@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestão Comercial — Matriz de Oportunidades</title>
+<style>
+  :root {
+    --bg: #0b0f1a;
+    --bg-soft: #121828;
+    --panel: #161d30;
+    --panel-2: #1b2440;
+    --border: #243150;
+    --border-soft: #1c263f;
+    --text: #e8edf7;
+    --text-dim: #9aa6c2;
+    --text-faint: #6b7794;
+    --accent: #4f8cff;
+    --accent-2: #22d3aa;
+    --danger: #ff5d6c;
+    --warn: #ffb74d;
+    --ok: #46d39a;
+    --info: #4f8cff;
+    --cell: #10162a;
+    --shadow: 0 10px 30px rgba(0,0,0,.35);
+    --radius: 14px;
+    --radius-sm: 9px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  html[data-theme="light"] {
+    --bg: #eef2f8;
+    --bg-soft: #e6ecf5;
+    --panel: #ffffff;
+    --panel-2: #f4f7fc;
+    --border: #d4dcea;
+    --border-soft: #e2e8f2;
+    --text: #1a2238;
+    --text-dim: #56617d;
+    --text-faint: #8b95ad;
+    --accent: #2f6bdf;
+    --accent-2: #0fae87;
+    --danger: #e23744;
+    --warn: #e08a18;
+    --ok: #15a06a;
+    --info: #2f6bdf;
+    --cell: #f7f9fd;
+    --shadow: 0 10px 30px rgba(40,60,110,.12);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 600px at 80% -10%, var(--bg-soft), var(--bg)) fixed;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  /* ===== Header ===== */
+  header.app {
+    position: sticky; top: 0; z-index: 40;
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 20px;
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .logo {
+    width: 38px; height: 38px; border-radius: 11px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center; font-weight: 800; color: #fff; font-size: 18px;
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 45%, transparent);
+    flex: none;
+  }
+  .titles { min-width: 0; }
+  .titles .t1 { font-weight: 700; font-size: 15px; letter-spacing: .2px; white-space: nowrap; }
+  .titles .t2 { font-size: 12px; color: var(--text-dim); }
+  .spacer { flex: 1; }
+  .header-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .month-pick {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 4px 6px;
+  }
+  .month-pick input[type="month"] {
+    background: transparent; border: none; color: var(--text); font-family: var(--font); font-size: 13px; outline: none;
+  }
+  .iconbtn, .ghost-btn {
+    cursor: pointer; border: 1px solid var(--border); background: var(--panel-2);
+    color: var(--text); border-radius: 10px; padding: 7px 11px; font-size: 13px; font-family: var(--font);
+    display: inline-flex; align-items: center; gap: 7px; transition: .15s;
+  }
+  .iconbtn:hover, .ghost-btn:hover { border-color: var(--accent); }
+  .iconbtn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .store-input {
+    background: var(--panel-2); border: 1px dashed var(--border); color: var(--text);
+    border-radius: 9px; padding: 5px 9px; font-size: 13px; font-family: var(--font); width: 120px; outline: none;
+  }
+  .store-input:focus { border-style: solid; border-color: var(--accent); }
+  /* ===== Nav ===== */
+  nav.tabs {
+    display: flex; gap: 4px; padding: 10px 16px 0; overflow-x: auto;
+    border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--panel) 60%, transparent);
+    position: sticky; top: 63px; z-index: 30;
+  }
+  nav.tabs button {
+    cursor: pointer; border: none; background: transparent; color: var(--text-dim);
+    padding: 10px 16px; font-size: 13.5px; font-weight: 600; font-family: var(--font);
+    border-radius: 10px 10px 0 0; border-bottom: 2px solid transparent; white-space: nowrap; transition: .15s;
+  }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button.active { color: var(--text); border-bottom-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  /* ===== Layout ===== */
+  main { padding: 20px; max-width: 1500px; margin: 0 auto; }
+  .view { display: none; animation: fade .25s ease; }
+  .view.active { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px);} to {opacity:1; transform:none;} }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px; margin-bottom: 18px; box-shadow: var(--shadow);
+  }
+  .panel h2 { margin: 0 0 4px; font-size: 16px; }
+  .panel .sub { color: var(--text-dim); font-size: 12.5px; margin-bottom: 14px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11.5px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+  input, select, textarea {
+    background: var(--cell); border: 1px solid var(--border); color: var(--text);
+    border-radius: 9px; padding: 8px 10px; font-size: 13px; font-family: var(--font); outline: none; transition: .15s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  input[type="number"] { width: 90px; }
+  .btn {
+    cursor: pointer; border: none; border-radius: 10px; padding: 9px 16px; font-size: 13px; font-weight: 700;
+    font-family: var(--font); background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; transition: .15s;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn.sec { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  .btn.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .btn.sm { padding: 6px 11px; font-size: 12px; }
+  .pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; font-weight: 700; }
+  .muted { color: var(--text-dim); }
+  .hint { font-size: 12px; color: var(--text-faint); }
+  /* ===== Tables ===== */
+  .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { padding: 8px 10px; text-align: center; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
+  th { background: var(--panel-2); color: var(--text-dim); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: .3px; position: sticky; top: 0; }
+  td.name, th.name { text-align: left; position: sticky; left: 0; background: var(--panel); font-weight: 600; z-index: 2; }
+  th.name { z-index: 5; }
+  tbody tr:hover td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  tbody tr:hover td.name { background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
+  .cellinput { width: 58px; background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 5px 4px; text-align: center; color: var(--text); }
+  .cellinput:hover { border-color: var(--border); }
+  .cellinput:focus { border-color: var(--accent); background: var(--cell); }
+  .plan-cell { color: var(--text-dim); }
+  /* ===== Matrix heat ===== */
+  .heat { border-radius: 7px; font-weight: 700; padding: 5px 7px; display: inline-block; min-width: 42px; }
+  .block-head { font-weight: 800; letter-spacing: .3px; cursor: pointer; user-select: none; }
+  .block-toggle { font-size: 10px; opacity: .7; margin-right: 4px; }
+  /* ===== Indicator config cards ===== */
+  .ind-card { border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; background: var(--panel-2); }
+  .ind-card .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .ind-card .swatch { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+  .sub-list, .rate-list { margin: 10px 0 0; padding: 10px 0 0; border-top: 1px dashed var(--border); }
+  .sub-row, .rate-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 0; }
+  .tag { font-size: 10.5px; padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-weight: 700; }
+  .tag.sub { background: color-mix(in srgb, var(--accent-2) 18%, transparent); color: var(--accent-2); }
+  /* ===== Toggle switch ===== */
+  .switch { position: relative; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: 12px; color: var(--text-dim); }
+  .switch input { display: none; }
+  .switch .track { width: 36px; height: 20px; border-radius: 99px; background: var(--border); transition: .2s; position: relative; }
+  .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: .2s; }
+  .switch input:checked + .track { background: var(--accent); }
+  .switch input:checked + .track::after { left: 18px; }
+  /* ===== KPI cards ===== */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 12px; }
+  .kpi { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .kpi .k { font-size: 11.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-weight: 700; }
+  .kpi .v { font-size: 24px; font-weight: 800; margin-top: 4px; }
+  .kpi .d { font-size: 12px; color: var(--text-dim); }
+  /* ===== Ranking ===== */
+  .rank-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--border); margin-bottom: 8px; }
+  .rank-medal { font-size: 18px; width: 28px; text-align: center; }
+  .rank-bars { display: flex; gap: 16px; flex: 1; flex-wrap: wrap; }
+  .rank-bars .m { font-size: 12px; }
+  .rank-bars .m b { font-size: 14px; }
+  .attn-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 14px; }
+  .attn-box { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .attn-box h4 { margin: 0 0 8px; font-size: 13px; display: flex; align-items: center; gap: 7px; }
+  .attn-box ul { margin: 0; padding-left: 0; list-style: none; }
+  .attn-box li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border-soft); font-size: 12.5px; }
+  .attn-box li:last-child { border: none; }
+  .empty { color: var(--text-faint); font-style: italic; padding: 8px 0; }
+  canvas { max-width: 100%; }
+  .draggable { cursor: grab; }
+  .dragging { opacity: .45; }
+  .drag-over { outline: 2px dashed var(--accent); outline-offset: -2px; }
+  .moveon .draghandle { display: inline; }
+  .draghandle { display: none; color: var(--text-faint); margin-right: 6px; cursor: grab; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-dim); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .toast {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    padding: 11px 18px; border-radius: 12px; box-shadow: var(--shadow); font-size: 13px; font-weight: 600;
+    opacity: 0; pointer-events: none; transition: .25s; z-index: 100;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.err { border-color: var(--danger); color: var(--danger); }
+  .seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg button { border: none; background: transparent; color: var(--text-dim); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12.5px; font-weight: 600; font-family: var(--font); }
+  .seg button.active { background: var(--accent); color: #fff; }
+  .obs-input { width: 100%; min-width: 160px; }
+  .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  details.help { margin-top: 8px; }
+  details.help summary { cursor: pointer; color: var(--text-dim); font-size: 12px; }
+  details.help div { font-size: 12.5px; color: var(--text-dim); margin-top: 8px; line-height: 1.6; }
+  @media (max-width: 640px) {
+    main { padding: 12px; }
+    .titles .t1 { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="brand">
+    <div class="logo">G</div>
+    <div class="titles">
+      <div class="t1">Matriz de Oportunidades — <span id="storeLabel">VCANT</span></div>
+      <div class="t2">Controle diário de gestão comercial</div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="header-controls">
+    <input id="storeName" class="store-input" placeholder="Sua loja" title="Nome da loja (editável)">
+    <div class="month-pick">
+      <span>📅</span>
+      <input type="month" id="monthPicker">
+    </div>
+    <button class="iconbtn" id="moveToggle" title="Permitir reordenar linhas e colunas arrastando">✥ Mover</button>
+    <button class="iconbtn" id="themeToggle" title="Alternar tema">🌙</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-view="matriz" class="active">Matriz / Painel</button>
+  <button data-view="diario">Check-in / Check-out</button>
+  <button data-view="sistema">Sistema (Auditoria)</button>
+  <button data-view="foco">Foco &amp; Ranking</button>
+  <button data-view="resumo">Resumo Geral</button>
+  <button data-view="config">Configuração</button>
+</nav>
+
+<main>
+  <!-- ===================== MATRIZ ===================== -->
+  <section class="view active" id="view-matriz">
+    <div class="panel">
+      <div class="flex-between">
+        <div>
+          <h2>Matriz de Oportunidades</h2>
+          <div class="sub">Acumulado do período por vendedor · % vs meta · projeção. Clique no nome do bloco para expandir taxas e sub-indicadores.</div>
+        </div>
+        <div class="seg" id="matrizPeriodo">
+          <button data-p="mes" class="active">Mês</button>
+          <button data-p="semana">Semana</button>
+        </div>
+      </div>
+      <div id="matrizSemanaPick" style="display:none; margin:10px 0;"></div>
+      <div class="table-wrap" style="margin-top:14px;">
+        <table id="matrizTable"></table>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--danger)"></i> &lt; 70% da meta</span>
+        <span><i style="background:var(--warn)"></i> 70–90%</span>
+        <span><i style="background:var(--ok)"></i> 90–100%</span>
+        <span><i style="background:var(--info)"></i> ≥ 100%</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== DIÁRIO ===================== -->
+  <section class="view" id="view-diario">
+    <div class="panel">
+      <div class="flex-between">
+        <div>
+          <h2>Check-in / Check-out diário</h2>
+          <div class="sub">Plano (manhã) e Real (fim do dia) por dia. Sábado usa a meta de sábado automaticamente.</div>
+        </div>
+        <div class="row" style="align-items:center;">
+          <div class="field">
+            <label>Vendedor</label>
+            <select id="diarioSeller"></select>
+          </div>
+          <div class="field">
+            <label>Semana</label>
+            <select id="diarioWeek"></select>
+          </div>
+        </div>
+      </div>
+      <div class="table-wrap" style="margin-top:14px;">
+        <table id="diarioTable"></table>
+      </div>
+      <div class="hint" style="margin-top:10px;">Linhas <span class="tag">plano</span> = check-in (tracejado) · <span class="tag sub">real</span> = check-out. A coluna <b>Aderência</b> = real ÷ plano.</div>
+    </div>
+  </section>
+
+  <!-- ===================== SISTEMA ===================== -->
+  <section class="view" id="view-sistema">
+    <div class="panel">
+      <h2>Sistema (Auditoria)</h2>
+      <div class="sub">Lance aqui a “verdade” do sistema (acumulado do mês por vendedor). Alimenta as taxas e a acuracidade (relato × sistema).</div>
+      <div class="table-wrap" style="margin-top:6px;">
+        <table id="sistemaTable"></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FOCO ===================== -->
+  <section class="view" id="view-foco">
+    <div class="panel">
+      <h2>Ranking da equipe</h2>
+      <div class="sub">Ordenado por ritmo vs meta. Mostra também acuracidade (relato × sistema) e aderência (plano × real).</div>
+      <div id="rankingList"></div>
+    </div>
+    <div class="panel">
+      <h2>Atenção do dia</h2>
+      <div class="sub">Listas automáticas de quem chamar para conversar.</div>
+      <div class="attn-cols" id="attnCols"></div>
+    </div>
+    <div class="panel">
+      <div class="flex-between">
+        <div><h2>Gráfico de ritmo</h2><div class="sub">Acumulado real vs meta ideal, com projeção até o fim do mês.</div></div>
+        <div class="row" style="align-items:center;">
+          <div class="field"><label>Indicador</label><select id="chartInd"></select></div>
+          <div class="field"><label>Quem</label><select id="chartWho"></select></div>
+        </div>
+      </div>
+      <canvas id="ritmoChart" height="320" style="margin-top:14px;"></canvas>
+    </div>
+  </section>
+
+  <!-- ===================== RESUMO ===================== -->
+  <section class="view" id="view-resumo">
+    <div class="panel">
+      <div class="flex-between">
+        <div><h2>Resumo Geral da equipe</h2><div class="sub">Totais consolidados — semana e mês lado a lado, com % vs meta e projeção.</div></div>
+        <button class="ghost-btn" id="exportCsv">⬇ Exportar CSV</button>
+      </div>
+      <div class="table-wrap" style="margin-top:14px;">
+        <table id="resumoTable"></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CONFIG ===================== -->
+  <section class="view" id="view-config">
+    <div class="panel">
+      <h2>Configuração do mês</h2>
+      <div class="sub" id="configMonthLabel"></div>
+      <div class="row">
+        <div class="field">
+          <label>Dias úteis do mês</label>
+          <input type="number" id="workdays" min="0" max="31">
+        </div>
+        <div class="field" style="align-self:flex-end;">
+          <button class="btn sec sm" id="autoWorkdays">Calcular automático (sem domingos)</button>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:8px;">Base automática exclui domingos e conta sábados. Edite à vontade.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Vendedores</h2>
+      <div class="sub">Cadastro dinâmico. Adicione, edite ou remova à vontade.</div>
+      <div class="row">
+        <input type="text" id="newSeller" placeholder="Nome do consultor" style="flex:1; min-width:200px;">
+        <button class="btn" id="addSeller">+ Adicionar</button>
+      </div>
+      <div id="sellerList" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="panel">
+      <div class="flex-between">
+        <div><h2>Indicadores</h2><div class="sub">Cada indicador principal pode ter sub-indicadores (quantidade) e taxas (A ÷ B). Defina metas e o que tem check-in / check-out.</div></div>
+        <button class="btn" id="addIndicator">+ Indicador</button>
+      </div>
+      <div id="indicatorList" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Backup &amp; dados</h2>
+      <div class="sub">Os dados ficam salvos neste navegador, por mês. Exporte um backup para não perder nada e para passar a base entre aparelhos.</div>
+      <div class="row">
+        <button class="btn sec" id="exportJson">⬇ Exportar backup (.json)</button>
+        <button class="btn sec" id="importJsonBtn">⬆ Importar backup</button>
+        <input type="file" id="importJson" accept="application/json" style="display:none;">
+        <button class="btn danger" id="resetAll">Apagar tudo</button>
+      </div>
+      <details class="help">
+        <summary>Como funciona o armazenamento?</summary>
+        <div>Tudo é salvo localmente (localStorage) no navegador de cada gestor — sem servidor e sem login. Cada mês é guardado separadamente: troque o mês no topo para ver/editar o período. Limpar o cache do navegador apaga os dados, por isso use o backup.</div>
+      </details>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   Gestão Comercial — app de arquivo único, sem dependências.
+   Persistência: localStorage. Estrutura por mês.
+   ============================================================ */
+
+const LS_KEY = "gestao_comercial_v1";
+const uid = () => Math.random().toString(36).slice(2, 9);
+const todayISO = () => new Date().toISOString().slice(0,7);
+
+/* ---------- Estado padrão ---------- */
+function defaultState() {
+  const venda = uid(), fichas = uid(), agto = uid(), comp = uid(), troca = uid(), prosp = uid();
+  const sVendaFat = uid(), sFinEf = uid(), sTrocaEf = uid(), sAprov = uid();
+  return {
+    storeName: "VCANT",
+    theme: "dark",
+    sellers: [
+      { id: uid(), name: "Consultor 1" },
+      { id: uid(), name: "Consultor 2" },
+    ],
+    indicators: [
+      { id: agto, name: "Agendamentos", abbr: "AGTO", color: "#4f8cff", checkin: true, checkout: true, role: "",
+        metaDay: 4, metaSat: 6, metaMonth: 100, subs: [], rates: [] },
+      { id: comp, name: "Comparecimentos", abbr: "COMP", color: "#22d3aa", checkin: false, checkout: true, role: "",
+        metaDay: 3, metaSat: 5, metaMonth: 75, subs: [], rates: [] },
+      { id: fichas, name: "Fichas (F&I)", abbr: "FICHAS", color: "#ffb74d", checkin: true, checkout: true, role: "fichas",
+        metaDay: 2, metaSat: 3, metaMonth: 50,
+        subs: [
+          { id: sAprov, name: "Aprovações", checkin: false, checkout: true, metaDay: 1, metaSat: 2, metaMonth: 35 },
+          { id: sFinEf, name: "Financiamentos efetivados", checkin: false, checkout: true, metaDay: 1, metaSat: 1, metaMonth: 28 },
+        ],
+        rates: [
+          { id: uid(), name: "Aprovação %", numId: sAprov, denId: fichas, invert: false, target: 70, manual: false },
+        ] },
+      { id: troca, name: "Carro Troca", abbr: "TROCA", color: "#a78bfa", checkin: false, checkout: true, role: "",
+        metaDay: 2, metaSat: 3, metaMonth: 45,
+        subs: [ { id: sTrocaEf, name: "Efetivados", checkin: false, checkout: true, metaDay: 1, metaSat: 2, metaMonth: 30 } ],
+        rates: [] },
+      { id: venda, name: "Vendas", abbr: "VENDA", color: "#46d39a", checkin: true, checkout: true, role: "venda",
+        metaDay: 1, metaSat: 2, metaMonth: 32,
+        subs: [ { id: sVendaFat, name: "Faturadas", checkin: false, checkout: true, metaDay: 1, metaSat: 2, metaMonth: 32 } ],
+        rates: [
+          { id: uid(), name: "Penetração Troca %", numId: sTrocaEf, denId: sVendaFat, invert: false, target: 60, manual: false },
+          { id: uid(), name: "Penetração F&I %", numId: sFinEf, denId: sVendaFat, invert: false, target: 55, manual: false },
+        ] },
+      { id: prosp, name: "Prospecção / Vídeos", abbr: "PROSP", color: "#f472b6", checkin: true, checkout: true, role: "",
+        metaDay: 5, metaSat: 5, metaMonth: 120, subs: [], rates: [] },
+    ],
+    order: { sellers: null, indicators: null },
+    months: {},
+  };
+}
+
+let state = load();
+
+function load() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return migrate(JSON.parse(raw));
+  } catch (e) { console.warn("load falhou", e); }
+  return defaultState();
+}
+function migrate(s) {
+  if (!s.order) s.order = { sellers: null, indicators: null };
+  if (!s.months) s.months = {};
+  if (!s.theme) s.theme = "dark";
+  return s;
+}
+function save() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+  catch (e) { toast("Não foi possível salvar (armazenamento cheio?)", true); }
+}
+
+/* ---------- Mês corrente ---------- */
+let currentMonth = todayISO();
+
+function monthData(m = currentMonth) {
+  if (!state.months[m]) {
+    state.months[m] = { workdays: autoWorkdays(m), daily: {}, system: {}, systemRate: {}, obs: {} };
+  }
+  const md = state.months[m];
+  md.daily = md.daily || {};
+  md.system = md.system || {};
+  md.systemRate = md.systemRate || {};
+  md.obs = md.obs || {};
+  return md;
+}
+
+/* ---------- Datas / dias úteis ---------- */
+function parseMonth(m) { const [y, mo] = m.split("-").map(Number); return { y, mo }; }
+function daysInMonth(m) { const { y, mo } = parseMonth(m); return new Date(y, mo, 0).getDate(); }
+function weekday(m, day) { const { y, mo } = parseMonth(m); return new Date(y, mo - 1, day).getDay(); } // 0=dom,6=sáb
+function isSunday(m, day) { return weekday(m, day) === 0; }
+function isSaturday(m, day) { return weekday(m, day) === 6; }
+function autoWorkdays(m) {
+  let c = 0; const n = daysInMonth(m);
+  for (let d = 1; d <= n; d++) if (!isSunday(m, d)) c++;
+  return c;
+}
+function elapsedWorkdays(m) {
+  const n = daysInMonth(m);
+  const now = new Date();
+  const sameMonth = todayISO() === m;
+  const last = sameMonth ? now.getDate() : n;
+  let c = 0;
+  for (let d = 1; d <= Math.min(last, n); d++) if (!isSunday(m, d)) c++;
+  return Math.max(c, 1);
+}
+// Semanas do mês (segmentos de dias, quebrando no sábado)
+function weeksOf(m) {
+  const n = daysInMonth(m); const weeks = []; let cur = [];
+  for (let d = 1; d <= n; d++) {
+    cur.push(d);
+    if (weekday(m, d) === 6 || d === n) { weeks.push(cur); cur = []; }
+  }
+  return weeks;
+}
+
+/* ---------- Ordenação (com override manual) ---------- */
+function orderedSellers() {
+  const ord = state.order.sellers;
+  if (!ord) return state.sellers.slice();
+  const byId = Object.fromEntries(state.sellers.map(s => [s.id, s]));
+  const res = ord.map(id => byId[id]).filter(Boolean);
+  state.sellers.forEach(s => { if (!ord.includes(s.id)) res.push(s); });
+  return res;
+}
+function orderedIndicators() {
+  const ord = state.order.indicators;
+  if (!ord) return state.indicators.slice();
+  const byId = Object.fromEntries(state.indicators.map(s => [s.id, s]));
+  const res = ord.map(id => byId[id]).filter(Boolean);
+  state.indicators.forEach(s => { if (!ord.includes(s.id)) res.push(s); });
+  return res;
+}
+
+/* ---------- Campos (indicador + subs) ---------- */
+function allFields() {
+  const arr = [];
+  state.indicators.forEach(ind => {
+    arr.push({ id: ind.id, name: ind.name, kind: "ind", ind });
+    (ind.subs || []).forEach(sub => arr.push({ id: sub.id, name: sub.name, kind: "sub", ind, sub }));
+  });
+  return arr;
+}
+function fieldById(id) { return allFields().find(f => f.id === id); }
+
+/* ---------- Acesso a dados diários ---------- */
+function getCell(sellerId, fieldId, day, m = currentMonth) {
+  const md = monthData(m);
+  return (md.daily[sellerId] && md.daily[sellerId][fieldId] && md.daily[sellerId][fieldId][day]) || {};
+}
+function setCell(sellerId, fieldId, day, key, val, m = currentMonth) {
+  const md = monthData(m);
+  md.daily[sellerId] = md.daily[sellerId] || {};
+  md.daily[sellerId][fieldId] = md.daily[sellerId][fieldId] || {};
+  md.daily[sellerId][fieldId][day] = md.daily[sellerId][fieldId][day] || {};
+  if (val === "" || val === null || isNaN(val)) delete md.daily[sellerId][fieldId][day][key];
+  else md.daily[sellerId][fieldId][day][key] = val;
+  save();
+}
+// soma acumulada (real=checkout, plan=check-in) num conjunto de dias
+function accum(sellerId, fieldId, key, days, m = currentMonth) {
+  let sum = 0, has = false;
+  days.forEach(d => {
+    const c = getCell(sellerId, fieldId, d, m);
+    if (c[key] != null) { sum += Number(c[key]); has = true; }
+  });
+  return has ? sum : null;
+}
+function monthDays(m = currentMonth) { return Array.from({ length: daysInMonth(m) }, (_, i) => i + 1); }
+
+/* ---------- Meta resolvida ---------- */
+function metaMonthFor(cfg) { return Number(cfg.metaMonth) || 0; }
+function metaForDay(cfg, m, day) {
+  if (isSaturday(m, day)) return Number(cfg.metaSat) || 0;
+  if (isSunday(m, day)) return 0;
+  return Number(cfg.metaDay) || 0;
+}
+
+/* ---------- Sistema / auditoria ---------- */
+function getSystem(sellerId, fieldId, m = currentMonth) {
+  const md = monthData(m);
+  return (md.system[sellerId] && md.system[sellerId][fieldId] != null) ? Number(md.system[sellerId][fieldId]) : null;
+}
+function setSystem(sellerId, fieldId, val, m = currentMonth) {
+  const md = monthData(m);
+  md.system[sellerId] = md.system[sellerId] || {};
+  if (val === "" || val === null || isNaN(val)) delete md.system[sellerId][fieldId];
+  else md.system[sellerId][fieldId] = Number(val);
+  save();
+}
+function getSystemRate(sellerId, rateId, m = currentMonth) {
+  const md = monthData(m);
+  return (md.systemRate[sellerId] && md.systemRate[sellerId][rateId] != null) ? Number(md.systemRate[sellerId][rateId]) : null;
+}
+function setSystemRate(sellerId, rateId, val, m = currentMonth) {
+  const md = monthData(m);
+  md.systemRate[sellerId] = md.systemRate[sellerId] || {};
+  if (val === "" || val === null || isNaN(val)) delete md.systemRate[sellerId][rateId];
+  else md.systemRate[sellerId][rateId] = Number(val);
+  save();
+}
+
+/* ---------- Cálculo de taxa (A ÷ B), valores do sistema ---------- */
+function rateValue(rate, sellerIds, m = currentMonth) {
+  if (rate.manual) {
+    let s = 0, c = 0;
+    sellerIds.forEach(id => { const v = getSystemRate(id, rate.id, m); if (v != null) { s += v; c++; } });
+    return c ? s / c : null;
+  }
+  let num = 0, den = 0, hasN = false, hasD = false;
+  sellerIds.forEach(id => {
+    const a = getSystem(id, rate.numId, m); if (a != null) { num += a; hasN = true; }
+    const b = getSystem(id, rate.denId, m); if (b != null) { den += b; hasD = true; }
+  });
+  if (!hasN && !hasD) return null;
+  let A = num, B = den;
+  if (rate.invert) { const t = A; A = B; B = t; }
+  if (!B) return null;
+  return (A / B) * 100;
+}
+
+/* ---------- Cores do mapa de calor ---------- */
+function heatColor(pct) {
+  if (pct == null) return "transparent";
+  const css = getComputedStyle(document.documentElement);
+  const danger = css.getPropertyValue("--danger").trim();
+  const warn = css.getPropertyValue("--warn").trim();
+  const ok = css.getPropertyValue("--ok").trim();
+  const info = css.getPropertyValue("--info").trim();
+  let c;
+  if (pct < 0.7) c = danger;
+  else if (pct < 0.9) c = warn;
+  else if (pct < 1.0) c = ok;
+  else c = info;
+  return "color-mix(in srgb, " + c + " 26%, transparent)";
+}
+function heatText(pct) {
+  const css = getComputedStyle(document.documentElement);
+  if (pct == null) return "var(--text-faint)";
+  if (pct < 0.7) return css.getPropertyValue("--danger").trim();
+  if (pct < 0.9) return css.getPropertyValue("--warn").trim();
+  if (pct < 1.0) return css.getPropertyValue("--ok").trim();
+  return css.getPropertyValue("--info").trim();
+}
+function fmt(n, dec = 0) {
+  if (n == null || isNaN(n)) return "—";
+  return Number(n).toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function pctTxt(p) { return p == null ? "—" : Math.round(p * 100) + "%"; }
+
+/* ============================================================
+   RENDER — controle de abas
+   ============================================================ */
+const views = ["matriz","diario","sistema","foco","resumo","config"];
+let activeView = "matriz";
+function showView(v) {
+  activeView = v;
+  document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+  views.forEach(x => document.getElementById("view-"+x).classList.toggle("active", x === v));
+  renderActive();
+}
+function renderActive() {
+  if (activeView === "matriz") renderMatriz();
+  else if (activeView === "diario") renderDiario();
+  else if (activeView === "sistema") renderSistema();
+  else if (activeView === "foco") renderFoco();
+  else if (activeView === "resumo") renderResumo();
+  else if (activeView === "config") renderConfig();
+}
+
+/* ============================================================
+   MATRIZ / PAINEL
+   ============================================================ */
+let matrizPeriodo = "mes";
+let matrizWeekIdx = 0;
+let expandedBlocks = {}; // indId -> bool (default expandido)
+
+function daysForPeriod() {
+  if (matrizPeriodo === "semana") {
+    const w = weeksOf(currentMonth);
+    return w[Math.min(matrizWeekIdx, w.length - 1)] || monthDays();
+  }
+  return monthDays();
+}
+
+function renderMatriz() {
+  const inds = orderedIndicators();
+  const sellers = orderedSellers();
+  const days = daysForPeriod();
+  const md = monthData();
+  const ewd = elapsedWorkdays(currentMonth);
+  const twd = Number(md.workdays) || autoWorkdays(currentMonth);
+  const moveOn = document.body.classList.contains("moveon");
+
+  // semana picker
+  const wpick = document.getElementById("matrizSemanaPick");
+  if (matrizPeriodo === "semana") {
+    const weeks = weeksOf(currentMonth);
+    wpick.style.display = "block";
+    wpick.innerHTML = '<div class="seg">' + weeks.map((w, i) =>
+      `<button data-w="${i}" class="${i===matrizWeekIdx?'active':''}">Sem ${i+1} (${w[0]}–${w[w.length-1]})</button>`).join("") + '</div>';
+    wpick.querySelectorAll("button").forEach(b => b.onclick = () => { matrizWeekIdx = +b.dataset.w; renderMatriz(); });
+  } else wpick.style.display = "none";
+
+  function colCount(ind) {
+    const exp = expandedBlocks[ind.id] !== false;
+    let c = 2 + (matrizPeriodo === "mes" ? 1 : 0); // real, %, (proj)
+    if (exp) { c += (ind.subs?.length||0) * 2 + (ind.rates?.length||0) * 2; }
+    return c;
+  }
+
+  // cabeçalho: linha 1 = blocos por indicador; linha 2 = colunas (Real / % / Proj / subs / taxas)
+  let head1 = '<tr><th class="name" rowspan="2">Vendedor</th>';
+  let head2 = "<tr>";
+  inds.forEach(ind => {
+    const exp = expandedBlocks[ind.id] !== false;
+    head1 += `<th colspan="${colCount(ind)}" style="background:color-mix(in srgb, ${ind.color} 22%, var(--panel-2)); color:${ind.color}; border-left:3px solid ${ind.color};" class="block-head" data-block="${ind.id}">
+      ${moveOn?'<span class="draghandle" draggable="true" data-dragind="'+ind.id+'">⋮⋮</span>':''}<span class="block-toggle">${exp?'▾':'▸'}</span>${ind.name}</th>`;
+    head2 += `<th style="border-left:3px solid ${ind.color};">Real</th><th>%</th>`;
+    if (matrizPeriodo === "mes") head2 += `<th>Proj.</th>`;
+    if (exp) {
+      (ind.subs||[]).forEach(s => { head2 += `<th style="color:var(--accent-2);">${s.name}</th><th>%</th>`; });
+      (ind.rates||[]).forEach(r => { head2 += `<th style="color:var(--accent);">${r.name}</th><th>alvo</th>`; });
+    }
+  });
+  head1 += "</tr>"; head2 += "</tr>";
+
+  // corpo por vendedor
+  let body = "";
+  sellers.forEach(seller => {
+    body += `<tr data-seller="${seller.id}">`;
+    body += `<td class="name ${moveOn?'draggable':''}" ${moveOn?'draggable="true" data-dragseller="'+seller.id+'"':''}>${moveOn?'<span class="draghandle">⋮⋮</span>':''}${seller.name}</td>`;
+    inds.forEach(ind => {
+      const exp = expandedBlocks[ind.id] !== false;
+      const real = accum(seller.id, ind.id, "real", days);
+      const meta = matrizPeriodo === "mes" ? metaMonthFor(ind) : weekMeta(ind, days);
+      const pct = (meta && real != null) ? real / meta : null;
+      body += `<td style="border-left:3px solid ${ind.color};"><span class="heat" style="background:${heatColor(pct)}; color:${heatText(pct)}">${real==null?'—':fmt(real)}</span></td>`;
+      body += `<td style="color:${heatText(pct)}; font-weight:700;">${pct==null?'—':pctTxt(pct)}</td>`;
+      if (matrizPeriodo === "mes") {
+        const proj = (real != null) ? (real / ewd) * twd : null;
+        const projPct = (meta && proj != null) ? proj / meta : null;
+        body += `<td style="color:${heatText(projPct)};">${proj==null?'—':fmt(proj)}</td>`;
+      }
+      if (exp) {
+        (ind.subs||[]).forEach(s => {
+          const sr = accum(seller.id, s.id, "real", days);
+          const sMeta = matrizPeriodo === "mes" ? metaMonthFor(s) : weekMeta(s, days);
+          const sPct = (sMeta && sr != null) ? sr / sMeta : null;
+          body += `<td>${sr==null?'—':fmt(sr)}</td><td style="color:${heatText(sPct)};">${sPct==null?'—':pctTxt(sPct)}</td>`;
+        });
+        (ind.rates||[]).forEach(r => {
+          const rv = rateValue(r, [seller.id]);
+          const tgt = Number(r.target) || 0;
+          const rp = tgt ? (rv != null ? (rv/100) / (tgt/100) : null) : null;
+          body += `<td style="color:${heatText(rp)}; font-weight:700;">${rv==null?'—':fmt(rv,1)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`;
+        });
+      }
+    });
+    body += "</tr>";
+  });
+
+  // linha total equipe
+  body += `<tr style="font-weight:800; background:var(--panel-2);"><td class="name">⌀ Equipe</td>`;
+  const allIds = sellers.map(s => s.id);
+  inds.forEach(ind => {
+    const exp = expandedBlocks[ind.id] !== false;
+    let real = 0, has = false;
+    allIds.forEach(id => { const v = accum(id, ind.id, "real", days); if (v != null) { real += v; has = true; } });
+    const meta = (matrizPeriodo === "mes" ? metaMonthFor(ind) : weekMeta(ind, days)) * sellers.length;
+    const pct = (meta && has) ? real / meta : null;
+    body += `<td style="border-left:3px solid ${ind.color};"><span class="heat" style="background:${heatColor(pct)}; color:${heatText(pct)}">${has?fmt(real):'—'}</span></td>`;
+    body += `<td style="color:${heatText(pct)};">${pct==null?'—':pctTxt(pct)}</td>`;
+    if (matrizPeriodo === "mes") {
+      const proj = has ? (real / ewd) * twd : null;
+      const pp = meta ? (proj/meta) : null;
+      body += `<td style="color:${heatText(pp)};">${proj==null?'—':fmt(proj)}</td>`;
+    }
+    if (exp) {
+      (ind.subs||[]).forEach(s => {
+        let sr = 0, h = false; allIds.forEach(id => { const v = accum(id, s.id, "real", days); if (v != null){sr+=v;h=true;} });
+        const sMeta = (matrizPeriodo === "mes" ? metaMonthFor(s) : weekMeta(s, days)) * sellers.length;
+        const sp = (sMeta&&h)? sr/sMeta : null;
+        body += `<td>${h?fmt(sr):'—'}</td><td style="color:${heatText(sp)};">${sp==null?'—':pctTxt(sp)}</td>`;
+      });
+      (ind.rates||[]).forEach(r => {
+        const rv = rateValue(r, allIds);
+        const tgt = Number(r.target)||0;
+        const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null):null;
+        body += `<td style="color:${heatText(rp)}; font-weight:700;">${rv==null?'—':fmt(rv,1)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`;
+      });
+    }
+  });
+  body += "</tr>";
+
+  document.getElementById("matrizTable").innerHTML = "<thead>"+head1+head2+"</thead><tbody>"+body+"</tbody>";
+
+  // eventos: expandir/recolher bloco
+  document.querySelectorAll('#matrizTable [data-block]').forEach(el => {
+    el.onclick = (e) => {
+      if (e.target.classList.contains('draghandle')) return;
+      const id = el.dataset.block;
+      expandedBlocks[id] = expandedBlocks[id] === false ? true : false;
+      renderMatriz();
+    };
+  });
+  if (moveOn) setupMatrixDnD();
+}
+
+function weekMeta(cfg, days) {
+  // soma das metas diárias dos dias do período (sábado usa metaSat)
+  let s = 0;
+  days.forEach(d => { s += metaForDay(cfg, currentMonth, d); });
+  return s;
+}
+
+/* ---------- Drag & drop matriz ---------- */
+function setupMatrixDnD() {
+  let dragSeller = null, dragInd = null;
+  document.querySelectorAll('[data-dragseller]').forEach(td => {
+    const tr = td.closest('tr');
+    td.addEventListener('dragstart', () => { dragSeller = td.dataset.dragseller; tr.classList.add('dragging'); });
+    tr.addEventListener('dragover', e => { e.preventDefault(); tr.classList.add('drag-over'); });
+    tr.addEventListener('dragleave', () => tr.classList.remove('drag-over'));
+    tr.addEventListener('drop', e => {
+      e.preventDefault(); tr.classList.remove('drag-over');
+      const target = tr.dataset.seller;
+      if (dragSeller && target && dragSeller !== target) reorder('sellers', dragSeller, target);
+    });
+    td.addEventListener('dragend', () => { tr.classList.remove('dragging'); dragSeller = null; });
+  });
+  document.querySelectorAll('[data-dragind]').forEach(h => {
+    h.addEventListener('dragstart', e => { dragInd = h.dataset.dragind; e.stopPropagation(); });
+    const th = h.closest('th');
+    th.addEventListener('dragover', e => { e.preventDefault(); th.classList.add('drag-over'); });
+    th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
+    th.addEventListener('drop', e => {
+      e.preventDefault(); th.classList.remove('drag-over');
+      const target = th.dataset.block;
+      if (dragInd && target && dragInd !== target) reorder('indicators', dragInd, target);
+    });
+  });
+}
+function reorder(kind, fromId, toId) {
+  const list = kind === 'sellers' ? orderedSellers() : orderedIndicators();
+  const ids = list.map(x => x.id);
+  const fi = ids.indexOf(fromId), ti = ids.indexOf(toId);
+  ids.splice(ti, 0, ids.splice(fi, 1)[0]);
+  state.order[kind] = ids;
+  save();
+  renderActive();
+}
+
+/* ============================================================
+   CHECK-IN / CHECK-OUT DIÁRIO
+   ============================================================ */
+let diarioSeller = null, diarioWeekIdx = 0;
+function renderDiario() {
+  const sellers = orderedSellers();
+  if (!sellers.length) { document.getElementById("diarioTable").innerHTML = '<tbody><tr><td class="empty">Cadastre vendedores na aba Configuração.</td></tr></tbody>'; return; }
+  const selSeller = document.getElementById("diarioSeller");
+  selSeller.innerHTML = sellers.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+  if (!diarioSeller || !sellers.find(s => s.id === diarioSeller)) diarioSeller = sellers[0].id;
+  selSeller.value = diarioSeller;
+
+  const weeks = weeksOf(currentMonth);
+  const selWeek = document.getElementById("diarioWeek");
+  selWeek.innerHTML = weeks.map((w, i) => `<option value="${i}">Semana ${i+1} (dias ${w[0]}–${w[w.length-1]})</option>`).join("");
+  if (diarioWeekIdx >= weeks.length) diarioWeekIdx = 0;
+  selWeek.value = diarioWeekIdx;
+  const days = weeks[diarioWeekIdx] || [];
+  const dn = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+
+  let head = '<thead><tr><th class="name">Indicador</th>';
+  days.forEach(d => head += `<th>${dn[weekday(currentMonth,d)]}<br>${d}${isSaturday(currentMonth,d)?' 🔶':''}</th>`);
+  head += '<th>Sem.</th><th>Meta</th><th>Ader.</th></tr></thead>';
+
+  let body = "<tbody>";
+  orderedIndicators().forEach(ind => {
+    body += diarioRows(ind, ind.color, false);
+    (ind.subs||[]).forEach(s => { body += diarioRows(s, ind.color, true); });
+  });
+  body += "</tbody>";
+  document.getElementById("diarioTable").innerHTML = head + body;
+
+  document.getElementById("diarioTable").querySelectorAll(".cellinput").forEach(inp => {
+    inp.addEventListener("change", () => {
+      setCell(diarioSeller, inp.dataset.field, +inp.dataset.day, inp.dataset.key, inp.value === "" ? "" : Number(inp.value));
+      renderDiario();
+    });
+  });
+}
+function diarioRows(cfg, color, isSub) {
+  const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
+  let rows = "";
+  const label = isSub ? `<span class="tag sub">sub</span> ${cfg.name}` : `<b>${cfg.name}</b>`;
+  // plano (check-in)
+  if (cfg.checkin) {
+    rows += `<tr><td class="name plan-cell" style="border-left:3px solid ${color};">${label} <span class="tag">plano</span></td>`;
+    days.forEach(d => {
+      const c = getCell(diarioSeller, cfg.id, d);
+      rows += `<td><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" style="border-style:dashed;"></td>`;
+    });
+    const planSum = accum(diarioSeller, cfg.id, "plan", days) ?? 0;
+    rows += `<td><b>${fmt(planSum)}</b></td><td class="muted">—</td><td class="muted">—</td></tr>`;
+  }
+  // real (check-out)
+  if (cfg.checkout) {
+    rows += `<tr><td class="name" style="border-left:3px solid ${color};">${cfg.checkin?'':label} <span class="tag sub">real</span></td>`;
+    days.forEach(d => {
+      const c = getCell(diarioSeller, cfg.id, d);
+      const metaD = metaForDay(cfg, currentMonth, d);
+      const v = c.real;
+      const pct = metaD ? (v!=null? v/metaD : null) : null;
+      rows += `<td><input class="cellinput" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${v ?? ''}" style="color:${v!=null?heatText(pct):'var(--text)'};"></td>`;
+    });
+    const realSum = accum(diarioSeller, cfg.id, "real", days) ?? 0;
+    const metaSum = weekMeta(cfg, days);
+    const pctW = metaSum ? realSum/metaSum : null;
+    const planSum = accum(diarioSeller, cfg.id, "plan", days);
+    const ader = (cfg.checkin && planSum) ? realSum/planSum : null;
+    rows += `<td><b style="color:${heatText(pctW)}">${fmt(realSum)}</b></td><td class="muted">${fmt(metaSum)}</td><td style="color:${heatText(ader)}; font-weight:700;">${ader==null?'—':pctTxt(ader)}</td></tr>`;
+  }
+  return rows;
+}
+
+/* ============================================================
+   SISTEMA / AUDITORIA
+   ============================================================ */
+function renderSistema() {
+  const sellers = orderedSellers();
+  const fields = allFields();
+  let head = '<thead><tr><th class="name">Vendedor</th>';
+  fields.forEach(f => head += `<th${f.kind==='sub'?' style="color:var(--accent-2)"':''}>${f.kind==='sub'?'↳ ':''}${f.name}</th>`);
+  const manualRates = [];
+  state.indicators.forEach(ind => (ind.rates||[]).forEach(r => { if (r.manual) manualRates.push({ ind, r }); }));
+  manualRates.forEach(mr => head += `<th style="color:var(--accent)">${mr.r.name} (man.)</th>`);
+  head += '</tr></thead>';
+
+  let body = "<tbody>";
+  if (!sellers.length) body += '<tr><td class="empty">Cadastre vendedores na aba Configuração.</td></tr>';
+  sellers.forEach(s => {
+    body += `<tr><td class="name">${s.name}</td>`;
+    fields.forEach(f => {
+      const v = getSystem(s.id, f.id);
+      body += `<td><input class="cellinput" data-seller="${s.id}" data-field="${f.id}" data-type="sys" value="${v ?? ''}"></td>`;
+    });
+    manualRates.forEach(mr => {
+      const v = getSystemRate(s.id, mr.r.id);
+      body += `<td><input class="cellinput" data-seller="${s.id}" data-rate="${mr.r.id}" data-type="rate" value="${v ?? ''}"></td>`;
+    });
+    body += "</tr>";
+  });
+  body += "</tbody>";
+  document.getElementById("sistemaTable").innerHTML = head + body;
+  document.querySelectorAll('#sistemaTable .cellinput').forEach(inp => {
+    inp.addEventListener("change", () => {
+      if (inp.dataset.type === "sys") setSystem(inp.dataset.seller, inp.dataset.field, inp.value);
+      else setSystemRate(inp.dataset.seller, inp.dataset.rate, inp.value);
+    });
+  });
+}
+
+/* ============================================================
+   FOCO & RANKING
+   ============================================================ */
+function sellerMetrics(sellerId) {
+  const days = monthDays();
+  const ewd = elapsedWorkdays(currentMonth);
+  const twd = Number(monthData().workdays) || autoWorkdays(currentMonth);
+  let projSum = 0, projN = 0, aderSum = 0, aderN = 0, accSum = 0, accN = 0;
+  state.indicators.forEach(ind => {
+    const real = accum(sellerId, ind.id, "real", days);
+    const meta = metaMonthFor(ind);
+    if (meta && real != null) { const proj = (real/ewd)*twd; projSum += proj/meta; projN++; }
+    if (ind.checkin && ind.checkout) {
+      const plan = accum(sellerId, ind.id, "plan", days);
+      const r = accum(sellerId, ind.id, "real", days);
+      if (plan) { aderSum += (r||0)/plan; aderN++; }
+    }
+    const sys = getSystem(sellerId, ind.id);
+    if (sys != null && sys > 0) {
+      const r = accum(sellerId, ind.id, "real", days) || 0;
+      const acc = Math.max(0, 1 - Math.abs(r - sys)/sys);
+      accSum += acc; accN++;
+    }
+  });
+  return {
+    ritmo: projN ? projSum/projN : null,
+    ader: aderN ? aderSum/aderN : null,
+    acc: accN ? accSum/accN : null,
+  };
+}
+function renderFoco() {
+  const sellers = orderedSellers();
+  const metrics = sellers.map(s => ({ s, ...sellerMetrics(s.id) }));
+  const ranked = metrics.slice().sort((a,b) => (b.ritmo??-1) - (a.ritmo??-1));
+  const medals = ["🥇","🥈","🥉"];
+  let html = "";
+  if (!ranked.length) html = '<div class="empty">Cadastre vendedores para ver o ranking.</div>';
+  ranked.forEach((m, i) => {
+    html += `<div class="rank-item">
+      <div class="rank-medal">${medals[i] || (i+1)}</div>
+      <div style="min-width:140px; font-weight:700;">${m.s.name}</div>
+      <div class="rank-bars">
+        <div class="m">Ritmo vs meta<br><b style="color:${heatText(m.ritmo)}">${m.ritmo==null?'—':pctTxt(m.ritmo)}</b></div>
+        <div class="m">Acuracidade<br><b style="color:${heatText(m.acc)}">${m.acc==null?'—':pctTxt(m.acc)}</b></div>
+        <div class="m">Aderência<br><b style="color:${heatText(m.ader)}">${m.ader==null?'—':pctTxt(m.ader)}</b></div>
+      </div>
+    </div>`;
+  });
+  document.getElementById("rankingList").innerHTML = html;
+
+  const lowRitmo = metrics.filter(m => m.ritmo != null && m.ritmo < 0.9).sort((a,b)=>a.ritmo-b.ritmo);
+  const lowAcc = metrics.filter(m => m.acc != null && m.acc < 0.9).sort((a,b)=>a.acc-b.acc);
+  const lowAder = metrics.filter(m => m.ader != null && m.ader < 0.9).sort((a,b)=>a.ader-b.ader);
+  const box = (title, icon, arr, key) => `<div class="attn-box"><h4>${icon} ${title}</h4><ul>${
+    arr.length ? arr.map(m=>`<li><span>${m.s.name}</span><b style="color:${heatText(m[key])}">${pctTxt(m[key])}</b></li>`).join("") : '<li class="empty">Ninguém — tudo certo!</li>'
+  }</ul></div>`;
+  document.getElementById("attnCols").innerHTML =
+    box("Abaixo do ritmo", "📉", lowRitmo, "ritmo") +
+    box("Relato furado (acuracidade)", "⚠️", lowAcc, "acc") +
+    box("Não cumpre o plano (aderência)", "🎯", lowAder, "ader");
+
+  const ci = document.getElementById("chartInd");
+  ci.innerHTML = state.indicators.map(i => `<option value="${i.id}">${i.name}</option>`).join("");
+  const cw = document.getElementById("chartWho");
+  cw.innerHTML = '<option value="__team">⌀ Equipe (todos)</option>' + sellers.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
+  if (!ci.dataset.bound) {
+    ci.addEventListener("change", drawRitmo); cw.addEventListener("change", drawRitmo); ci.dataset.bound = "1";
+  }
+  drawRitmo();
+}
+function drawRitmo() {
+  const cv = document.getElementById("ritmoChart");
+  const indId = document.getElementById("chartInd").value;
+  const who = document.getElementById("chartWho").value;
+  const ind = state.indicators.find(i => i.id === indId);
+  if (!ind || !cv) return;
+  const sellers = orderedSellers();
+  const ids = who === "__team" ? sellers.map(s=>s.id) : [who];
+  const n = daysInMonth(currentMonth);
+  const twd = Number(monthData().workdays) || autoWorkdays(currentMonth);
+  const metaTotal = metaMonthFor(ind) * (ids.length || 1);
+  const ewd = elapsedWorkdays(currentMonth);
+
+  const realCum = []; let run = 0;
+  for (let d=1; d<=n; d++){ ids.forEach(id=>{ const c=getCell(id,ind.id,d); if(c.real!=null) run+=Number(c.real); }); realCum.push(run); }
+  const metaLine = []; let wd=0;
+  for (let d=1; d<=n; d++){ if(!isSunday(currentMonth,d)) wd++; metaLine.push(twd? metaTotal*(wd/twd):0); }
+  const projTotal = ewd ? (run/ewd)*twd : 0;
+
+  const css = getComputedStyle(document.documentElement);
+  const text = css.getPropertyValue("--text").trim();
+  const dim = css.getPropertyValue("--text-faint").trim();
+  const grid = css.getPropertyValue("--border").trim();
+  const accent = css.getPropertyValue("--accent").trim();
+  const projColor = projTotal>=metaTotal? css.getPropertyValue("--ok").trim() : (projTotal>=metaTotal*0.9? css.getPropertyValue("--warn").trim() : css.getPropertyValue("--danger").trim());
+
+  const W = cv.clientWidth || 800, H = 320; const dpr = window.devicePixelRatio||1;
+  cv.width = W*dpr; cv.height = H*dpr; const ctx = cv.getContext("2d"); ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,W,H);
+  const pad = { l: 46, r: 16, t: 22, b: 28 };
+  const maxY = Math.max(metaTotal, run, projTotal, ...metaLine, 1) * 1.1;
+  const X = i => pad.l + (W-pad.l-pad.r) * (i/Math.max(n-1,1));
+  const Y = v => H-pad.b - (H-pad.t-pad.b) * (v/maxY);
+
+  function line(pts, color, dash, w){ if(pts.length<1) return; ctx.strokeStyle=color; ctx.lineWidth=w||1.8; ctx.setLineDash(dash||[]); ctx.beginPath(); pts.forEach((p,i)=> i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.stroke(); ctx.setLineDash([]); }
+  function legend(x,y,color,label){ ctx.fillStyle=color; ctx.fillRect(x,y,10,10); ctx.fillStyle=text; ctx.fillText(label, x+15, y+9); }
+
+  ctx.strokeStyle = grid; ctx.fillStyle = dim; ctx.font = "11px sans-serif"; ctx.lineWidth = 1;
+  for (let g=0; g<=4; g++){ const v=maxY*g/4; const y=Y(v); ctx.globalAlpha=.4; ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke(); ctx.globalAlpha=1; ctx.fillText(Math.round(v), 6, y+3); }
+  for (let d=1; d<=n; d+=Math.ceil(n/10)){ ctx.fillText(d, X(d-1)-4, H-8); }
+
+  line(metaLine.map((v,i)=>[X(i),Y(v)]), dim, [6,5]);
+  const elapsedIdx = daysElapsedIndex();
+  const realPts = realCum.map((v,i)=>[X(i),Y(v)]).slice(0, Math.min(n, elapsedIdx+1));
+  line(realPts, accent, null, 2.5);
+  if (realPts.length){
+    const last = realPts[realPts.length-1];
+    line([last,[X(n-1),Y(projTotal)]], projColor, [4,4], 2);
+    ctx.fillStyle = projColor; ctx.beginPath(); ctx.arc(X(n-1),Y(projTotal),3.5,0,Math.PI*2); ctx.fill();
+  }
+  ctx.font = "12px sans-serif";
+  legend(pad.l, 6, accent, "Real acumulado");
+  legend(pad.l+130, 6, dim, "Meta ideal");
+  legend(pad.l+230, 6, projColor, "Projeção: "+Math.round(projTotal)+" / "+Math.round(metaTotal));
+}
+function daysElapsedIndex(){ const now=new Date(); return todayISO()===currentMonth? now.getDate()-1 : daysInMonth(currentMonth)-1; }
+
+/* ============================================================
+   RESUMO GERAL
+   ============================================================ */
+function renderResumo() {
+  const sellers = orderedSellers();
+  const inds = orderedIndicators();
+  const weekDays = (weeksOf(currentMonth)[currentWeekIndex()] || []);
+  const ewd = elapsedWorkdays(currentMonth);
+  const twd = Number(monthData().workdays) || autoWorkdays(currentMonth);
+
+  let head = '<thead><tr><th class="name">Indicador</th><th>Sem. real</th><th>Sem. meta</th><th>Sem. %</th><th>Mês real</th><th>Mês meta</th><th>Mês %</th><th>Projeção</th><th>Proj. %</th></tr></thead>';
+  let body = "<tbody>";
+  const ids = sellers.map(s=>s.id);
+  inds.forEach(ind => {
+    let wReal=0, mReal=0; const mDays=monthDays();
+    ids.forEach(id=>{ const w=accum(id,ind.id,"real",weekDays); if(w!=null)wReal+=w; const mm=accum(id,ind.id,"real",mDays); if(mm!=null)mReal+=mm; });
+    const wMeta = weekMeta(ind, weekDays)*(sellers.length||1);
+    const mMeta = metaMonthFor(ind)*(sellers.length||1);
+    const wPct = wMeta? wReal/wMeta : null;
+    const mPct = mMeta? mReal/mMeta : null;
+    const proj = ewd? (mReal/ewd)*twd : null;
+    const pPct = mMeta && proj!=null? proj/mMeta : null;
+    body += `<tr><td class="name" style="border-left:3px solid ${ind.color}">${ind.name}</td>
+      <td>${fmt(wReal)}</td><td class="muted">${fmt(wMeta)}</td><td style="color:${heatText(wPct)};font-weight:700;">${pctTxt(wPct)}</td>
+      <td>${fmt(mReal)}</td><td class="muted">${fmt(mMeta)}</td><td style="color:${heatText(mPct)};font-weight:700;">${pctTxt(mPct)}</td>
+      <td><span class="heat" style="background:${heatColor(pPct)};color:${heatText(pPct)}">${proj==null?'—':fmt(proj)}</span></td>
+      <td style="color:${heatText(pPct)};font-weight:700;">${pctTxt(pPct)}</td></tr>`;
+  });
+  body += "</tbody>";
+  document.getElementById("resumoTable").innerHTML = head + body;
+}
+function currentWeekIndex() {
+  const weeks = weeksOf(currentMonth);
+  if (todayISO() !== currentMonth) return weeks.length-1;
+  const day = new Date().getDate();
+  for (let i=0;i<weeks.length;i++) if (weeks[i].includes(day)) return i;
+  return weeks.length-1;
+}
+
+/* ============================================================
+   CONFIGURAÇÃO
+   ============================================================ */
+function renderConfig() {
+  const md = monthData();
+  document.getElementById("configMonthLabel").textContent = "Editando: " + monthLabel(currentMonth);
+  document.getElementById("workdays").value = md.workdays;
+  const sl = document.getElementById("sellerList");
+  sl.innerHTML = orderedSellers().map(s => `
+    <div class="row" style="align-items:center; margin-bottom:8px;">
+      <input type="text" value="${escapeHtml(s.name)}" data-seller="${s.id}" class="seller-name" style="flex:1; min-width:200px;">
+      <button class="btn danger sm" data-del-seller="${s.id}">Remover</button>
+    </div>`).join("") || '<div class="empty">Nenhum vendedor cadastrado.</div>';
+  sl.querySelectorAll(".seller-name").forEach(i => i.addEventListener("change", () => {
+    const s = state.sellers.find(x=>x.id===i.dataset.seller); if(s){ s.name=i.value; save(); toast("Salvo"); }
+  }));
+  sl.querySelectorAll("[data-del-seller]").forEach(b => b.addEventListener("click", () => {
+    if(confirm("Remover este vendedor e seus dados deste mês?")){
+      state.sellers = state.sellers.filter(x=>x.id!==b.dataset.delSeller);
+      if(state.order.sellers) state.order.sellers = state.order.sellers.filter(id=>id!==b.dataset.delSeller);
+      save(); renderConfig();
+    }
+  }));
+  renderIndicatorConfig();
+}
+function monthLabel(m){ const {y,mo}=parseMonth(m); return new Date(y,mo-1,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"}); }
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function renderIndicatorConfig() {
+  const fields = allFields();
+  const list = document.getElementById("indicatorList");
+  list.innerHTML = orderedIndicators().map(ind => {
+    const validMsg = validateMeta(ind);
+    let html = `<div class="ind-card" data-ind="${ind.id}">
+      <div class="head">
+        <span class="swatch" style="background:${ind.color}"></span>
+        <input type="text" value="${escapeHtml(ind.name)}" data-k="name" class="ind-field" style="font-weight:700; min-width:170px;">
+        <input type="text" value="${escapeHtml(ind.abbr)}" data-k="abbr" class="ind-field" style="width:90px;" placeholder="Sigla">
+        <input type="color" value="${ind.color}" data-k="color" class="ind-field" style="width:42px; height:34px; padding:2px;">
+        <select data-k="role" class="ind-field" title="Papel para cálculos">
+          <option value="" ${ind.role===''?'selected':''}>— papel —</option>
+          <option value="venda" ${ind.role==='venda'?'selected':''}>É Venda</option>
+          <option value="fichas" ${ind.role==='fichas'?'selected':''}>É Fichas</option>
+        </select>
+        <label class="switch"><input type="checkbox" data-k="checkin" ${ind.checkin?'checked':''}><span class="track"></span>Check-in</label>
+        <label class="switch"><input type="checkbox" data-k="checkout" ${ind.checkout?'checked':''}><span class="track"></span>Check-out</label>
+        <span class="spacer" style="flex:1"></span>
+        <button class="btn danger sm" data-del-ind="${ind.id}">Excluir</button>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <div class="field"><label>Meta / dia</label><input type="number" value="${ind.metaDay}" data-meta="metaDay"></div>
+        <div class="field"><label>Meta / sábado</label><input type="number" value="${ind.metaSat}" data-meta="metaSat"></div>
+        <div class="field"><label>Meta / mês</label><input type="number" value="${ind.metaMonth}" data-meta="metaMonth"></div>
+        ${validMsg ? `<div class="field" style="align-self:flex-end;"><span class="pill" style="background:color-mix(in srgb,var(--danger) 20%,transparent); color:var(--danger)">⚠ ${validMsg}</span></div>` : ''}
+      </div>`;
+    html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
+    (ind.subs||[]).forEach(s => {
+      html += `<div class="sub-row" data-sub="${s.id}">
+        <span class="tag sub">sub</span>
+        <input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:150px;">
+        <span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:70px;">
+        <span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:70px;">
+        <span class="hint">mês</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:70px;">
+        <label class="switch"><input type="checkbox" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label>
+        <label class="switch"><input type="checkbox" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label>
+        <button class="btn danger sm" data-del-sub="${s.id}">×</button>
+      </div>`;
+    });
+    html += `</div>`;
+    html += `<div class="rate-list"><div class="flex-between"><b style="font-size:12.5px;">Taxas (A ÷ B)</b><button class="btn sec sm" data-add-rate="${ind.id}">+ taxa</button></div>`;
+    const opts = fields.map(f => `<option value="${f.id}">${f.kind==='sub'?'↳ ':''}${escapeHtml(f.name)}</option>`).join("");
+    (ind.rates||[]).forEach(r => {
+      html += `<div class="rate-row" data-rate="${r.id}">
+        <span class="tag">%</span>
+        <input type="text" value="${escapeHtml(r.name)}" data-rk="name" class="rate-field" style="min-width:140px;">
+        <label class="switch"><input type="checkbox" data-rk="manual" ${r.manual?'checked':''}><span class="track"></span>Manual</label>
+        <span class="manual-hide" style="${r.manual?'display:none;':''}">
+          <select data-rk="numId" class="rate-field">${opts}</select>
+          <b>÷</b>
+          <select data-rk="denId" class="rate-field">${opts}</select>
+          <label class="switch"><input type="checkbox" data-rk="invert" ${r.invert?'checked':''}><span class="track"></span>Inverter</label>
+        </span>
+        <span class="hint">alvo %</span><input type="number" value="${r.target}" data-rk="target" class="rate-field" style="width:70px;">
+        <button class="btn danger sm" data-del-rate="${r.id}">×</button>
+      </div>`;
+    });
+    html += `</div></div>`;
+    return html;
+  }).join("") || '<div class="empty">Nenhum indicador. Clique em “+ Indicador”.</div>';
+
+  list.querySelectorAll('[data-rate]').forEach(row => {
+    const ind = findIndByRate(row.dataset.rate);
+    const r = ind && ind.rates.find(x=>x.id===row.dataset.rate);
+    if(r){ const num=row.querySelector('[data-rk="numId"]'); const den=row.querySelector('[data-rk="denId"]'); if(num)num.value=r.numId||''; if(den)den.value=r.denId||''; }
+  });
+
+  bindIndicatorEvents();
+}
+function validateMeta(cfg){
+  const twd = Number(monthData().workdays)||autoWorkdays(currentMonth);
+  const cap = (Number(cfg.metaDay)||0) * twd;
+  if (Number(cfg.metaMonth) && cap < Number(cfg.metaMonth))
+    return `meta diária × ${twd} dias (${cap}) < meta mês (${cfg.metaMonth})`;
+  return "";
+}
+function findIndByRate(rid){ return state.indicators.find(i => (i.rates||[]).some(r=>r.id===rid)); }
+function findIndBySub(sid){ return state.indicators.find(i => (i.subs||[]).some(s=>s.id===sid)); }
+
+function bindIndicatorEvents() {
+  const list = document.getElementById("indicatorList");
+  list.querySelectorAll(".ind-card").forEach(card => {
+    const ind = state.indicators.find(i=>i.id===card.dataset.ind);
+    if(!ind) return;
+    card.querySelectorAll(".ind-field").forEach(f => f.addEventListener("change", () => {
+      const k=f.dataset.k; ind[k] = f.type==="checkbox"? f.checked : f.value; save(); renderIndicatorConfig();
+    }));
+    card.querySelectorAll("[data-meta]").forEach(f => f.addEventListener("change", () => { ind[f.dataset.meta]=Number(f.value)||0; save(); renderIndicatorConfig(); }));
+  });
+  list.querySelectorAll("[data-del-ind]").forEach(b => b.addEventListener("click", () => {
+    if(confirm("Excluir este indicador (e seus subs/taxas)?")){ state.indicators = state.indicators.filter(i=>i.id!==b.dataset.delInd); save(); renderIndicatorConfig(); }
+  }));
+  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => {
+    const ind = state.indicators.find(i=>i.id===b.dataset.addSub);
+    ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaMonth:0 });
+    save(); renderIndicatorConfig();
+  }));
+  list.querySelectorAll(".sub-row").forEach(row => {
+    const ind = findIndBySub(row.dataset.sub); const s = ind && ind.subs.find(x=>x.id===row.dataset.sub);
+    if(!s) return;
+    row.querySelectorAll(".sub-field").forEach(f => f.addEventListener("change", () => {
+      const k=f.dataset.sk; s[k]= f.type==="checkbox"? f.checked : (["metaDay","metaSat","metaMonth"].includes(k)? Number(f.value)||0 : f.value); save(); renderIndicatorConfig();
+    }));
+  });
+  list.querySelectorAll("[data-del-sub]").forEach(b => b.addEventListener("click", () => {
+    const ind = findIndBySub(b.dataset.delSub); ind.subs = ind.subs.filter(s=>s.id!==b.dataset.delSub); save(); renderIndicatorConfig();
+  }));
+  list.querySelectorAll("[data-add-rate]").forEach(b => b.addEventListener("click", () => {
+    const ind = state.indicators.find(i=>i.id===b.dataset.addRate);
+    const f = allFields();
+    ind.rates = ind.rates||[]; ind.rates.push({ id:uid(), name:"Nova taxa %", numId:(f[0]&&f[0].id)||"", denId:(f[1]&&f[1].id)||(f[0]&&f[0].id)||"", invert:false, target:0, manual:false });
+    save(); renderIndicatorConfig();
+  }));
+  list.querySelectorAll(".rate-row").forEach(row => {
+    const ind = findIndByRate(row.dataset.rate); const r = ind && ind.rates.find(x=>x.id===row.dataset.rate);
+    if(!r) return;
+    row.querySelectorAll(".rate-field").forEach(f => f.addEventListener("change", () => {
+      const k=f.dataset.rk; r[k]= f.type==="checkbox"? f.checked : (k==="target"? Number(f.value)||0 : f.value); save(); renderIndicatorConfig();
+    }));
+  });
+  list.querySelectorAll("[data-del-rate]").forEach(b => b.addEventListener("click", () => {
+    const ind = findIndByRate(b.dataset.delRate); ind.rates = ind.rates.filter(r=>r.id!==b.dataset.delRate); save(); renderIndicatorConfig();
+  }));
+}
+
+/* ============================================================
+   EXPORT CSV / JSON
+   ============================================================ */
+function exportCsv() {
+  const sellers = orderedSellers(); const inds = orderedIndicators();
+  const days = monthDays();
+  const ewd = elapsedWorkdays(currentMonth); const twd = Number(monthData().workdays)||autoWorkdays(currentMonth);
+  let rows = [["Vendedor","Indicador","Real mes","Meta mes","% meta","Projecao"].join(";")];
+  sellers.forEach(s => inds.forEach(ind => {
+    const real = accum(s.id, ind.id, "real", days) || 0;
+    const meta = metaMonthFor(ind);
+    const proj = (real/ewd)*twd;
+    rows.push([s.name, ind.name, real, meta, meta?Math.round(real/meta*100)+"%":"", Math.round(proj)].join(";"));
+  }));
+  download("gestao_"+currentMonth+".csv", rows.join("\n"), "text/csv");
+  toast("CSV exportado");
+}
+function exportJson() {
+  download("backup_gestao_"+todayISO()+".json", JSON.stringify(state, null, 2), "application/json");
+  toast("Backup exportado");
+}
+function download(name, content, type) {
+  const blob = new Blob([content], { type }); const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url);
+}
+function importJson(file) {
+  const r = new FileReader();
+  r.onload = () => {
+    try { state = migrate(JSON.parse(r.result)); save(); applyTheme(); syncStore(); renderActive(); toast("Backup importado"); }
+    catch(e){ toast("Arquivo inválido", true); }
+  };
+  r.readAsText(file);
+}
+
+/* ============================================================
+   TEMA / LOJA / TOAST
+   ============================================================ */
+function applyTheme() {
+  document.documentElement.setAttribute("data-theme", state.theme);
+  document.getElementById("themeToggle").textContent = state.theme === "dark" ? "🌙" : "☀️";
+}
+function syncStore() {
+  document.getElementById("storeName").value = state.storeName || "";
+  document.getElementById("storeLabel").textContent = state.storeName || "—";
+}
+let toastTimer;
+function toast(msg, err) {
+  const t = document.getElementById("toast"); t.textContent = msg; t.classList.toggle("err", !!err); t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove("show"), 1800);
+}
+
+/* ============================================================
+   INIT / EVENTOS GLOBAIS
+   ============================================================ */
+function init() {
+  applyTheme();
+  syncStore();
+  document.getElementById("monthPicker").value = currentMonth;
+  monthData(); save();
+
+  document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => showView(b.dataset.view));
+
+  document.getElementById("monthPicker").addEventListener("change", e => {
+    currentMonth = e.target.value || todayISO(); monthData(); save(); renderActive();
+  });
+  document.getElementById("themeToggle").onclick = () => { state.theme = state.theme==="dark"?"light":"dark"; save(); applyTheme(); renderActive(); };
+  document.getElementById("moveToggle").onclick = (e) => {
+    document.body.classList.toggle("moveon");
+    e.currentTarget.classList.toggle("active", document.body.classList.contains("moveon"));
+    toast(document.body.classList.contains("moveon")? "Modo mover: arraste linhas e blocos" : "Modo mover desligado");
+    renderActive();
+  };
+  document.getElementById("storeName").addEventListener("input", e => { state.storeName = e.target.value; document.getElementById("storeLabel").textContent = e.target.value || "—"; save(); });
+
+  document.querySelectorAll("#matrizPeriodo button").forEach(b => b.onclick = () => {
+    document.querySelectorAll("#matrizPeriodo button").forEach(x=>x.classList.remove("active")); b.classList.add("active");
+    matrizPeriodo = b.dataset.p; if(matrizPeriodo==="semana") matrizWeekIdx = currentWeekIndex(); renderMatriz();
+  });
+  document.getElementById("diarioSeller").addEventListener("change", e => { diarioSeller = e.target.value; renderDiario(); });
+  document.getElementById("diarioWeek").addEventListener("change", e => { diarioWeekIdx = +e.target.value; renderDiario(); });
+  document.getElementById("workdays").addEventListener("change", e => { monthData().workdays = Number(e.target.value)||0; save(); toast("Dias úteis salvos"); });
+  document.getElementById("autoWorkdays").onclick = () => { monthData().workdays = autoWorkdays(currentMonth); save(); renderConfig(); toast("Calculado: "+monthData().workdays+" dias"); };
+  document.getElementById("addSeller").onclick = () => {
+    const i = document.getElementById("newSeller"); const v = i.value.trim(); if(!v) return;
+    state.sellers.push({ id: uid(), name: v }); i.value=""; save(); renderConfig(); toast("Vendedor adicionado");
+  };
+  document.getElementById("newSeller").addEventListener("keydown", e => { if(e.key==="Enter") document.getElementById("addSeller").click(); });
+  document.getElementById("addIndicator").onclick = () => {
+    state.indicators.push({ id:uid(), name:"Novo indicador", abbr:"NOVO", color:randColor(), checkin:true, checkout:true, role:"", metaDay:0, metaSat:0, metaMonth:0, subs:[], rates:[] });
+    save(); renderIndicatorConfig(); toast("Indicador adicionado");
+  };
+  document.getElementById("exportCsv").onclick = exportCsv;
+  document.getElementById("exportJson").onclick = exportJson;
+  document.getElementById("importJsonBtn").onclick = () => document.getElementById("importJson").click();
+  document.getElementById("importJson").addEventListener("change", e => { if(e.target.files[0]) importJson(e.target.files[0]); });
+  document.getElementById("resetAll").onclick = () => { if(confirm("Apagar TODOS os dados deste navegador? Isso não pode ser desfeito.")){ localStorage.removeItem(LS_KEY); state = defaultState(); save(); applyTheme(); syncStore(); renderActive(); toast("Tudo apagado"); } };
+
+  showView("matriz");
+}
+function randColor(){ const c=["#4f8cff","#22d3aa","#ffb74d","#a78bfa","#46d39a","#f472b6","#fb7185","#38bdf8","#facc15"]; return c[Math.floor(Math.random()*c.length)]; }
+
+document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>
