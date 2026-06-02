@@ -131,6 +131,14 @@
   .month-breakdown .mb label span { font-size: 9px; color: var(--text-faint); letter-spacing: .3px; }
   .month-breakdown .mb input { width: 100%; font-weight: 700; }
   .month-breakdown .mb-val { background: var(--cell); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; font-weight: 700; color: var(--text-dim); }
+  .chip-days { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); font-weight: 800; font-size: 10.5px; border-radius: 99px; padding: 1px 7px; }
+  .seller-chip .x.esc:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+  .escala-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 10px; }
+  .escala-cal .eh { font-size: 10px; color: var(--text-faint); text-align: center; text-transform: uppercase; font-weight: 700; padding-bottom: 2px; }
+  .escala-cal .ed { aspect-ratio: 1; border: 1px solid var(--border); border-radius: 9px; background: var(--cell); color: var(--text-dim); font-weight: 700; cursor: pointer; display: grid; place-items: center; font-size: 13px; transition: .12s; }
+  .escala-cal .ed.on { background: color-mix(in srgb, var(--accent-2) 24%, var(--cell)); border-color: var(--accent-2); color: var(--text); }
+  .escala-cal .ed.disabled { opacity: .3; cursor: not-allowed; }
+  .escala-cal .ed.blank { border: none; background: transparent; cursor: default; }
   /* Indicator config */
   .ind-card { border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; background: var(--panel-2); }
   .ind-card .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -358,6 +366,14 @@
   <div id="metaLojaList" style="margin-top:8px;"></div>
 </div></div>
 
+<div class="modal-bg" id="escalaModal"><div class="modal">
+  <div class="flex-between"><h3>📅 Escala — <span id="escalaName"></span> · <span id="escalaMonth"></span></h3><button class="iconbtn" id="closeEscala">✕</button></div>
+  <div class="sub">Dias marcados = trabalhados. Desmarque as folgas. Domingos só contam se "Trabalha domingo" estiver ligado.</div>
+  <label class="switch" style="margin:6px 0 2px;"><input type="checkbox" id="escalaSunday"><span class="track"></span>Trabalha domingo</label>
+  <div id="escalaCal" class="escala-cal"></div>
+  <div class="hint" style="margin-top:10px;">Dias trabalhados no mês: <b id="escalaCount" class="neon">0</b></div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -435,6 +451,14 @@ function diasUteisOf(m=currentMonth){ const md=monthData(m); return md.diasUteis
 function sabadosOf(m=currentMonth){ const md=monthData(m); return md.sabados!=null?Number(md.sabados):countSaturdays(m); }
 function workdaysOf(m=currentMonth){ return diasUteisOf(m)+sabadosOf(m); }
 function capacityOf(cfg){ return (Number(cfg.metaDay)||0)*diasUteisOf()+(Number(cfg.metaSat)||0)*sabadosOf(); }
+function defaultWorks(m,day){ return !isSunday(m,day); }
+function sched(sellerId,m){ const md=monthData(m); return md.sched && md.sched[sellerId]; }
+function sellerWorks(sellerId,day,m=currentMonth){ const s=sched(sellerId,m); if(s) return !!s[day]; return defaultWorks(m,day); }
+function sellerWorkedCount(sellerId,m=currentMonth){ let c=0; const n=daysInMonth(m); for(let d=1;d<=n;d++) if(sellerWorks(sellerId,d,m)) c++; return c; }
+function sellerElapsedWorked(sellerId,m=currentMonth){ const n=daysInMonth(m); const last=(todayISO()===m)?new Date().getDate():n; let c=0; for(let d=1;d<=Math.min(last,n);d++) if(sellerWorks(sellerId,d,m)) c++; return Math.max(c,1); }
+function sellerWorksAnySunday(sellerId,m=currentMonth){ const n=daysInMonth(m); for(let d=1;d<=n;d++) if(isSunday(m,d)&&sellerWorks(sellerId,d,m)) return true; return false; }
+function sellerProjVal(sellerId,fieldId,m=currentMonth){ const real=accum(sellerId,fieldId,"real",monthDays(m),m)||0; return (real/sellerElapsedWorked(sellerId,m))*sellerWorkedCount(sellerId,m); }
+function teamProjVal(ids,fieldId,m=currentMonth){ let s=0; ids.forEach(id=>{ s+=sellerProjVal(id,fieldId,m); }); return s; }
 function elapsedWorkdays(m) {
   const n = daysInMonth(m); const sameMonth = todayISO() === m; const last = sameMonth ? new Date().getDate() : n;
   let c = 0; for (let d = 1; d <= Math.min(last, n); d++) if (!isSunday(m, d)) c++; return Math.max(c, 1);
@@ -569,7 +593,7 @@ function renderMatriz() {
     const meta = (matrizPeriodo === "mes" ? metaMonthFor(ind) : weekMeta(ind, days)) * factor;
     const pct = (meta && has) ? real / meta : null;
     html += `<td style="border-left:3px solid ${ind.color};"><span class="heat" style="background:${heatColor(pct)}; color:${heatText(pct)}">${has?fmt(real):'—'}</span></td>` + pctCell(has?real:null, meta);
-    if (matrizPeriodo === "mes") { const proj = has ? (real/ewd)*twd : null; const pp = meta ? (proj/meta) : null; html += `<td style="color:${heatText(pp)};">${proj==null?'—':fmt(proj)}</td>`; }
+    if (matrizPeriodo === "mes") { const proj = has ? teamProjVal(ids, ind.id) : null; const pp = meta ? (proj/meta) : null; html += `<td style="color:${heatText(pp)};">${proj==null?'—':fmt(proj)}</td>`; }
     if (expandedBlocks[ind.id] !== false) {
       (ind.subs||[]).forEach(s => { let sr = 0, h = false; ids.forEach(id => { const v = accum(id, s.id, "real", days); if (v != null) { sr += v; h = true; } }); const sMeta = (matrizPeriodo === "mes" ? metaMonthFor(s) : weekMeta(s, days)) * factor; const sp = (sMeta&&h)? sr/sMeta : null; html += `<td>${h?fmt(sr):'—'}</td>`; });
       (ind.rates||[]).forEach(r => { const rv = rateValue(r, ids); const tgt = Number(r.target)||0; const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null; html += `<td style="color:${heatText(rp)}; font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`; });
@@ -654,13 +678,15 @@ function renderDiario() {
 }
 function diarioRow(cfg, color, isSub) {
   const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
-  const label = isSub ? `<span class="tag sub">↳</span> ${cfg.name}` : `<b style="color:${color}">${cfg.name}</b>`;
+  const gated = cfg.sundayOnly && !sellerWorksAnySunday(diarioSeller);
+  const ci = cfg.checkin && !gated, co = cfg.checkout && !gated;
+  const label = (isSub ? `<span class="tag sub">↳</span> ${cfg.name}` : `<b style="color:${color}">${cfg.name}</b>`) + (gated ? ` <span class="hint" style="font-size:9px">🔒 só domingo</span>` : (cfg.sundayOnly ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">dom</span>` : ""));
   let row = `<tr class="${isSub?'dsub':'dgroup'}" style="--gc:${color}"><td class="name" style="border-left:3px solid ${color};">${label}</td>`;
   row += `<td><span class="neon">${fmt(cfg.metaDay)}</span>${Number(cfg.metaSat)?`<br><span class="muted" style="font-size:10px">sáb ${fmt(cfg.metaSat)}</span>`:''}</td>`;
   days.forEach(d => {
     const c = getCell(diarioSeller, cfg.id, d); let cell = '<div class="daycell">';
-    if (cfg.checkin) cell += `<input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="plano" style="border-style:dashed;">`;
-    if (cfg.checkout) { const metaD = metaForDay(cfg, currentMonth, d); const pct = metaD ? (c.real!=null? c.real/metaD : null) : null; cell += `<input class="cellinput" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${c.real ?? ''}" placeholder="real" style="color:${c.real!=null?heatText(pct):'var(--text)'};">`; }
+    if (ci) cell += `<input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="plano" style="border-style:dashed;">`;
+    if (co) { const metaD = metaForDay(cfg, currentMonth, d); const pct = metaD ? (c.real!=null? c.real/metaD : null) : null; cell += `<input class="cellinput" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${c.real ?? ''}" placeholder="real" style="color:${c.real!=null?heatText(pct):'var(--text)'};">`; }
     cell += '</div>'; row += `<td class="${dayCls(d)}">${cell}</td>`;
   });
   const realSum = accum(diarioSeller, cfg.id, "real", days) ?? 0; const metaSum = weekMeta(cfg, days); const pctW = metaSum ? realSum/metaSum : null;
@@ -701,7 +727,7 @@ function sellerMetrics(sellerId) {
   state.indicators.forEach(ind => {
     if (ind.pctOnly) return;
     const real = accum(sellerId, ind.id, "real", days), meta = metaMonthFor(ind);
-    if (meta && real != null) { projSum += ((real/ewd)*twd)/meta; projN++; }
+    if (meta && real != null) { projSum += (sellerProjVal(sellerId, ind.id)/meta); projN++; }
     if (ind.checkin && ind.checkout) { const plan = accum(sellerId, ind.id, "plan", days); const r = accum(sellerId, ind.id, "real", days); if (plan) { aderSum += (r||0)/plan; aderN++; } }
     const sys = getSystem(sellerId, ind.id);
     if (sys != null && sys > 0) { const r = accum(sellerId, ind.id, "real", days) || 0; accSum += Math.max(0, 1 - Math.abs(r - sys)/sys); accN++; }
@@ -736,11 +762,11 @@ function drawRitmo() {
   const cv = document.getElementById("ritmoChart"); const indId = document.getElementById("chartInd").value; const who = document.getElementById("chartWho").value;
   const ind = state.indicators.find(i => i.id === indId); if (!ind || !cv) return;
   const sellers = orderedSellers(); const ids = who === "__team" ? sellers.map(s=>s.id) : [who];
-  const n = daysInMonth(currentMonth); const twd = workdaysOf(currentMonth);
-  const metaTotal = metaMonthFor(ind) * (ids.length || 1); const ewd = elapsedWorkdays(currentMonth);
+  const n = daysInMonth(currentMonth); const totalWorked = ids.reduce((a,id)=>a+sellerWorkedCount(id),0) || 1;
+  const metaTotal = metaMonthFor(ind) * (ids.length || 1);
   const realCum = []; let run = 0; for (let d=1; d<=n; d++){ ids.forEach(id=>{ const c=getCell(id,ind.id,d); if(c.real!=null) run+=Number(c.real); }); realCum.push(run); }
-  const metaLine = []; let wd=0; for (let d=1; d<=n; d++){ if(!isSunday(currentMonth,d)) wd++; metaLine.push(twd? metaTotal*(wd/twd):0); }
-  const projTotal = ewd ? (run/ewd)*twd : 0;
+  const metaLine = []; for (let d=1; d<=n; d++){ let wc=0; ids.forEach(id=>{ for(let k=1;k<=d;k++) if(sellerWorks(id,k)) wc++; }); metaLine.push(metaTotal*wc/totalWorked); }
+  const projTotal = teamProjVal(ids, ind.id);
   const css = getComputedStyle(document.documentElement); const text = css.getPropertyValue("--text").trim(); const dim = css.getPropertyValue("--text-faint").trim(); const grid = css.getPropertyValue("--border").trim(); const accent = css.getPropertyValue("--accent").trim();
   const projColor = projTotal>=metaTotal? css.getPropertyValue("--ok").trim() : (projTotal>=metaTotal*0.9? css.getPropertyValue("--warn").trim() : css.getPropertyValue("--danger").trim());
   const W = cv.clientWidth || 800, H = 320, dpr = window.devicePixelRatio||1; cv.width = W*dpr; cv.height = H*dpr; const ctx = cv.getContext("2d"); ctx.scale(dpr,dpr); ctx.clearRect(0,0,W,H);
@@ -782,7 +808,7 @@ function renderResumo() {
     const target = metaLoja != null ? metaLoja : metaVend;
     const wPct = wMeta? wReal/wMeta : null;
     const mPct = target? mReal/target : null;
-    const proj = ewd? (mReal/ewd)*twd : null;
+    const proj = teamProjVal(ids, cfg.id);
     const pPct = target && proj!=null? proj/target : null;
     const vendRed = (metaLoja != null && metaVend < metaLoja);
     const name = isSub ? `<span class="tag sub">↳</span> ${cfg.name}` : `<b>${cfg.name}</b>`;
@@ -810,6 +836,10 @@ function openMetaLoja() {
   list.querySelectorAll(".metaloja-inp").forEach(inp => inp.addEventListener("input", () => setMetaLoja(inp.dataset.field, inp.value)));
   document.getElementById("metaLojaModal").classList.add("show");
 }
+let escalaSellerId = null;
+function ensureSched(sellerId){ const md=monthData(); md.sched=md.sched||{}; if(!md.sched[sellerId]){ const o={}; const n=daysInMonth(currentMonth); for(let d=1;d<=n;d++) if(defaultWorks(currentMonth,d)) o[d]=1; md.sched[sellerId]=o; } return md.sched[sellerId]; }
+function openEscala(sellerId){ const s=state.sellers.find(x=>x.id===sellerId); if(!s) return; escalaSellerId=sellerId; document.getElementById("escalaName").textContent=s.name; document.getElementById("escalaMonth").textContent=monthLabel(currentMonth); document.getElementById("escalaSunday").checked=sellerWorksAnySunday(sellerId); renderEscalaCal(); document.getElementById("escalaModal").classList.add("show"); }
+function renderEscalaCal(){ const m=currentMonth, n=daysInMonth(m); const sunOn=document.getElementById("escalaSunday").checked; const dn=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"]; let html=dn.map(x=>`<div class="eh">${x}</div>`).join(""); const fw=weekday(m,1); for(let i=0;i<fw;i++) html+=`<div class="ed blank"></div>`; for(let d=1;d<=n;d++){ const sun=isSunday(m,d); const on=sellerWorks(escalaSellerId,d,m); const dis=sun&&!sunOn; html+=`<div class="ed ${on&&!dis?'on':''} ${dis?'disabled':''}" data-day="${d}">${d}</div>`; } const cal=document.getElementById("escalaCal"); cal.innerHTML=html; cal.querySelectorAll(".ed[data-day]").forEach(el=>{ el.onclick=()=>{ if(el.classList.contains("disabled")) return; const d=+el.dataset.day; const sc=ensureSched(escalaSellerId); if(sc[d]) delete sc[d]; else sc[d]=1; save(); renderEscalaCal(); }; }); document.getElementById("escalaCount").textContent=sellerWorkedCount(escalaSellerId); }
 
 /* ============================================================ CONFIG */
 let sellersExpanded = false;
@@ -826,13 +856,14 @@ function renderConfig() {
   const shown = showAll ? sellers : sellers.slice(0, LIMIT);
   if (!sellers.length) { sl.innerHTML = '<div class="empty">Nenhum vendedor.</div>'; }
   else {
-    sl.innerHTML = '<div class="seller-chips">' + shown.map(s => `<div class="seller-chip"><input type="text" value="${escapeHtml(s.name)}" data-seller="${s.id}" class="seller-name" style="width:${Math.max(4, s.name.length + 1)}ch"><button class="x" data-del-seller="${s.id}" title="Remover">✕</button></div>`).join("") + '</div>'
+    sl.innerHTML = '<div class="seller-chips">' + shown.map(s => `<div class="seller-chip"><input type="text" value="${escapeHtml(s.name)}" data-seller="${s.id}" class="seller-name" style="width:${Math.max(4, s.name.length + 1)}ch"><span class="chip-days" title="Dias trabalhados no mês">${sellerWorkedCount(s.id)}${sellerWorksAnySunday(s.id)?' · dom':''}</span><button class="x esc" data-esc-seller="${s.id}" title="Escala / domingos">📅</button><button class="x" data-del-seller="${s.id}" title="Remover">✕</button></div>`).join("") + '</div>'
       + (sellers.length > LIMIT ? `<button class="btn sec sm" id="toggleSellers" style="margin-top:12px;">${showAll ? '▴ Mostrar menos' : '▾ Ver todos ('+sellers.length+')'}</button>` : '');
     sl.querySelectorAll(".seller-name").forEach(i => {
       i.addEventListener("input", () => { i.style.width = Math.max(4, i.value.length + 1) + "ch"; });
       i.addEventListener("change", () => { const s = state.sellers.find(x=>x.id===i.dataset.seller); if(s){ s.name=i.value; save(); toast("Salvo"); } });
     });
     sl.querySelectorAll("[data-del-seller]").forEach(b => b.addEventListener("click", () => { if(confirm("Remover este vendedor e seus dados deste mês?")){ state.sellers = state.sellers.filter(x=>x.id!==b.dataset.delSeller); if(state.order.sellers) state.order.sellers = state.order.sellers.filter(id=>id!==b.dataset.delSeller); save(); renderConfig(); } }));
+    sl.querySelectorAll("[data-esc-seller]").forEach(b => b.addEventListener("click", () => openEscala(b.dataset.escSeller)));
     const tg = document.getElementById("toggleSellers"); if (tg) tg.onclick = () => { sellersExpanded = !sellersExpanded; renderConfig(); };
   }
   renderIndicatorConfig();
@@ -860,7 +891,7 @@ function renderIndicatorConfig() {
       </div>${validMsg?`<div class="hint" style="color:var(--danger)">⚠ ${validMsg}</div>`:''}`;
     if (!ind.pctOnly) {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
-      (ind.subs||[]).forEach(s => { html += `<div class="sub-row" data-sub="${s.id}"><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:140px;"><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:64px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:64px;"><span class="hint">mês</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`; });
+      (ind.subs||[]).forEach(s => { html += `<div class="sub-row" data-sub="${s.id}"><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:140px;"><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:64px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:64px;"><span class="hint">mês</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`; });
       html += `</div>`;
     }
     html += `<div class="rate-list"><div class="flex-between"><b style="font-size:12.5px;">Taxas (A ÷ B)</b><button class="btn sec sm" data-add-rate="${ind.id}">+ taxa</button></div>`;
@@ -924,10 +955,13 @@ function init() {
   document.getElementById("openMetaLoja").onclick = openMetaLoja;
   document.getElementById("closeMetaLoja").onclick = () => { document.getElementById("metaLojaModal").classList.remove("show"); renderResumo(); };
   document.getElementById("metaLojaModal").addEventListener("click", e => { if (e.target.id === "metaLojaModal") { e.currentTarget.classList.remove("show"); renderResumo(); } });
+  document.getElementById("closeEscala").onclick = () => { document.getElementById("escalaModal").classList.remove("show"); renderConfig(); };
+  document.getElementById("escalaModal").addEventListener("click", e => { if (e.target.id === "escalaModal") { e.currentTarget.classList.remove("show"); renderConfig(); } });
+  document.getElementById("escalaSunday").addEventListener("change", e => { const sc = ensureSched(escalaSellerId); const n = daysInMonth(currentMonth); if(!e.target.checked){ for(let d=1;d<=n;d++) if(isSunday(currentMonth,d)) delete sc[d]; } save(); renderEscalaCal(); });
   document.getElementById("diasUteis").addEventListener("change", e => { monthData().diasUteis = Number(e.target.value)||0; save(); updateWorkdaysBadge(); renderConfig(); toast("Dias úteis salvos"); });
   document.getElementById("sabados").addEventListener("change", e => { monthData().sabados = Number(e.target.value)||0; save(); updateWorkdaysBadge(); renderConfig(); toast("Sábados salvos"); });
   document.getElementById("autoWorkdays").onclick = () => { const md = monthData(); delete md.diasUteis; delete md.sabados; save(); renderConfig(); updateWorkdaysBadge(); toast("Recalculado automático"); };
-  document.getElementById("addSeller").onclick = () => { const i = document.getElementById("newSeller"); const v = i.value.trim(); if(!v) return; state.sellers.push({ id: uid(), name: v }); i.value=""; save(); renderConfig(); toast("Vendedor adicionado"); };
+  document.getElementById("addSeller").onclick = () => { const i = document.getElementById("newSeller"); const v = i.value.trim(); if(!v) return; const sid = uid(); state.sellers.push({ id: sid, name: v }); i.value=""; save(); renderConfig(); openEscala(sid); toast("Vendedor adicionado"); };
   document.getElementById("newSeller").addEventListener("keydown", e => { if(e.key==="Enter") document.getElementById("addSeller").click(); });
   document.getElementById("addIndicator").onclick = () => { state.indicators.push({ id:uid(), name:"Novo indicador", abbr:"NOVO", color:randColor(), checkin:true, checkout:true, role:"", pctOnly:false, metaDay:0, metaSat:0, metaMonth:0, subs:[], rates:[] }); save(); renderIndicatorConfig(); toast("Indicador adicionado"); };
   document.getElementById("exportJson").onclick = exportJson;
