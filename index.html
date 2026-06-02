@@ -126,6 +126,11 @@
   .sysfield label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-weight: 700; display: block; margin-bottom: 5px; }
   .sysfield.sub label { color: var(--accent-2); }
   .sysfield input { width: 100%; font-size: 16px; font-weight: 700; }
+  .month-breakdown { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-top: 6px; }
+  .month-breakdown .mb label { display: flex; flex-direction: column; gap: 1px; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-weight: 700; margin-bottom: 5px; }
+  .month-breakdown .mb label span { font-size: 9px; color: var(--text-faint); letter-spacing: .3px; }
+  .month-breakdown .mb input { width: 100%; font-weight: 700; }
+  .month-breakdown .mb-val { background: var(--cell); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; font-weight: 700; color: var(--text-dim); }
   /* Indicator config */
   .ind-card { border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; background: var(--panel-2); }
   .ind-card .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -307,9 +312,13 @@
     <div class="row" style="align-items:stretch; gap:18px;">
       <div class="panel" style="flex:1; min-width:280px; margin:0;">
         <h2>Configuração do Mês</h2>
-        <div class="sub" id="configMonthLabel">Dias úteis (base automática, editável)</div>
-        <div class="field"><label>Dias úteis deste mês</label><input type="number" id="workdays" min="0" max="31"></div>
-        <div style="margin-top:8px;"><button class="btn sec sm" id="autoWorkdays">Calcular automático (sem domingos)</button></div>
+        <div class="sub" id="configMonthLabel">Os dias são puxados automaticamente do mês. Ajuste se houver feriados.</div>
+        <div class="month-breakdown">
+          <div class="mb"><label>Dias úteis<span>seg–sex</span></label><input type="number" id="diasUteis" min="0" max="31"></div>
+          <div class="mb"><label>Sábados<span>conta</span></label><input type="number" id="sabados" min="0" max="6"></div>
+          <div class="mb"><label>Domingos<span>fora</span></label><div class="mb-val" id="domingos">0</div></div>
+        </div>
+        <div style="margin-top:10px;"><button class="btn sec sm" id="autoWorkdays">↺ Recalcular automático</button></div>
         <div class="hint" id="workdaysHint" style="margin-top:8px;"></div>
       </div>
       <div class="panel" style="flex:1.4; min-width:280px; margin:0;">
@@ -418,6 +427,13 @@ function isSunday(m, d) { return weekday(m, d) === 0; }
 function isSaturday(m, d) { return weekday(m, d) === 6; }
 function isToday(m, d) { return todayISO() === m && d === new Date().getDate(); }
 function autoWorkdays(m) { let c = 0; const n = daysInMonth(m); for (let d = 1; d <= n; d++) if (!isSunday(m, d)) c++; return c; }
+function countWeekdays(m){ let c=0; const n=daysInMonth(m); for(let d=1;d<=n;d++){ const w=weekday(m,d); if(w>=1&&w<=5) c++; } return c; }
+function countSaturdays(m){ let c=0; const n=daysInMonth(m); for(let d=1;d<=n;d++) if(isSaturday(m,d)) c++; return c; }
+function countSundays(m){ let c=0; const n=daysInMonth(m); for(let d=1;d<=n;d++) if(isSunday(m,d)) c++; return c; }
+function diasUteisOf(m=currentMonth){ const md=monthData(m); return md.diasUteis!=null?Number(md.diasUteis):countWeekdays(m); }
+function sabadosOf(m=currentMonth){ const md=monthData(m); return md.sabados!=null?Number(md.sabados):countSaturdays(m); }
+function workdaysOf(m=currentMonth){ return diasUteisOf(m)+sabadosOf(m); }
+function capacityOf(cfg){ return (Number(cfg.metaDay)||0)*diasUteisOf()+(Number(cfg.metaSat)||0)*sabadosOf(); }
 function elapsedWorkdays(m) {
   const n = daysInMonth(m); const sameMonth = todayISO() === m; const last = sameMonth ? new Date().getDate() : n;
   let c = 0; for (let d = 1; d <= Math.min(last, n); d++) if (!isSunday(m, d)) c++; return Math.max(c, 1);
@@ -492,7 +508,7 @@ function renderActive() {
   else if (activeView === "sistema") renderSistema();
   else if (activeView === "config") renderConfig();
 }
-function updateWorkdaysBadge() { const b = document.querySelector("#workdaysBadge b"); if (b) b.textContent = (Number(monthData().workdays) || autoWorkdays(currentMonth)); }
+function updateWorkdaysBadge() { const b = document.querySelector("#workdaysBadge b"); if (b) b.textContent = diasUteisOf(currentMonth); }
 
 /* Navegação por teclado */
 function moveCell(inp, dir) {
@@ -515,7 +531,7 @@ function daysForPeriod() { if (matrizPeriodo === "semana") { const w = weeksOf(c
 
 function renderMatriz() {
   const inds = orderedIndicators(), sellers = orderedSellers(), days = daysForPeriod();
-  const ewd = elapsedWorkdays(currentMonth), twd = Number(monthData().workdays) || autoWorkdays(currentMonth);
+  const ewd = elapsedWorkdays(currentMonth), twd = workdaysOf(currentMonth);
   const moveOn = document.body.classList.contains("moveon");
   document.getElementById("matrizReorder").classList.toggle("active", moveOn);
 
@@ -679,7 +695,7 @@ function renderSistema() {
 
 /* ============================================================ FOCO */
 function sellerMetrics(sellerId) {
-  const days = monthDays(), ewd = elapsedWorkdays(currentMonth), twd = Number(monthData().workdays) || autoWorkdays(currentMonth);
+  const days = monthDays(), ewd = elapsedWorkdays(currentMonth), twd = workdaysOf(currentMonth);
   let projSum = 0, projN = 0, aderSum = 0, aderN = 0, accSum = 0, accN = 0;
   state.indicators.forEach(ind => {
     if (ind.pctOnly) return;
@@ -719,7 +735,7 @@ function drawRitmo() {
   const cv = document.getElementById("ritmoChart"); const indId = document.getElementById("chartInd").value; const who = document.getElementById("chartWho").value;
   const ind = state.indicators.find(i => i.id === indId); if (!ind || !cv) return;
   const sellers = orderedSellers(); const ids = who === "__team" ? sellers.map(s=>s.id) : [who];
-  const n = daysInMonth(currentMonth); const twd = Number(monthData().workdays) || autoWorkdays(currentMonth);
+  const n = daysInMonth(currentMonth); const twd = workdaysOf(currentMonth);
   const metaTotal = metaMonthFor(ind) * (ids.length || 1); const ewd = elapsedWorkdays(currentMonth);
   const realCum = []; let run = 0; for (let d=1; d<=n; d++){ ids.forEach(id=>{ const c=getCell(id,ind.id,d); if(c.real!=null) run+=Number(c.real); }); realCum.push(run); }
   const metaLine = []; let wd=0; for (let d=1; d<=n; d++){ if(!isSunday(currentMonth,d)) wd++; metaLine.push(twd? metaTotal*(wd/twd):0); }
@@ -748,7 +764,7 @@ function renderResumo() {
   const sellers = orderedSellers(); const inds = orderedIndicators(); const nS = sellers.length || 1;
   const weeks = weeksOf(currentMonth); if (resumoWeekIdx >= weeks.length) resumoWeekIdx = 0;
   const weekDays = weeks[resumoWeekIdx] || [];
-  const ewd = elapsedWorkdays(currentMonth), twd = Number(monthData().workdays) || autoWorkdays(currentMonth);
+  const ewd = elapsedWorkdays(currentMonth), twd = workdaysOf(currentMonth);
   const segW = document.getElementById("resumoWeeks");
   segW.innerHTML = weeks.map((w, i) => `<button data-w="${i}" class="${i===resumoWeekIdx?'active':''}">Sem ${i+1}<br><span style="font-size:9px;opacity:.7">${w[0]}-${w[w.length-1]}</span></button>`).join("");
   segW.querySelectorAll("button").forEach(b => b.onclick = () => { resumoWeekIdx = +b.dataset.w; state.ui.resumoWeek = resumoWeekIdx; save(); renderResumo(); });
@@ -798,8 +814,10 @@ function openMetaLoja() {
 let sellersExpanded = false;
 function renderConfig() {
   const md = monthData();
-  document.getElementById("workdays").value = md.workdays;
-  document.getElementById("workdaysHint").textContent = `Referente a ${currentMonth}: base automática ${autoWorkdays(currentMonth)} (domingos fora).`;
+  document.getElementById("diasUteis").value = diasUteisOf(currentMonth);
+  document.getElementById("sabados").value = sabadosOf(currentMonth);
+  document.getElementById("domingos").textContent = countSundays(currentMonth);
+  document.getElementById("workdaysHint").innerHTML = `Total trabalhado (não-domingo): <b>${workdaysOf(currentMonth)}</b> dias. Regra: <b>meta/dia × dias úteis + meta/sábado × sábados ≥ meta/mês</b>.`;
   const sl = document.getElementById("sellerList");
   const sellers = orderedSellers();
   const LIMIT = 14;
@@ -837,7 +855,7 @@ function renderIndicatorConfig() {
       <div class="field"><label>Meta / dia</label><input type="number" value="${ind.metaDay}" data-meta="metaDay"></div>
       <div class="field"><label>Meta / sábado</label><input type="number" value="${ind.metaSat}" data-meta="metaSat"></div>
       <div class="field"><label>Meta / mês</label><input type="number" value="${ind.metaMonth}" data-meta="metaMonth"></div>
-      <div class="field"><label>Diária×úteis (${autoWorkdays(currentMonth)})</label><div style="padding:8px 0; color:${validMsg?'var(--danger)':'var(--ok)'}; font-weight:700;">${(Number(ind.metaDay)||0)*(Number(monthData().workdays)||autoWorkdays(currentMonth))} ${validMsg?'⚠':'✓'}</div></div>
+      <div class="field"><label>Capacidade/mês</label><div style="padding:8px 0; color:${validMsg?'var(--danger)':'var(--ok)'}; font-weight:700;" title="meta/dia × dias úteis + meta/sábado × sábados">${capacityOf(ind)} ${validMsg?'⚠':'✓'}</div></div>
       </div>${validMsg?`<div class="hint" style="color:var(--danger)">⚠ ${validMsg}</div>`:''}`;
     if (!ind.pctOnly) {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
@@ -853,7 +871,7 @@ function renderIndicatorConfig() {
   list.querySelectorAll('[data-rate]').forEach(row => { const ind = findIndByRate(row.dataset.rate); const r = ind && ind.rates.find(x=>x.id===row.dataset.rate); if(r && !r.manual){ const num=row.querySelector('[data-rk="numId"]'); const den=row.querySelector('[data-rk="denId"]'); if(num)num.value=r.numId||''; if(den)den.value=r.denId||''; } });
   bindIndicatorEvents();
 }
-function validateMeta(cfg){ const twd = Number(monthData().workdays)||autoWorkdays(currentMonth); const cap = (Number(cfg.metaDay)||0) * twd; if (Number(cfg.metaMonth) && cap < Number(cfg.metaMonth)) return `meta diária × ${twd} dias (${cap}) < meta mês (${cfg.metaMonth})`; return ""; }
+function validateMeta(cfg){ const du = diasUteisOf(currentMonth), sb = sabadosOf(currentMonth); const cap = (Number(cfg.metaDay)||0)*du + (Number(cfg.metaSat)||0)*sb; if (Number(cfg.metaMonth) && cap < Number(cfg.metaMonth)) return `meta/dia×${du} + meta/sáb×${sb} = ${cap} < meta mês (${cfg.metaMonth})`; return ""; }
 function findIndByRate(rid){ return state.indicators.find(i => (i.rates||[]).some(r=>r.id===rid)); }
 function findIndBySub(sid){ return state.indicators.find(i => (i.subs||[]).some(s=>s.id===sid)); }
 function bindIndicatorEvents() {
@@ -873,7 +891,7 @@ function bindIndicatorEvents() {
 /* ============================================================ EXPORT */
 function exportCsv() {
   const sellers = orderedSellers(), inds = orderedIndicators(), days = monthDays();
-  const ewd = elapsedWorkdays(currentMonth), twd = Number(monthData().workdays)||autoWorkdays(currentMonth);
+  const ewd = elapsedWorkdays(currentMonth), twd = workdaysOf(currentMonth);
   let rows = [["Vendedor","Indicador","Real mes","Meta Vend","Meta Loja","% (vs loja)","Projecao"].join(";")];
   sellers.forEach(s => inds.forEach(ind => { if(ind.pctOnly) return; const real = accum(s.id, ind.id, "real", days) || 0; const mv = metaMonthFor(ind); const ml = getMetaLoja(ind.id); const tgt = ml!=null?ml:mv; const proj = (real/ewd)*twd; rows.push([s.name, ind.name, real, mv, ml!=null?ml:"", tgt?Math.round(real/tgt*100)+"%":"", Math.round(proj)].join(";")); }));
   download("gestao_"+currentMonth+".csv", rows.join("\n"), "text/csv"); toast("CSV exportado");
@@ -905,8 +923,9 @@ function init() {
   document.getElementById("openMetaLoja").onclick = openMetaLoja;
   document.getElementById("closeMetaLoja").onclick = () => { document.getElementById("metaLojaModal").classList.remove("show"); renderResumo(); };
   document.getElementById("metaLojaModal").addEventListener("click", e => { if (e.target.id === "metaLojaModal") { e.currentTarget.classList.remove("show"); renderResumo(); } });
-  document.getElementById("workdays").addEventListener("change", e => { monthData().workdays = Number(e.target.value)||0; save(); updateWorkdaysBadge(); toast("Dias úteis salvos"); });
-  document.getElementById("autoWorkdays").onclick = () => { monthData().workdays = autoWorkdays(currentMonth); save(); renderConfig(); updateWorkdaysBadge(); toast("Calculado: "+monthData().workdays+" dias"); };
+  document.getElementById("diasUteis").addEventListener("change", e => { monthData().diasUteis = Number(e.target.value)||0; save(); updateWorkdaysBadge(); renderConfig(); toast("Dias úteis salvos"); });
+  document.getElementById("sabados").addEventListener("change", e => { monthData().sabados = Number(e.target.value)||0; save(); updateWorkdaysBadge(); renderConfig(); toast("Sábados salvos"); });
+  document.getElementById("autoWorkdays").onclick = () => { const md = monthData(); delete md.diasUteis; delete md.sabados; save(); renderConfig(); updateWorkdaysBadge(); toast("Recalculado automático"); };
   document.getElementById("addSeller").onclick = () => { const i = document.getElementById("newSeller"); const v = i.value.trim(); if(!v) return; state.sellers.push({ id: uid(), name: v }); i.value=""; save(); renderConfig(); toast("Vendedor adicionado"); };
   document.getElementById("newSeller").addEventListener("keydown", e => { if(e.key==="Enter") document.getElementById("addSeller").click(); });
   document.getElementById("addIndicator").onclick = () => { state.indicators.push({ id:uid(), name:"Novo indicador", abbr:"NOVO", color:randColor(), checkin:true, checkout:true, role:"", pctOnly:false, metaDay:0, metaSat:0, metaMonth:0, subs:[], rates:[] }); save(); renderIndicatorConfig(); toast("Indicador adicionado"); };
