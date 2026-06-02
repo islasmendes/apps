@@ -87,7 +87,11 @@
   .cellinput::placeholder { color: var(--text-faint); opacity: .55; font-size: 9px; letter-spacing: .5px; text-transform: uppercase; }
   .plan-cell { color: var(--text-dim); }
   .daycell { display: flex; flex-direction: column; gap: 4px; width: 100%; }
-  .daycell .cellinput { width: 100%; }
+  .daycell .cellinput { width: 100%; background: var(--cell); border: 1px solid var(--border); border-radius: 8px; padding: 7px 6px; font-weight: 700; box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent); transition: .15s; }
+  .daycell .cellinput.plan-cell { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 65%, var(--border)); background: color-mix(in srgb, var(--accent) 13%, var(--cell)); }
+  .daycell .cellinput:not(.plan-cell) { border-color: color-mix(in srgb, var(--accent-2) 60%, var(--border)); background: color-mix(in srgb, var(--accent-2) 11%, var(--cell)); }
+  .daycell .cellinput:hover { filter: brightness(1.14); border-color: var(--accent); }
+  .daycell .cellinput:focus { border-color: var(--accent); background: var(--cell); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent); }
   th.today, td.today { background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)) !important; }
   th.col-sun, td.col-sun { opacity: .5; }
   .neon { color: var(--neon); font-weight: 800; text-shadow: 0 0 8px color-mix(in srgb, var(--neon) 55%, transparent); }
