@@ -57,12 +57,13 @@
     -webkit-font-smoothing: antialiased;
   }
   a { color: var(--accent); }
+  :focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); outline-offset: 1px; border-radius: 4px; }
   /* ===== Header ===== */
   header.app {
     position: sticky; top: 0; z-index: 40;
     display: flex; align-items: center; gap: 16px;
     padding: 12px 20px;
-    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, transparent), color-mix(in srgb, var(--panel) 86%, transparent));
     backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border);
   }
@@ -92,7 +93,7 @@
     color: var(--text); border-radius: 10px; padding: 7px 11px; font-size: 13px; font-family: var(--font);
     display: inline-flex; align-items: center; gap: 7px; transition: .15s;
   }
-  .iconbtn:hover, .ghost-btn:hover { border-color: var(--accent); }
+  .iconbtn:hover, .ghost-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
   .iconbtn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   .store-input {
     background: var(--panel-2); border: 1px dashed var(--border); color: var(--text);
@@ -136,7 +137,7 @@
     cursor: pointer; border: none; border-radius: 10px; padding: 9px 16px; font-size: 13px; font-weight: 700;
     font-family: var(--font); background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; transition: .15s;
   }
-  .btn:hover { filter: brightness(1.08); }
+  .btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
   .btn.sec { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
   .btn.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
   .btn.sm { padding: 6px 11px; font-size: 12px; }
@@ -145,7 +146,7 @@
   .hint { font-size: 12px; color: var(--text-faint); }
   /* ===== Tables ===== */
   .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
-  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
   th, td { padding: 8px 10px; text-align: center; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
   th { background: var(--panel-2); color: var(--text-dim); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: .3px; position: sticky; top: 0; }
   td.name, th.name { text-align: left; position: sticky; left: 0; background: var(--panel); font-weight: 600; z-index: 2; }
@@ -154,12 +155,16 @@
   tbody tr:hover td.name { background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
   .cellinput { width: 58px; background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 5px 4px; text-align: center; color: var(--text); }
   .cellinput:hover { border-color: var(--border); }
-  .cellinput:focus { border-color: var(--accent); background: var(--cell); }
+  .cellinput:focus { border-color: var(--accent); background: var(--cell); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
   .plan-cell { color: var(--text-dim); }
+  th.today, td.today { background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)) !important; }
+  th.col-sun, td.col-sun { opacity: .55; }
   /* ===== Matrix heat ===== */
   .heat { border-radius: 7px; font-weight: 700; padding: 5px 7px; display: inline-block; min-width: 42px; }
   .block-head { font-weight: 800; letter-spacing: .3px; cursor: pointer; user-select: none; }
   .block-toggle { font-size: 10px; opacity: .7; margin-right: 4px; }
+  .barwrap { height: 4px; background: var(--border-soft); border-radius: 3px; margin-top: 4px; overflow: hidden; }
+  .barwrap > i { display: block; height: 100%; border-radius: 3px; }
   /* ===== Indicator config cards ===== */
   .ind-card { border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; background: var(--panel-2); }
   .ind-card .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -176,13 +181,15 @@
   .switch input:checked + .track { background: var(--accent); }
   .switch input:checked + .track::after { left: 18px; }
   /* ===== KPI cards ===== */
-  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 12px; }
-  .kpi { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
-  .kpi .k { font-size: 11.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-weight: 700; }
-  .kpi .v { font-size: 24px; font-weight: 800; margin-top: 4px; }
-  .kpi .d { font-size: 12px; color: var(--text-dim); }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 12px; }
+  .kpi { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; transition: .15s; }
+  .kpi:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .kpi .k { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-weight: 700; }
+  .kpi .v { font-size: 24px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .kpi .d { font-size: 11.5px; color: var(--text-faint); margin-top: 2px; }
   /* ===== Ranking ===== */
-  .rank-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--border); margin-bottom: 8px; }
+  .rank-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--border); margin-bottom: 8px; transition: .15s; }
+  .rank-item:hover { border-color: var(--accent); }
   .rank-medal { font-size: 18px; width: 28px; text-align: center; }
   .rank-bars { display: flex; gap: 16px; flex: 1; flex-wrap: wrap; }
   .rank-bars .m { font-size: 12px; }
@@ -193,7 +200,8 @@
   .attn-box ul { margin: 0; padding-left: 0; list-style: none; }
   .attn-box li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border-soft); font-size: 12.5px; }
   .attn-box li:last-child { border: none; }
-  .empty { color: var(--text-faint); font-style: italic; padding: 8px 0; }
+  .empty { color: var(--text-faint); padding: 18px; text-align: center; }
+  .empty .btn { margin-top: 12px; }
   canvas { max-width: 100%; }
   .draggable { cursor: grab; }
   .dragging { opacity: .45; }
@@ -214,11 +222,11 @@
   .seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; }
   .seg button { border: none; background: transparent; color: var(--text-dim); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12.5px; font-weight: 600; font-family: var(--font); }
   .seg button.active { background: var(--accent); color: #fff; }
-  .obs-input { width: 100%; min-width: 160px; }
   .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
   details.help { margin-top: 8px; }
   details.help summary { cursor: pointer; color: var(--text-dim); font-size: 12px; }
   details.help div { font-size: 12.5px; color: var(--text-dim); margin-top: 8px; line-height: 1.6; }
+  kbd { background: var(--panel-2); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; font-size: 11px; font-family: var(--font); }
   @media (max-width: 640px) {
     main { padding: 12px; }
     .titles .t1 { font-size: 13px; }
@@ -236,13 +244,13 @@
   </div>
   <div class="spacer"></div>
   <div class="header-controls">
-    <input id="storeName" class="store-input" placeholder="Sua loja" title="Nome da loja (editável)">
+    <input id="storeName" class="store-input" placeholder="Sua loja" title="Nome da loja (editável)" aria-label="Nome da loja">
     <div class="month-pick">
-      <span>📅</span>
-      <input type="month" id="monthPicker">
+      <span aria-hidden="true">📅</span>
+      <input type="month" id="monthPicker" aria-label="Mês">
     </div>
-    <button class="iconbtn" id="moveToggle" title="Permitir reordenar linhas e colunas arrastando">✥ Mover</button>
-    <button class="iconbtn" id="themeToggle" title="Alternar tema">🌙</button>
+    <button class="iconbtn" id="moveToggle" title="Permitir reordenar linhas e colunas arrastando" aria-label="Modo mover">✥ Mover</button>
+    <button class="iconbtn" id="themeToggle" title="Alternar tema" aria-label="Alternar tema">🌙</button>
   </div>
 </header>
 
@@ -269,8 +277,9 @@
           <button data-p="semana">Semana</button>
         </div>
       </div>
+      <div class="kpi-grid" id="matrizKpis" style="margin:6px 0 16px;"></div>
       <div id="matrizSemanaPick" style="display:none; margin:10px 0;"></div>
-      <div class="table-wrap" style="margin-top:14px;">
+      <div class="table-wrap">
         <table id="matrizTable"></table>
       </div>
       <div class="legend">
@@ -304,7 +313,7 @@
       <div class="table-wrap" style="margin-top:14px;">
         <table id="diarioTable"></table>
       </div>
-      <div class="hint" style="margin-top:10px;">Linhas <span class="tag">plano</span> = check-in (tracejado) · <span class="tag sub">real</span> = check-out. A coluna <b>Aderência</b> = real ÷ plano.</div>
+      <div class="hint" style="margin-top:10px;">Linhas <span class="tag">plano</span> = check-in (tracejado) · <span class="tag sub">real</span> = check-out · coluna <b>Ader.</b> = real ÷ plano. Dica: use <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para andar entre as células e digitar rápido.</div>
     </div>
   </section>
 
@@ -312,7 +321,7 @@
   <section class="view" id="view-sistema">
     <div class="panel">
       <h2>Sistema (Auditoria)</h2>
-      <div class="sub">Lance aqui a “verdade” do sistema (acumulado do mês por vendedor). Alimenta as taxas e a acuracidade (relato × sistema).</div>
+      <div class="sub">Lance aqui a “verdade” do sistema (acumulado do mês por vendedor). Alimenta as taxas e a acuracidade (relato × sistema). Use <kbd>Enter</kbd> / setas para navegar.</div>
       <div class="table-wrap" style="margin-top:6px;">
         <table id="sistemaTable"></table>
       </div>
@@ -461,6 +470,7 @@ function defaultState() {
         metaDay: 5, metaSat: 5, metaMonth: 120, subs: [], rates: [] },
     ],
     order: { sellers: null, indicators: null },
+    ui: { view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, expanded: {} },
     months: {},
   };
 }
@@ -478,6 +488,8 @@ function migrate(s) {
   if (!s.order) s.order = { sellers: null, indicators: null };
   if (!s.months) s.months = {};
   if (!s.theme) s.theme = "dark";
+  if (!s.ui) s.ui = { view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, expanded: {} };
+  if (!s.ui.expanded) s.ui.expanded = {};
   return s;
 }
 function save() {
@@ -506,6 +518,7 @@ function daysInMonth(m) { const { y, mo } = parseMonth(m); return new Date(y, mo
 function weekday(m, day) { const { y, mo } = parseMonth(m); return new Date(y, mo - 1, day).getDay(); } // 0=dom,6=sáb
 function isSunday(m, day) { return weekday(m, day) === 0; }
 function isSaturday(m, day) { return weekday(m, day) === 6; }
+function isToday(m, day) { return todayISO() === m && day === new Date().getDate(); }
 function autoWorkdays(m) {
   let c = 0; const n = daysInMonth(m);
   for (let d = 1; d <= n; d++) if (!isSunday(m, d)) c++;
@@ -520,7 +533,6 @@ function elapsedWorkdays(m) {
   for (let d = 1; d <= Math.min(last, n); d++) if (!isSunday(m, d)) c++;
   return Math.max(c, 1);
 }
-// Semanas do mês (segmentos de dias, quebrando no sábado)
 function weeksOf(m) {
   const n = daysInMonth(m); const weeks = []; let cur = [];
   for (let d = 1; d <= n; d++) {
@@ -558,6 +570,13 @@ function allFields() {
   return arr;
 }
 function fieldById(id) { return allFields().find(f => f.id === id); }
+function cfgById(id) {
+  for (const ind of state.indicators) {
+    if (ind.id === id) return ind;
+    for (const s of (ind.subs || [])) if (s.id === id) return s;
+  }
+  return null;
+}
 
 /* ---------- Acesso a dados diários ---------- */
 function getCell(sellerId, fieldId, day, m = currentMonth) {
@@ -573,7 +592,6 @@ function setCell(sellerId, fieldId, day, key, val, m = currentMonth) {
   else md.daily[sellerId][fieldId][day][key] = val;
   save();
 }
-// soma acumulada (real=checkout, plan=check-in) num conjunto de dias
 function accum(sellerId, fieldId, key, days, m = currentMonth) {
   let sum = 0, has = false;
   days.forEach(d => {
@@ -590,6 +608,11 @@ function metaForDay(cfg, m, day) {
   if (isSaturday(m, day)) return Number(cfg.metaSat) || 0;
   if (isSunday(m, day)) return 0;
   return Number(cfg.metaDay) || 0;
+}
+function weekMeta(cfg, days) {
+  let s = 0;
+  days.forEach(d => { s += metaForDay(cfg, currentMonth, d); });
+  return s;
 }
 
 /* ---------- Sistema / auditoria ---------- */
@@ -636,27 +659,21 @@ function rateValue(rate, sellerIds, m = currentMonth) {
 }
 
 /* ---------- Cores do mapa de calor ---------- */
-function heatColor(pct) {
-  if (pct == null) return "transparent";
+function heatBase(pct) {
   const css = getComputedStyle(document.documentElement);
-  const danger = css.getPropertyValue("--danger").trim();
-  const warn = css.getPropertyValue("--warn").trim();
-  const ok = css.getPropertyValue("--ok").trim();
-  const info = css.getPropertyValue("--info").trim();
-  let c;
-  if (pct < 0.7) c = danger;
-  else if (pct < 0.9) c = warn;
-  else if (pct < 1.0) c = ok;
-  else c = info;
-  return "color-mix(in srgb, " + c + " 26%, transparent)";
-}
-function heatText(pct) {
-  const css = getComputedStyle(document.documentElement);
-  if (pct == null) return "var(--text-faint)";
+  if (pct == null) return null;
   if (pct < 0.7) return css.getPropertyValue("--danger").trim();
   if (pct < 0.9) return css.getPropertyValue("--warn").trim();
   if (pct < 1.0) return css.getPropertyValue("--ok").trim();
   return css.getPropertyValue("--info").trim();
+}
+function heatColor(pct) {
+  if (pct == null) return "transparent";
+  return "color-mix(in srgb, " + heatBase(pct) + " 26%, transparent)";
+}
+function heatText(pct) {
+  if (pct == null) return "var(--text-faint)";
+  return heatBase(pct);
 }
 function fmt(n, dec = 0) {
   if (n == null || isNaN(n)) return "—";
@@ -668,9 +685,10 @@ function pctTxt(p) { return p == null ? "—" : Math.round(p * 100) + "%"; }
    RENDER — controle de abas
    ============================================================ */
 const views = ["matriz","diario","sistema","foco","resumo","config"];
-let activeView = "matriz";
+let activeView = state.ui.view || "matriz";
 function showView(v) {
   activeView = v;
+  state.ui.view = v; save();
   document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.view === v));
   views.forEach(x => document.getElementById("view-"+x).classList.toggle("active", x === v));
   renderActive();
@@ -684,12 +702,35 @@ function renderActive() {
   else if (activeView === "config") renderConfig();
 }
 
+/* ---------- Navegação por teclado nas grades ---------- */
+function moveCell(inp, dir) {
+  const td = inp.closest("td"); const tr = inp.closest("tr"); const table = inp.closest("table");
+  if (!td || !tr || !table) return;
+  const col = td.cellIndex;
+  const rows = [...table.querySelectorAll("tbody tr")];
+  let idx = rows.indexOf(tr);
+  for (let i = idx + dir; i >= 0 && i < rows.length; i += dir) {
+    const cell = rows[i].cells[col];
+    const ni = cell && cell.querySelector(".cellinput");
+    if (ni) { ni.focus(); return; }
+  }
+}
+function attachGridNav(table) {
+  table.querySelectorAll(".cellinput").forEach(inp => {
+    inp.addEventListener("focus", () => inp.select());
+    inp.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === "ArrowDown") { e.preventDefault(); moveCell(inp, 1); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); moveCell(inp, -1); }
+    });
+  });
+}
+
 /* ============================================================
    MATRIZ / PAINEL
    ============================================================ */
-let matrizPeriodo = "mes";
-let matrizWeekIdx = 0;
-let expandedBlocks = {}; // indId -> bool (default expandido)
+let matrizPeriodo = state.ui.period || "mes";
+let matrizWeekIdx = state.ui.weekIdx || 0;
+let expandedBlocks = state.ui.expanded;
 
 function daysForPeriod() {
   if (matrizPeriodo === "semana") {
@@ -699,7 +740,39 @@ function daysForPeriod() {
   return monthDays();
 }
 
+function teamSummary() {
+  const sellers = orderedSellers(); const ids = sellers.map(s => s.id); const days = monthDays();
+  const ewd = elapsedWorkdays(currentMonth); const twd = Number(monthData().workdays) || autoWorkdays(currentMonth);
+  let metaPctSum = 0, projPctSum = 0, metaN = 0;
+  state.indicators.forEach(ind => {
+    let real = 0, has = false; ids.forEach(id => { const v = accum(id, ind.id, "real", days); if (v != null) { real += v; has = true; } });
+    const meta = metaMonthFor(ind) * (ids.length || 1);
+    if (meta) { metaPctSum += real / meta; projPctSum += ((real / ewd) * twd) / meta; metaN++; }
+  });
+  let accS = 0, accN = 0, adS = 0, adN = 0;
+  sellers.forEach(s => { const m = sellerMetrics(s.id); if (m.acc != null) { accS += m.acc; accN++; } if (m.ader != null) { adS += m.ader; adN++; } });
+  return {
+    metaPct: metaN ? metaPctSum / metaN : null,
+    projPct: metaN ? projPctSum / metaN : null,
+    acc: accN ? accS / accN : null,
+    ader: adN ? adS / adN : null,
+    ewd, twd, sellers: sellers.length
+  };
+}
+function renderMatrizKpis() {
+  const t = teamSummary();
+  const card = (k, v, color, d) => `<div class="kpi"><div class="k">${k}</div><div class="v" style="color:${color || 'var(--text)'}">${v}</div><div class="d">${d || ''}</div></div>`;
+  document.getElementById("matrizKpis").innerHTML =
+    card("Equipe vs meta", t.metaPct == null ? '—' : pctTxt(t.metaPct), heatText(t.metaPct), "acumulado do mês") +
+    card("Projeção do mês", t.projPct == null ? '—' : pctTxt(t.projPct), heatText(t.projPct), "se manter o ritmo") +
+    card("Acuracidade média", t.acc == null ? '—' : pctTxt(t.acc), heatText(t.acc), "relato × sistema") +
+    card("Aderência média", t.ader == null ? '—' : pctTxt(t.ader), heatText(t.ader), "plano × real") +
+    card("Dias úteis", t.ewd + " / " + t.twd, "var(--text)", "decorridos / mês") +
+    card("Equipe", t.sellers, "var(--text)", t.sellers === 1 ? "consultor" : "consultores");
+}
+
 function renderMatriz() {
+  renderMatrizKpis();
   const inds = orderedIndicators();
   const sellers = orderedSellers();
   const days = daysForPeriod();
@@ -708,24 +781,27 @@ function renderMatriz() {
   const twd = Number(md.workdays) || autoWorkdays(currentMonth);
   const moveOn = document.body.classList.contains("moveon");
 
-  // semana picker
   const wpick = document.getElementById("matrizSemanaPick");
   if (matrizPeriodo === "semana") {
     const weeks = weeksOf(currentMonth);
     wpick.style.display = "block";
     wpick.innerHTML = '<div class="seg">' + weeks.map((w, i) =>
       `<button data-w="${i}" class="${i===matrizWeekIdx?'active':''}">Sem ${i+1} (${w[0]}–${w[w.length-1]})</button>`).join("") + '</div>';
-    wpick.querySelectorAll("button").forEach(b => b.onclick = () => { matrizWeekIdx = +b.dataset.w; renderMatriz(); });
+    wpick.querySelectorAll("button").forEach(b => b.onclick = () => { matrizWeekIdx = +b.dataset.w; state.ui.weekIdx = matrizWeekIdx; save(); renderMatriz(); });
   } else wpick.style.display = "none";
+
+  if (!sellers.length) {
+    document.getElementById("matrizTable").innerHTML = '<tbody><tr><td class="empty">Nenhum vendedor cadastrado.<br><button class="btn" onclick="document.querySelector(\'nav.tabs [data-view=config]\').click()">Ir para Configuração</button></td></tr></tbody>';
+    return;
+  }
 
   function colCount(ind) {
     const exp = expandedBlocks[ind.id] !== false;
-    let c = 2 + (matrizPeriodo === "mes" ? 1 : 0); // real, %, (proj)
+    let c = 2 + (matrizPeriodo === "mes" ? 1 : 0);
     if (exp) { c += (ind.subs?.length||0) * 2 + (ind.rates?.length||0) * 2; }
     return c;
   }
 
-  // cabeçalho: linha 1 = blocos por indicador; linha 2 = colunas (Real / % / Proj / subs / taxas)
   let head1 = '<tr><th class="name" rowspan="2">Vendedor</th>';
   let head2 = "<tr>";
   inds.forEach(ind => {
@@ -741,7 +817,12 @@ function renderMatriz() {
   });
   head1 += "</tr>"; head2 += "</tr>";
 
-  // corpo por vendedor
+  function pctCell(real, meta) {
+    const pct = (meta && real != null) ? real / meta : null;
+    const w = pct == null ? 0 : Math.min(100, pct * 100);
+    return `<td style="color:${heatText(pct)}; font-weight:700;">${pct==null?'—':pctTxt(pct)}${pct==null?'':`<div class="barwrap"><i style="width:${w}%; background:${heatBase(pct)}"></i></div>`}</td>`;
+  }
+
   let body = "";
   sellers.forEach(seller => {
     body += `<tr data-seller="${seller.id}">`;
@@ -752,7 +833,7 @@ function renderMatriz() {
       const meta = matrizPeriodo === "mes" ? metaMonthFor(ind) : weekMeta(ind, days);
       const pct = (meta && real != null) ? real / meta : null;
       body += `<td style="border-left:3px solid ${ind.color};"><span class="heat" style="background:${heatColor(pct)}; color:${heatText(pct)}">${real==null?'—':fmt(real)}</span></td>`;
-      body += `<td style="color:${heatText(pct)}; font-weight:700;">${pct==null?'—':pctTxt(pct)}</td>`;
+      body += pctCell(real, meta);
       if (matrizPeriodo === "mes") {
         const proj = (real != null) ? (real / ewd) * twd : null;
         const projPct = (meta && proj != null) ? proj / meta : null;
@@ -776,7 +857,6 @@ function renderMatriz() {
     body += "</tr>";
   });
 
-  // linha total equipe
   body += `<tr style="font-weight:800; background:var(--panel-2);"><td class="name">⌀ Equipe</td>`;
   const allIds = sellers.map(s => s.id);
   inds.forEach(ind => {
@@ -786,7 +866,7 @@ function renderMatriz() {
     const meta = (matrizPeriodo === "mes" ? metaMonthFor(ind) : weekMeta(ind, days)) * sellers.length;
     const pct = (meta && has) ? real / meta : null;
     body += `<td style="border-left:3px solid ${ind.color};"><span class="heat" style="background:${heatColor(pct)}; color:${heatText(pct)}">${has?fmt(real):'—'}</span></td>`;
-    body += `<td style="color:${heatText(pct)};">${pct==null?'—':pctTxt(pct)}</td>`;
+    body += pctCell(has ? real : null, meta);
     if (matrizPeriodo === "mes") {
       const proj = has ? (real / ewd) * twd : null;
       const pp = meta ? (proj/meta) : null;
@@ -811,23 +891,15 @@ function renderMatriz() {
 
   document.getElementById("matrizTable").innerHTML = "<thead>"+head1+head2+"</thead><tbody>"+body+"</tbody>";
 
-  // eventos: expandir/recolher bloco
   document.querySelectorAll('#matrizTable [data-block]').forEach(el => {
     el.onclick = (e) => {
       if (e.target.classList.contains('draghandle')) return;
       const id = el.dataset.block;
       expandedBlocks[id] = expandedBlocks[id] === false ? true : false;
-      renderMatriz();
+      save(); renderMatriz();
     };
   });
   if (moveOn) setupMatrixDnD();
-}
-
-function weekMeta(cfg, days) {
-  // soma das metas diárias dos dias do período (sábado usa metaSat)
-  let s = 0;
-  days.forEach(d => { s += metaForDay(cfg, currentMonth, d); });
-  return s;
 }
 
 /* ---------- Drag & drop matriz ---------- */
@@ -870,10 +942,17 @@ function reorder(kind, fromId, toId) {
 /* ============================================================
    CHECK-IN / CHECK-OUT DIÁRIO
    ============================================================ */
-let diarioSeller = null, diarioWeekIdx = 0;
+let diarioSeller = state.ui.diarioSeller || null;
+let diarioWeekIdx = state.ui.diarioWeek || 0;
+function dayCls(d) {
+  let c = [];
+  if (isToday(currentMonth, d)) c.push("today");
+  if (isSunday(currentMonth, d)) c.push("col-sun");
+  return c.join(" ");
+}
 function renderDiario() {
   const sellers = orderedSellers();
-  if (!sellers.length) { document.getElementById("diarioTable").innerHTML = '<tbody><tr><td class="empty">Cadastre vendedores na aba Configuração.</td></tr></tbody>'; return; }
+  if (!sellers.length) { document.getElementById("diarioTable").innerHTML = '<tbody><tr><td class="empty">Cadastre vendedores na aba Configuração.<br><button class="btn" onclick="document.querySelector(\'nav.tabs [data-view=config]\').click()">Ir para Configuração</button></td></tr></tbody>'; return; }
   const selSeller = document.getElementById("diarioSeller");
   selSeller.innerHTML = sellers.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
   if (!diarioSeller || !sellers.find(s => s.id === diarioSeller)) diarioSeller = sellers[0].id;
@@ -888,7 +967,7 @@ function renderDiario() {
   const dn = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
   let head = '<thead><tr><th class="name">Indicador</th>';
-  days.forEach(d => head += `<th>${dn[weekday(currentMonth,d)]}<br>${d}${isSaturday(currentMonth,d)?' 🔶':''}</th>`);
+  days.forEach(d => { const wd = weekday(currentMonth,d); head += `<th class="${dayCls(d)}">${dn[wd]}<br>${d}${wd===6?' 🔶':''}${isToday(currentMonth,d)?' •':''}</th>`; });
   head += '<th>Sem.</th><th>Meta</th><th>Ader.</th></tr></thead>';
 
   let body = "<tbody>";
@@ -897,30 +976,31 @@ function renderDiario() {
     (ind.subs||[]).forEach(s => { body += diarioRows(s, ind.color, true); });
   });
   body += "</tbody>";
-  document.getElementById("diarioTable").innerHTML = head + body;
+  const table = document.getElementById("diarioTable");
+  table.innerHTML = head + body;
 
-  document.getElementById("diarioTable").querySelectorAll(".cellinput").forEach(inp => {
-    inp.addEventListener("change", () => {
+  table.querySelectorAll(".cellinput").forEach(inp => {
+    inp.addEventListener("input", () => {
       setCell(diarioSeller, inp.dataset.field, +inp.dataset.day, inp.dataset.key, inp.value === "" ? "" : Number(inp.value));
-      renderDiario();
+      recolorDiarioCell(inp);
+      updateDiarioSummary(inp.dataset.field);
     });
   });
+  attachGridNav(table);
 }
 function diarioRows(cfg, color, isSub) {
   const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
   let rows = "";
   const label = isSub ? `<span class="tag sub">sub</span> ${cfg.name}` : `<b>${cfg.name}</b>`;
-  // plano (check-in)
   if (cfg.checkin) {
     rows += `<tr><td class="name plan-cell" style="border-left:3px solid ${color};">${label} <span class="tag">plano</span></td>`;
     days.forEach(d => {
       const c = getCell(diarioSeller, cfg.id, d);
-      rows += `<td><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" style="border-style:dashed;"></td>`;
+      rows += `<td class="${dayCls(d)}"><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" style="border-style:dashed;"></td>`;
     });
     const planSum = accum(diarioSeller, cfg.id, "plan", days) ?? 0;
-    rows += `<td><b>${fmt(planSum)}</b></td><td class="muted">—</td><td class="muted">—</td></tr>`;
+    rows += `<td data-sum="week" data-field="${cfg.id}" data-key="plan"><b>${fmt(planSum)}</b></td><td class="muted">—</td><td class="muted">—</td></tr>`;
   }
-  // real (check-out)
   if (cfg.checkout) {
     rows += `<tr><td class="name" style="border-left:3px solid ${color};">${cfg.checkin?'':label} <span class="tag sub">real</span></td>`;
     days.forEach(d => {
@@ -928,16 +1008,38 @@ function diarioRows(cfg, color, isSub) {
       const metaD = metaForDay(cfg, currentMonth, d);
       const v = c.real;
       const pct = metaD ? (v!=null? v/metaD : null) : null;
-      rows += `<td><input class="cellinput" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${v ?? ''}" style="color:${v!=null?heatText(pct):'var(--text)'};"></td>`;
+      rows += `<td class="${dayCls(d)}"><input class="cellinput" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${v ?? ''}" style="color:${v!=null?heatText(pct):'var(--text)'};"></td>`;
     });
     const realSum = accum(diarioSeller, cfg.id, "real", days) ?? 0;
     const metaSum = weekMeta(cfg, days);
     const pctW = metaSum ? realSum/metaSum : null;
     const planSum = accum(diarioSeller, cfg.id, "plan", days);
     const ader = (cfg.checkin && planSum) ? realSum/planSum : null;
-    rows += `<td><b style="color:${heatText(pctW)}">${fmt(realSum)}</b></td><td class="muted">${fmt(metaSum)}</td><td style="color:${heatText(ader)}; font-weight:700;">${ader==null?'—':pctTxt(ader)}</td></tr>`;
+    rows += `<td data-sum="week" data-field="${cfg.id}" data-key="real"><b style="color:${heatText(pctW)}">${fmt(realSum)}</b></td><td class="muted" data-sum="meta" data-field="${cfg.id}">${fmt(metaSum)}</td><td data-sum="ader" data-field="${cfg.id}" style="color:${heatText(ader)}; font-weight:700;">${ader==null?'—':pctTxt(ader)}</td></tr>`;
   }
   return rows;
+}
+function recolorDiarioCell(inp) {
+  if (inp.dataset.key !== "real") return;
+  const d = +inp.dataset.day; const cfg = cfgById(inp.dataset.field); if (!cfg) return;
+  const metaD = metaForDay(cfg, currentMonth, d);
+  const v = inp.value === "" ? null : Number(inp.value);
+  const pct = metaD ? (v != null ? v/metaD : null) : null;
+  inp.style.color = v != null ? heatText(pct) : "var(--text)";
+}
+function updateDiarioSummary(fieldId) {
+  const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
+  const cfg = cfgById(fieldId); if (!cfg) return;
+  const t = document.getElementById("diarioTable");
+  const planSum = accum(diarioSeller, fieldId, "plan", days) ?? 0;
+  const realSum = accum(diarioSeller, fieldId, "real", days) ?? 0;
+  const metaSum = weekMeta(cfg, days);
+  const pctW = metaSum ? realSum/metaSum : null;
+  const ader = (cfg.checkin && planSum) ? realSum/planSum : null;
+  const pw = t.querySelector(`[data-sum="week"][data-field="${fieldId}"][data-key="plan"]`); if (pw) pw.innerHTML = `<b>${fmt(planSum)}</b>`;
+  const rw = t.querySelector(`[data-sum="week"][data-field="${fieldId}"][data-key="real"]`); if (rw) rw.innerHTML = `<b style="color:${heatText(pctW)}">${fmt(realSum)}</b>`;
+  const mc = t.querySelector(`[data-sum="meta"][data-field="${fieldId}"]`); if (mc) mc.textContent = fmt(metaSum);
+  const ac = t.querySelector(`[data-sum="ader"][data-field="${fieldId}"]`); if (ac) { ac.style.color = heatText(ader); ac.innerHTML = ader==null?'—':pctTxt(ader); }
 }
 
 /* ============================================================
@@ -968,13 +1070,15 @@ function renderSistema() {
     body += "</tr>";
   });
   body += "</tbody>";
-  document.getElementById("sistemaTable").innerHTML = head + body;
-  document.querySelectorAll('#sistemaTable .cellinput').forEach(inp => {
-    inp.addEventListener("change", () => {
+  const table = document.getElementById("sistemaTable");
+  table.innerHTML = head + body;
+  table.querySelectorAll('.cellinput').forEach(inp => {
+    inp.addEventListener("input", () => {
       if (inp.dataset.type === "sys") setSystem(inp.dataset.seller, inp.dataset.field, inp.value);
       else setSystemRate(inp.dataset.seller, inp.dataset.rate, inp.value);
     });
   });
+  attachGridNav(table);
 }
 
 /* ============================================================
@@ -1031,7 +1135,7 @@ function renderFoco() {
   const lowAcc = metrics.filter(m => m.acc != null && m.acc < 0.9).sort((a,b)=>a.acc-b.acc);
   const lowAder = metrics.filter(m => m.ader != null && m.ader < 0.9).sort((a,b)=>a.ader-b.ader);
   const box = (title, icon, arr, key) => `<div class="attn-box"><h4>${icon} ${title}</h4><ul>${
-    arr.length ? arr.map(m=>`<li><span>${m.s.name}</span><b style="color:${heatText(m[key])}">${pctTxt(m[key])}</b></li>`).join("") : '<li class="empty">Ninguém — tudo certo!</li>'
+    arr.length ? arr.map(m=>`<li><span>${m.s.name}</span><b style="color:${heatText(m[key])}">${pctTxt(m[key])}</b></li>`).join("") : '<li class="empty" style="padding:8px 0;">Ninguém — tudo certo!</li>'
   }</ul></div>`;
   document.getElementById("attnCols").innerHTML =
     box("Abaixo do ritmo", "📉", lowRitmo, "ritmo") +
@@ -1292,9 +1396,6 @@ function bindIndicatorEvents() {
       const k=f.dataset.rk; r[k]= f.type==="checkbox"? f.checked : (k==="target"? Number(f.value)||0 : f.value); save(); renderIndicatorConfig();
     }));
   });
-  list.querySelectorAll("[data-del-rate]").forEach(b => b.addEventListener("click", () => {
-    const ind = findIndByRate(b.dataset.delRate); ind.rates = ind.rates.filter(r=>r.id!==b.dataset.delRate); save(); renderIndicatorConfig();
-  }));
 }
 
 /* ============================================================
@@ -1358,6 +1459,7 @@ function init() {
   monthData(); save();
 
   document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => showView(b.dataset.view));
+  document.querySelectorAll("#matrizPeriodo button").forEach(x => x.classList.toggle("active", x.dataset.p === matrizPeriodo));
 
   document.getElementById("monthPicker").addEventListener("change", e => {
     currentMonth = e.target.value || todayISO(); monthData(); save(); renderActive();
@@ -1373,10 +1475,12 @@ function init() {
 
   document.querySelectorAll("#matrizPeriodo button").forEach(b => b.onclick = () => {
     document.querySelectorAll("#matrizPeriodo button").forEach(x=>x.classList.remove("active")); b.classList.add("active");
-    matrizPeriodo = b.dataset.p; if(matrizPeriodo==="semana") matrizWeekIdx = currentWeekIndex(); renderMatriz();
+    matrizPeriodo = b.dataset.p; state.ui.period = matrizPeriodo;
+    if(matrizPeriodo==="semana") { matrizWeekIdx = currentWeekIndex(); state.ui.weekIdx = matrizWeekIdx; }
+    save(); renderMatriz();
   });
-  document.getElementById("diarioSeller").addEventListener("change", e => { diarioSeller = e.target.value; renderDiario(); });
-  document.getElementById("diarioWeek").addEventListener("change", e => { diarioWeekIdx = +e.target.value; renderDiario(); });
+  document.getElementById("diarioSeller").addEventListener("change", e => { diarioSeller = e.target.value; state.ui.diarioSeller = diarioSeller; save(); renderDiario(); });
+  document.getElementById("diarioWeek").addEventListener("change", e => { diarioWeekIdx = +e.target.value; state.ui.diarioWeek = diarioWeekIdx; save(); renderDiario(); });
   document.getElementById("workdays").addEventListener("change", e => { monthData().workdays = Number(e.target.value)||0; save(); toast("Dias úteis salvos"); });
   document.getElementById("autoWorkdays").onclick = () => { monthData().workdays = autoWorkdays(currentMonth); save(); renderConfig(); toast("Calculado: "+monthData().workdays+" dias"); };
   document.getElementById("addSeller").onclick = () => {
@@ -1392,9 +1496,9 @@ function init() {
   document.getElementById("exportJson").onclick = exportJson;
   document.getElementById("importJsonBtn").onclick = () => document.getElementById("importJson").click();
   document.getElementById("importJson").addEventListener("change", e => { if(e.target.files[0]) importJson(e.target.files[0]); });
-  document.getElementById("resetAll").onclick = () => { if(confirm("Apagar TODOS os dados deste navegador? Isso não pode ser desfeito.")){ localStorage.removeItem(LS_KEY); state = defaultState(); save(); applyTheme(); syncStore(); renderActive(); toast("Tudo apagado"); } };
+  document.getElementById("resetAll").onclick = () => { if(confirm("Apagar TODOS os dados deste navegador? Isso não pode ser desfeito.")){ localStorage.removeItem(LS_KEY); state = defaultState(); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); toast("Tudo apagado"); } };
 
-  showView("matriz");
+  showView(activeView);
 }
 function randColor(){ const c=["#4f8cff","#22d3aa","#ffb74d","#a78bfa","#46d39a","#f472b6","#fb7185","#38bdf8","#facc15"]; return c[Math.floor(Math.random()*c.length)]; }
 
