@@ -230,6 +230,7 @@
         <span><i style="background:var(--ok)"></i> ≥90%</span>
         <span><i style="background:var(--info)"></i> ≥120%</span>
       </div>
+      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>%</b> = realizado ÷ meta do período. <b>Proj.</b> = projeção no ritmo atual = (realizado ÷ dias úteis decorridos) × dias úteis do mês — estima onde o mês fecha se mantiver o ritmo. Cores conforme a faixa acima. Sub-indicadores mostram só a quantidade (Real); para ver percentual, crie uma <b>Taxa</b> (valor atual × alvo).</div>
     </div>
     <div class="panel">
       <div class="flex-between">
@@ -547,7 +548,7 @@ function renderMatriz() {
   function colCount(ind) {
     if (ind.pctOnly) return Math.max(1, (ind.rates?.length || 0)) * 2;
     const exp = expandedBlocks[ind.id] !== false; let c = 2 + (matrizPeriodo === "mes" ? 1 : 0);
-    if (exp) c += (ind.subs?.length || 0) * 2 + (ind.rates?.length || 0) * 2; return c;
+    if (exp) c += (ind.subs?.length || 0) * 1 + (ind.rates?.length || 0) * 2; return c;
   }
   let head1 = '<tr><th class="name" rowspan="2">Vendedor</th>', head2 = "<tr>";
   inds.forEach(ind => {
@@ -556,7 +557,7 @@ function renderMatriz() {
     if (ind.pctOnly) { (ind.rates||[]).forEach(r => head2 += `<th style="border-left:3px solid ${ind.color};">${r.name}</th><th>alvo</th>`); return; }
     head2 += `<th style="border-left:3px solid ${ind.color};">Real</th><th>%</th>`;
     if (matrizPeriodo === "mes") head2 += `<th>Proj.</th>`;
-    if (exp) { (ind.subs||[]).forEach(s => head2 += `<th style="color:var(--accent-2);">${s.name}</th><th>%</th>`); (ind.rates||[]).forEach(r => head2 += `<th style="color:var(--accent);">${r.name}</th><th>alvo</th>`); }
+    if (exp) { (ind.subs||[]).forEach(s => head2 += `<th style="color:var(--accent-2);">${s.name}</th>`); (ind.rates||[]).forEach(r => head2 += `<th style="color:var(--accent);">${r.name}</th><th>alvo</th>`); }
   });
   head1 += "</tr>"; head2 += "</tr>";
 
@@ -570,7 +571,7 @@ function renderMatriz() {
     html += `<td style="border-left:3px solid ${ind.color};"><span class="heat" style="background:${heatColor(pct)}; color:${heatText(pct)}">${has?fmt(real):'—'}</span></td>` + pctCell(has?real:null, meta);
     if (matrizPeriodo === "mes") { const proj = has ? (real/ewd)*twd : null; const pp = meta ? (proj/meta) : null; html += `<td style="color:${heatText(pp)};">${proj==null?'—':fmt(proj)}</td>`; }
     if (expandedBlocks[ind.id] !== false) {
-      (ind.subs||[]).forEach(s => { let sr = 0, h = false; ids.forEach(id => { const v = accum(id, s.id, "real", days); if (v != null) { sr += v; h = true; } }); const sMeta = (matrizPeriodo === "mes" ? metaMonthFor(s) : weekMeta(s, days)) * factor; const sp = (sMeta&&h)? sr/sMeta : null; html += `<td>${h?fmt(sr):'—'}</td><td style="color:${heatText(sp)};">${sp==null?'—':pctTxt(sp)}</td>`; });
+      (ind.subs||[]).forEach(s => { let sr = 0, h = false; ids.forEach(id => { const v = accum(id, s.id, "real", days); if (v != null) { sr += v; h = true; } }); const sMeta = (matrizPeriodo === "mes" ? metaMonthFor(s) : weekMeta(s, days)) * factor; const sp = (sMeta&&h)? sr/sMeta : null; html += `<td>${h?fmt(sr):'—'}</td>`; });
       (ind.rates||[]).forEach(r => { const rv = rateValue(r, ids); const tgt = Number(r.target)||0; const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null; html += `<td style="color:${heatText(rp)}; font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`; });
     }
     return html;
