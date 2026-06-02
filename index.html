@@ -113,11 +113,17 @@
   .seller-chip .x { cursor: pointer; border: none; background: transparent; color: var(--text-faint); font-size: 12px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none; }
   .seller-chip .x:hover { background: color-mix(in srgb, var(--danger) 22%, transparent); color: var(--danger); }
   /* Sistema cards */
-  .syscards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 14px; margin-top: 6px; }
+  .syscards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 14px; margin-top: 6px; }
   .syscard { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
   .syscard .k { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-weight: 700; }
   .syscard .k.sub { color: var(--accent-2); }
   .syscard input { width: 100%; margin-top: 8px; font-size: 18px; font-weight: 700; text-align: left; }
+  .sysgroup { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .sysgroup-head { font-weight: 800; font-size: 13px; margin-bottom: 12px; letter-spacing: .3px; }
+  .sysgroup-fields { display: flex; flex-direction: column; gap: 12px; }
+  .sysfield label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-weight: 700; display: block; margin-bottom: 5px; }
+  .sysfield.sub label { color: var(--accent-2); }
+  .sysfield input { width: 100%; font-size: 16px; font-weight: 700; }
   /* Indicator config */
   .ind-card { border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; background: var(--panel-2); }
   .ind-card .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -652,8 +658,16 @@ function renderSistema() {
   if (!sellers.length) { document.getElementById("sistemaCards").innerHTML = '<div class="empty">Cadastre vendedores na aba Configuração.</div>'; document.getElementById("sistemaRateCards").innerHTML = ""; return; }
   const sel = document.getElementById("sistemaSeller"); sel.innerHTML = sellers.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
   if (!sistemaSeller || !sellers.find(s => s.id === sistemaSeller)) sistemaSeller = sellers[0].id; sel.value = sistemaSeller;
-  const fields = []; state.indicators.forEach(ind => { if (!ind.pctOnly && ind.checkout) fields.push({ id: ind.id, name: ind.name }); (ind.subs||[]).forEach(s => { if (s.checkout) fields.push({ id: s.id, name: s.name, sub: true }); }); });
-  document.getElementById("sistemaCards").innerHTML = fields.map(f => `<div class="syscard"><div class="k ${f.sub?'sub':''}">${f.sub?'↳ ':''}${f.name}</div><input type="number" class="syscell" data-field="${f.id}" value="${getSystem(sistemaSeller, f.id) ?? ''}" placeholder="0"></div>`).join("");
+  document.getElementById("sistemaCards").innerHTML = orderedIndicators().map(ind => {
+    if (ind.pctOnly) return "";
+    const fs2 = [];
+    if (ind.checkout) fs2.push({ id: ind.id, name: ind.name, sub: false });
+    (ind.subs||[]).forEach(s => { if (s.checkout) fs2.push({ id: s.id, name: s.name, sub: true }); });
+    if (!fs2.length) return "";
+    return `<div class="sysgroup" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head" style="color:${ind.color}">${ind.name}</div><div class="sysgroup-fields">` +
+      fs2.map(f => `<div class="sysfield ${f.sub?'sub':''}"><label>${f.sub?'↳ ':''}${f.name}</label><input type="number" class="syscell" data-field="${f.id}" value="${getSystem(sistemaSeller, f.id) ?? ''}" placeholder="0"></div>`).join("") +
+      `</div></div>`;
+  }).join("");
   const manualRates = []; state.indicators.forEach(ind => (ind.rates||[]).forEach(r => { if (r.manual) manualRates.push(r); }));
   document.getElementById("sistemaRatesLabel").style.display = manualRates.length ? "block" : "none";
   document.getElementById("sistemaRateCards").innerHTML = manualRates.map(r => `<div class="syscard"><div class="k">${r.name} (%)</div><input type="number" class="sysratecell" data-rate="${r.id}" value="${getSystemRate(sistemaSeller, r.id) ?? ''}" placeholder="0"></div>`).join("");
@@ -808,14 +822,13 @@ function renderIndicatorConfig() {
   const fields = allFields(); const list = document.getElementById("indicatorList");
   list.innerHTML = orderedIndicators().map(ind => {
     const validMsg = ind.pctOnly ? "" : validateMeta(ind);
-    let html = `<div class="ind-card" data-ind="${ind.id}"><div class="head">
+    let html = `<div class="ind-card" data-ind="${ind.id}" style="border:1px solid ${ind.color}; box-shadow:0 0 0 1px color-mix(in srgb, ${ind.color} 50%, transparent), 0 0 18px color-mix(in srgb, ${ind.color} 24%, transparent);"><div class="head">
       <span class="swatch" style="background:${ind.color}"></span>
       <input type="text" value="${escapeHtml(ind.name)}" data-k="name" class="ind-field" style="font-weight:700; min-width:150px;">
-      <input type="text" value="${escapeHtml(ind.abbr)}" data-k="abbr" class="ind-field" style="width:80px;" placeholder="Sigla">
       <input type="color" value="${ind.color}" data-k="color" class="ind-field" style="width:42px; height:34px; padding:2px;">
-      <label class="switch"><input type="checkbox" data-k="pctOnly" ${ind.pctOnly?'checked':''}><span class="track"></span>Só taxa (ex.: NPS)</label>
-      ${ind.pctOnly?'':`<label class="switch"><input type="checkbox" data-k="checkin" ${ind.checkin?'checked':''}><span class="track"></span>Check-in</label>
-      <label class="switch"><input type="checkbox" data-k="checkout" ${ind.checkout?'checked':''}><span class="track"></span>Check-out</label>`}
+      <label class="switch"><input type="checkbox" class="ind-field" data-k="pctOnly" ${ind.pctOnly?'checked':''}><span class="track"></span>Só taxa (ex.: NPS)</label>
+      ${ind.pctOnly?'':`<label class="switch"><input type="checkbox" class="ind-field" data-k="checkin" ${ind.checkin?'checked':''}><span class="track"></span>Check-in</label>
+      <label class="switch"><input type="checkbox" class="ind-field" data-k="checkout" ${ind.checkout?'checked':''}><span class="track"></span>Check-out</label>`}
       <span class="spacer" style="flex:1"></span>
       <button class="iconbtn" data-del-ind="${ind.id}" title="Excluir">✕</button></div>`;
     if (!ind.pctOnly) html += `<div class="row" style="margin-top:10px;">
