@@ -48,6 +48,8 @@
   nav.tabs { display: flex; gap: 4px; padding: 10px 16px 0; overflow-x: auto; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--panel) 70%, transparent); position: sticky; top: 63px; z-index: 30; }
   nav.tabs button { cursor: pointer; border: none; background: transparent; color: var(--text-dim); padding: 10px 16px; font-size: 13.5px; font-weight: 600; font-family: var(--font); border-radius: 10px 10px 0 0; border-bottom: 2px solid transparent; white-space: nowrap; transition: .15s; }
   nav.tabs button:hover { color: var(--text); }
+  nav.tabs button { cursor: grab; }
+  nav.tabs button:active { cursor: grabbing; }
   nav.tabs button.active { color: var(--text); border-bottom-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
   /* Layout */
   main { padding: 20px; max-width: 100%; margin: 0 auto; }
@@ -217,7 +219,7 @@
   <button data-view="foco">Foco &amp; Ranking</button>
   <button data-view="diario">Check-in / Check-out</button>
   <button data-view="sistema">Sistema (Auditoria)</button>
-  <button data-view="config">Configuração</button>
+  <button data-view="config">Regras de Negócio</button>
 </nav>
 
 <main>
@@ -569,7 +571,7 @@ function renderMatriz() {
     wpick.querySelectorAll("button").forEach(b => b.onclick = () => { matrizWeekIdx = +b.dataset.w; state.ui.weekIdx = matrizWeekIdx; save(); renderMatriz(); });
   } else wpick.style.display = "none";
 
-  if (!sellers.length) { document.getElementById("matrizTable").innerHTML = '<tbody><tr><td class="empty">Nenhum vendedor cadastrado.<br><button class="btn" onclick="document.querySelector(\'nav.tabs [data-view=config]\').click()">Ir para Configuração</button></td></tr></tbody>'; document.getElementById("acuracidadeTable").innerHTML = ""; return; }
+  if (!sellers.length) { document.getElementById("matrizTable").innerHTML = '<tbody><tr><td class="empty">Nenhum vendedor cadastrado.<br><button class="btn" onclick="document.querySelector(\'nav.tabs [data-view=config]\').click()">Ir para Regras de Negócio</button></td></tr></tbody>'; document.getElementById("acuracidadeTable").innerHTML = ""; return; }
 
   function colCount(ind) {
     if (ind.pctOnly) return Math.max(1, (ind.rates?.length || 0)) * 2;
@@ -658,7 +660,7 @@ let diarioWeekIdx = state.ui.diarioWeek || 0;
 function dayCls(d) { let c = []; if (isToday(currentMonth, d)) c.push("today"); if (isSunday(currentMonth, d)) c.push("col-sun"); return c.join(" "); }
 function renderDiario() {
   const sellers = orderedSellers();
-  if (!sellers.length) { document.getElementById("diarioTable").innerHTML = '<tbody><tr><td class="empty">Cadastre vendedores na aba Configuração.</td></tr></tbody>'; return; }
+  if (!sellers.length) { document.getElementById("diarioTable").innerHTML = '<tbody><tr><td class="empty">Cadastre vendedores na aba Regras de Negócio.</td></tr></tbody>'; return; }
   const selSeller = document.getElementById("diarioSeller"); selSeller.innerHTML = sellers.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
   if (!diarioSeller || !sellers.find(s => s.id === diarioSeller)) diarioSeller = sellers[0].id; selSeller.value = diarioSeller;
   const weeks = weeksOf(currentMonth);
@@ -702,7 +704,7 @@ function updateDiarioSummary(fieldId) { const days = (weeksOf(currentMonth)[diar
 let sistemaSeller = state.ui.sistemaSeller || null;
 function renderSistema() {
   const sellers = orderedSellers();
-  if (!sellers.length) { document.getElementById("sistemaCards").innerHTML = '<div class="empty">Cadastre vendedores na aba Configuração.</div>'; document.getElementById("sistemaRateCards").innerHTML = ""; return; }
+  if (!sellers.length) { document.getElementById("sistemaCards").innerHTML = '<div class="empty">Cadastre vendedores na aba Regras de Negócio.</div>'; document.getElementById("sistemaRateCards").innerHTML = ""; return; }
   const sel = document.getElementById("sistemaSeller"); sel.innerHTML = sellers.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
   if (!sistemaSeller || !sellers.find(s => s.id === sistemaSeller)) sistemaSeller = sellers[0].id; sel.value = sistemaSeller;
   const sysQty = (id,name,sub) => `<div class="sysfield ${sub?'sub':''}"><label>${sub?'↳ ':''}${name}</label><input type="number" class="syscell" data-field="${id}" value="${getSystem(sistemaSeller, id) ?? ''}" placeholder="0"></div>`;
@@ -947,10 +949,14 @@ function syncStore() { document.getElementById("storeName").value = state.storeN
 let toastTimer; function toast(msg, err) { const t = document.getElementById("toast"); t.textContent = msg; t.classList.toggle("err", !!err); t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove("show"), 1800); }
 
 /* ============================================================ INIT */
+function applyTabOrder(){ const nav=document.getElementById("tabs"); const order=state.ui.tabOrder; if(!order) return; order.forEach(v=>{ const btn=nav.querySelector(`button[data-view="${v}"]`); if(btn) nav.appendChild(btn); }); }
+function reorderTabs(fromV,toV){ const nav=document.getElementById("tabs"); const order=[...nav.querySelectorAll("button")].map(b=>b.dataset.view); const fi=order.indexOf(fromV), ti=order.indexOf(toV); if(fi<0||ti<0) return; order.splice(ti,0,order.splice(fi,1)[0]); state.ui.tabOrder=order; save(); applyTabOrder(); }
+function setupTabDnD(){ const nav=document.getElementById("tabs"); let dragV=null; nav.querySelectorAll("button").forEach(btn=>{ btn.setAttribute("draggable","true"); btn.addEventListener("dragstart",e=>{ dragV=btn.dataset.view; btn.classList.add("dragging"); if(e.dataTransfer) e.dataTransfer.effectAllowed="move"; }); btn.addEventListener("dragend",()=>{ btn.classList.remove("dragging"); dragV=null; }); btn.addEventListener("dragover",e=>{ e.preventDefault(); btn.classList.add("drag-over"); }); btn.addEventListener("dragleave",()=>btn.classList.remove("drag-over")); btn.addEventListener("drop",e=>{ e.preventDefault(); btn.classList.remove("drag-over"); const t=btn.dataset.view; if(dragV&&t&&dragV!==t) reorderTabs(dragV,t); }); }); }
 function init() {
   applyTheme(); syncStore();
   document.getElementById("monthPicker").value = currentMonth; monthData(); save();
   document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => showView(b.dataset.view));
+  applyTabOrder(); setupTabDnD();
   document.querySelectorAll("#matrizPeriodo button").forEach(x => x.classList.toggle("active", x.dataset.p === matrizPeriodo));
   document.getElementById("monthPicker").addEventListener("change", e => { currentMonth = e.target.value || todayISO(); monthData(); save(); renderActive(); });
   document.getElementById("themeToggle").onclick = () => { state.theme = state.theme==="dark"?"light":"dark"; save(); applyTheme(); renderActive(); };
