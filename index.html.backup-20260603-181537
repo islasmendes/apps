@@ -213,15 +213,6 @@
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; z-index: 200; align-items: center; justify-content: center; padding: 16px; }
   .modal-bg.show { display: flex; }
   .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 20px; max-width: 560px; width: 100%; max-height: 86vh; overflow: auto; box-shadow: var(--shadow); }
-  .modal.modal-wide { max-width: 720px; }
-  td.name.seller-link { cursor: pointer; color: var(--accent-2); }
-  td.name.seller-link:hover { text-decoration: underline; text-underline-offset: 2px; }
-  body.moveon td.name.seller-link { cursor: default; color: inherit; text-decoration: none; }
-  .sysgroup-head.sys-toggle { cursor: pointer; user-select: none; margin-bottom: 0; }
-  .sysgroup:not(.collapsed) .sysgroup-head.sys-toggle { margin-bottom: 12px; }
-  .sysgroup.collapsed .sysgroup-fields { display: none; }
-  .audit-summary { display: flex; gap: 10px; flex-wrap: wrap; }
-  .audit-summary .pill { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 99px; font-weight: 700; }
   .modal h3 { margin: 0 0 4px; }
   .meta-loja-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
   .meta-loja-row.sub { padding-left: 18px; }
@@ -252,6 +243,7 @@
   <button data-view="resumo">Resumo Geral</button>
   <button data-view="foco">Foco &amp; Ranking</button>
   <button data-view="diario">Check-in / Check-out</button>
+  <button data-view="sistema">Sistema (Auditoria)</button>
   <button data-view="fechamento">Fechamento Diário</button>
   <button data-view="rscen">RSCEN+</button>
   <button data-view="config">Regras de Negócio</button>
@@ -278,14 +270,15 @@
         <span><i style="background:var(--ok)"></i> ≥90%</span>
         <span><i style="background:var(--info)"></i> ≥120%</span>
       </div>
-      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>%</b> = realizado ÷ meta do período. <b>Proj.</b> = projeção no ritmo atual = (realizado ÷ dias úteis decorridos) × dias úteis do mês — estima onde o mês fecha se mantiver o ritmo. Cores conforme a faixa acima. Sub-indicadores mostram só a quantidade (Real); para ver percentual, crie uma <b>Taxa</b> (valor atual × alvo). <b>Clique no nome</b> do consultor para lançar os números do sistema.</div>
+      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>%</b> = realizado ÷ meta do período. <b>Proj.</b> = projeção no ritmo atual = (realizado ÷ dias úteis decorridos) × dias úteis do mês — estima onde o mês fecha se mantiver o ritmo. Cores conforme a faixa acima. Sub-indicadores mostram só a quantidade (Real); para ver percentual, crie uma <b>Taxa</b> (valor atual × alvo).</div>
     </div>
     <div class="panel">
       <div class="flex-between">
-        <div><h2>Acuracidade do Relato</h2><div class="sub">Auditoria do mês: check-in (plano) · check-out (relato) × sistema. Clique no <b>nome</b> aqui para ver a auditoria; na matriz acima, clique no nome para <b>lançar o sistema</b>.</div></div>
+        <div><h2>Acuracidade do Relato</h2><div class="sub">Check-out informado × o que está no sistema.</div></div>
+        <button class="ghost-btn" id="goSistema" title="Ir lançar os números reais do sistema">⚙ Lançar no Sistema →</button>
       </div>
       <div class="table-wrap" style="margin-top:6px;"><table id="acuracidadeTable"></table></div>
-      <div class="hint" style="margin-top:10px;">Acuracidade = quão próximo o relato ficou do sistema (inclui <b>0</b> no sistema). Aderência = realizado ÷ planejado no check-in. O lançamento do sistema saiu da aba superior — use o clique no nome na matriz.</div>
+      <div class="hint" style="margin-top:10px;">Acuracidade = quão próximo o check-out ficou do real do sistema (100% = perfeito). Aderência = realizado ÷ planejado no check-in (cumpriu o que prometeu).</div>
     </div>
   </section>
 
@@ -338,6 +331,20 @@
       </div>
       <div class="table-wrap" style="margin-top:12px;"><table id="diarioTable"></table></div>
       <div class="hint" style="margin-top:10px;"><span class="tag">plano</span> = check-in · <span class="tag sub">real</span> = check-out. Sábado usa a meta de sábado. Salva sozinho. Dica: <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar.</div>
+    </div>
+  </section>
+
+  <!-- SISTEMA -->
+  <section class="view" id="view-sistema">
+    <div class="panel">
+      <div class="flex-between">
+        <div><h2>Lançamento do Sistema</h2><div class="sub">Números reais do sistema para auditar o relato + taxas manuais.</div></div>
+        <div class="field"><label>Vendedor</label><select id="sistemaSeller"></select></div>
+      </div>
+      <div class="hint" style="margin:6px 0;">Digite o número <b>real do sistema</b> (acumulado do mês) de cada indicador. Gera a auditoria de acuracidade.</div>
+      <div class="syscards" id="sistemaCards"></div>
+      <div class="hint" id="sistemaRatesLabel" style="margin:18px 0 0; text-transform:uppercase; letter-spacing:.4px; font-weight:700;">Taxas manuais (ex.: NPS) — digitadas por vendedor</div>
+      <div class="syscards" id="sistemaRateCards"></div>
     </div>
   </section>
 
@@ -430,19 +437,6 @@
   <div class="hint" style="margin-top:10px;">Dias trabalhados no mês: <b id="escalaCount" class="neon">0</b></div>
 </div></div>
 
-<div class="modal-bg" id="lancamentoModal"><div class="modal modal-wide">
-  <div class="flex-between"><h3>Lançamento do Sistema — <span id="lancamentoName"></span> · <span id="lancamentoMonth"></span></h3><button class="iconbtn" id="closeLancamento">✕</button></div>
-  <div class="sub">Número real do sistema (acumulado do mês). Clique no indicador para expandir ou recolher.</div>
-  <div class="syscards" id="lancamentoCards"></div>
-</div></div>
-
-<div class="modal-bg" id="auditoriaModal"><div class="modal modal-wide">
-  <div class="flex-between"><h3>Auditoria — <span id="auditoriaName"></span> · <span id="auditoriaMonth"></span></h3><button class="iconbtn" id="closeAuditoria">✕</button></div>
-  <div id="auditoriaSummary" class="audit-summary"></div>
-  <div class="table-wrap" style="margin-top:10px;"><table id="auditoriaTable"></table></div>
-  <div class="row" style="margin-top:12px; justify-content:flex-end;"><button class="ghost-btn" id="auditoriaParaLancamento">✎ Lançar no sistema</button></div>
-</div></div>
-
 <div class="modal-bg" id="lojaModal"><div class="modal" style="max-width:420px">
   <h3>🏪 Qual é a sua loja?</h3>
   <div class="sub">Digite o código da loja (começa com <b>VC</b>). Ex.: VCANT, VCBHZ, VCCMA. Em qualquer aparelho, digitar o mesmo código carrega a mesma configuração. Para o <b>Divisional</b> (ver todas as lojas), digite <b>RSCEN</b>.</div>
@@ -498,11 +492,8 @@ function migrate(s) {
   if (!s.order) s.order = { sellers: null, indicators: null };
   if (!s.months) s.months = {};
   if (!s.theme) s.theme = "dark";
-  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {} }, s.ui || {});
+  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, sistemaSeller: null, resumoWeek: 0, expanded: {} }, s.ui || {});
   if (!s.ui.expanded) s.ui.expanded = {};
-  if (!s.ui.lancamentoExpanded) s.ui.lancamentoExpanded = {};
-  if (s.ui.view === "sistema") s.ui.view = "matriz";
-  if (s.ui.tabOrder) s.ui.tabOrder = s.ui.tabOrder.filter(v => v !== "sistema");
   (s.indicators || []).forEach(i => { if (i.pctOnly == null) i.pctOnly = false; });
   return s;
 }
@@ -602,9 +593,8 @@ function fmt(n, dec = 0) { if (n == null || isNaN(n)) return "—"; return Numbe
 function pctTxt(p) { return p == null ? "—" : Math.round(p * 100) + "%"; }
 
 /* ===== Abas ===== */
-const views = ["matriz","resumo","foco","diario","fechamento","rscen","config","kpis"];
+const views = ["matriz","resumo","foco","diario","sistema","fechamento","rscen","config","kpis"];
 let activeView = state.ui.view || "matriz";
-if (activeView === "sistema" || !views.includes(activeView)) activeView = "matriz";
 function showView(v) { activeView = v; state.ui.view = v; save(); document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.view === v)); views.forEach(x => document.getElementById("view-"+x).classList.toggle("active", x === v)); renderActive(); }
 function renderActive() {
   updateWorkdaysBadge();
@@ -612,6 +602,7 @@ function renderActive() {
   else if (activeView === "resumo") renderResumo();
   else if (activeView === "foco") renderFoco();
   else if (activeView === "diario") renderDiario();
+  else if (activeView === "sistema") renderSistema();
   else if (activeView === "fechamento") renderFechamento();
   else if (activeView === "rscen") renderArvore();
   else if (activeView === "kpis") renderIndicatorConfig();
@@ -687,7 +678,7 @@ function renderMatriz() {
 
   let body = "";
   sellers.forEach(seller => {
-    body += `<tr data-seller="${seller.id}"><td class="name ${moveOn?'draggable':''}${moveOn?'':' seller-link'}" ${moveOn?'draggable="true" data-dragseller="'+seller.id+'"':''} title="${moveOn?'':'Lançar números do sistema'}">${moveOn?'<span class="draghandle">⋮⋮</span>':''}${seller.name}</td>`;
+    body += `<tr data-seller="${seller.id}"><td class="name ${moveOn?'draggable':''}" ${moveOn?'draggable="true" data-dragseller="'+seller.id+'"':''}>${moveOn?'<span class="draghandle">⋮⋮</span>':''}${seller.name}</td>`;
     inds.forEach(ind => body += blockCells([seller.id], ind, false));
     body += "</tr>";
   });
@@ -698,49 +689,25 @@ function renderMatriz() {
   document.getElementById("matrizTable").innerHTML = "<thead>"+head1+head2+"</thead><tbody>"+body+"</tbody>";
 
   document.querySelectorAll('#matrizTable [data-block]').forEach(el => { el.onclick = (e) => { if (e.target.classList.contains('draghandle')) return; const ind = state.indicators.find(i=>i.id===el.dataset.block); if (ind && ind.pctOnly) return; const id = el.dataset.block; expandedBlocks[id] = expandedBlocks[id] === false ? true : false; save(); renderMatriz(); }; });
-  if (!moveOn) document.querySelectorAll('#matrizTable tbody tr[data-seller] td.name.seller-link').forEach(td => { td.onclick = (e) => { if (e.target.classList.contains('draghandle')) return; const sid = td.closest('tr').dataset.seller; if (sid) openLancamentoModal(sid); }; });
   if (moveOn) setupMatrixDnD();
   renderAcuracidade();
 }
 
-function acuracidadeFieldList() {
-  const fields = [];
-  state.indicators.forEach(ind => {
-    if (ind.pctOnly) { (ind.rates||[]).forEach(r => { if (r.manual) fields.push({ id: "rate:"+r.id, rateId: r.id, name: r.name, color: ind.color, sub: false, rate: true }); }); return; }
-    if (ind.checkout) fields.push({ id: ind.id, name: ind.name, color: ind.color, sub: false, rate: false });
-    (ind.subs||[]).forEach(s => { if (s.checkout) fields.push({ id: s.id, name: s.name, color: ind.color, sub: true, rate: false }); });
-  });
-  return fields;
-}
-function fieldAccuracy(sellerId, fieldId, days) {
-  const sys = getSystem(sellerId, fieldId);
-  if (sys == null) return null;
-  const r = accum(sellerId, fieldId, "real", days) ?? 0;
-  if (sys > 0) return Math.max(0, 1 - Math.abs(r - sys) / sys);
-  return r === 0 ? 1 : 0;
-}
 function renderAcuracidade() {
   const sellers = orderedSellers(); const days = monthDays();
-  const fields = acuracidadeFieldList().filter(f => !f.rate);
+  const fields = []; state.indicators.forEach(ind => { if (ind.pctOnly) return; if (ind.checkout) fields.push({ id: ind.id, name: ind.name, color: ind.color }); (ind.subs||[]).forEach(s => { if (s.checkout) fields.push({ id: s.id, name: s.name, color: ind.color, sub: true }); }); });
   let head = '<thead><tr><th class="name">Vendedor</th>';
   fields.forEach(f => head += `<th${f.sub?' style="color:var(--accent-2)"':''}>${f.sub?'↳ ':''}${f.name}<br><span class="muted" style="font-weight:600">relato·sis</span></th>`);
   head += '<th>Acurac.</th><th>Aderência<br><span class="muted" style="font-weight:600">check-in</span></th></tr></thead>';
   let body = "<tbody>";
   sellers.forEach(s => {
     const m = sellerMetrics(s.id);
-    body += `<tr data-seller="${s.id}"><td class="name seller-link" title="Ver auditoria">${s.name}</td>`;
-    fields.forEach(f => {
-      const rel = accum(s.id, f.id, "real", days); const sys = getSystem(s.id, f.id);
-      const acc = fieldAccuracy(s.id, f.id, days);
-      const both = rel != null || sys != null;
-      const accMini = sys != null && acc != null ? ` <span class="muted" style="font-size:10px">${pctTxt(acc)}</span>` : "";
-      body += `<td class="relato">${both ? `${rel==null?'—':fmt(rel)} <span class="s">${sys==null?'—':fmt(sys)}</span>${accMini}` : '—'}</td>`;
-    });
+    body += `<tr><td class="name">${s.name}</td>`;
+    fields.forEach(f => { const rel = accum(s.id, f.id, "real", days); const sys = getSystem(s.id, f.id); const both = rel != null || sys != null; body += `<td class="relato">${both ? `${rel==null?'—':fmt(rel)} <span class="s">${sys==null?'—':fmt(sys)}</span>` : '—'}</td>`; });
     body += `<td style="color:${heatText(m.acc)}; font-weight:700;">${m.acc==null?'—':pctTxt(m.acc)}</td><td style="color:${heatText(m.ader)}; font-weight:700;">${m.ader==null?'—':pctTxt(m.ader)}</td></tr>`;
   });
   body += "</tbody>";
   document.getElementById("acuracidadeTable").innerHTML = head + body;
-  document.querySelectorAll("#acuracidadeTable td.name.seller-link").forEach(td => { td.onclick = () => { const sid = td.closest("tr").dataset.seller; if (sid) openAuditoriaModal(sid); }; });
 }
 
 function setupMatrixDnD() {
@@ -804,77 +771,31 @@ function diarioRow(cfg, color, isSub) {
 function recolorDiarioCell(inp) { if (inp.dataset.key !== "real") return; const d = +inp.dataset.day; const cfg = cfgById(inp.dataset.field); if (!cfg) return; const metaD = metaForDay(cfg, currentMonth, d); const v = inp.value === "" ? null : Number(inp.value); const pct = metaD ? (v != null ? v/metaD : null) : null; inp.style.color = v != null ? heatText(pct) : "var(--text)"; }
 function updateDiarioSummary(fieldId) { const days = (weeksOf(currentMonth)[diarioWeekIdx] || []); const cfg = cfgById(fieldId); if (!cfg) return; const realSum = accum(diarioSeller, fieldId, "real", days) ?? 0; const metaSum = weekMeta(cfg, days); const pctW = metaSum ? realSum/metaSum : null; const cell = document.querySelector(`#diarioTable [data-sum="${fieldId}"]`); if (cell) cell.innerHTML = `<b style="color:${heatText(pctW)}">${fmt(realSum)}</b> <span class="muted">/ ${fmt(metaSum)}</span>`; }
 
-/* ============================================================ LANÇAMENTO / AUDITORIA (modais) */
-let modalSellerId = null;
-let lancamentoExpanded = state.ui.lancamentoExpanded || {};
-function renderLancamentoCards(sellerId) {
-  const box = document.getElementById("lancamentoCards");
-  if (!box) return;
-  const sysQty = (id, name, sub) => `<div class="sysfield ${sub?'sub':''}"><label>${sub?'↳ ':''}${name}</label><input type="number" class="syscell" data-field="${id}" value="${getSystem(sellerId, id) ?? ''}" placeholder="0"></div>`;
-  box.innerHTML = orderedIndicators().map(ind => {
+/* ============================================================ SISTEMA */
+let sistemaSeller = state.ui.sistemaSeller || null;
+function renderSistema() {
+  const sellers = orderedSellers();
+  if (!sellers.length) { document.getElementById("sistemaCards").innerHTML = '<div class="empty">Cadastre vendedores na aba Regras de Negócio.</div>'; document.getElementById("sistemaRateCards").innerHTML = ""; return; }
+  const sel = document.getElementById("sistemaSeller"); sel.innerHTML = sellers.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+  if (!sistemaSeller || !sellers.find(s => s.id === sistemaSeller)) sistemaSeller = sellers[0].id; sel.value = sistemaSeller;
+  const sysQty = (id,name,sub) => `<div class="sysfield ${sub?'sub':''}"><label>${sub?'↳ ':''}${name}</label><input type="number" class="syscell" data-field="${id}" value="${getSystem(sistemaSeller, id) ?? ''}" placeholder="0"></div>`;
+  document.getElementById("sistemaRatesLabel").style.display = "none";
+  document.getElementById("sistemaRateCards").innerHTML = "";
+  document.getElementById("sistemaCards").innerHTML = orderedIndicators().map(ind => {
     let fields = "";
     if (!ind.pctOnly) {
       fields += sysQty(ind.id, ind.name, false);
       (ind.subs||[]).forEach(s => { fields += sysQty(s.id, s.name, true); });
     }
     (ind.rates||[]).forEach(r => {
-      if (r.manual) fields += `<div class="sysfield rate"><label>% ${r.name}</label><input type="number" class="sysratecell" data-rate="${r.id}" value="${getSystemRate(sellerId, r.id) ?? ''}" placeholder="0"></div>`;
-      else { const rv = rateValue(r, [sellerId]); const tgt = Number(r.target)||0; fields += `<div class="sysfield rate calc"><label>% ${r.name} <span class="hint">auto</span></label><div class="syscalc">${rv==null?'—':fmt(rv,0)+'%'}${tgt?` <span class="muted">/ alvo ${tgt}%</span>`:''}</div></div>`; }
+      if (r.manual) fields += `<div class="sysfield rate"><label>% ${r.name} <span class="hint">auditar</span></label><input type="number" class="sysratecell" data-rate="${r.id}" value="${getSystemRate(sistemaSeller, r.id) ?? ''}" placeholder="0"></div>`;
+      else { const rv = rateValue(r, [sistemaSeller]); const tgt = Number(r.target)||0; fields += `<div class="sysfield rate calc"><label>% ${r.name} <span class="hint">auto</span></label><div class="syscalc">${rv==null?'—':fmt(rv,0)+'%'}${tgt?` <span class="muted">/ alvo ${tgt}%</span>`:''}</div></div>`; }
     });
     if (!fields) return "";
-    const exp = lancamentoExpanded[ind.id] !== false;
-    return `<div class="sysgroup ${exp?'':'collapsed'}" data-ind="${ind.id}" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head sys-toggle" style="color:${ind.color}" data-ind="${ind.id}"><span class="block-toggle">${exp?'▾':'▸'}</span> ${ind.name}</div><div class="sysgroup-fields">` + fields + `</div></div>`;
-  }).join("") || '<div class="empty">Nenhum indicador com lançamento de sistema.</div>';
-  box.querySelectorAll(".sys-toggle").forEach(h => { h.onclick = () => { const id = h.dataset.ind; lancamentoExpanded[id] = lancamentoExpanded[id] === false; state.ui.lancamentoExpanded = lancamentoExpanded; save(); renderLancamentoCards(sellerId); }; });
-  box.querySelectorAll(".syscell").forEach(inp => inp.addEventListener("input", () => { setSystem(sellerId, inp.dataset.field, inp.value); if (activeView === "matriz") renderAcuracidade(); }));
-  box.querySelectorAll(".sysratecell").forEach(inp => inp.addEventListener("input", () => { setSystemRate(sellerId, inp.dataset.rate, inp.value); if (activeView === "matriz") renderAcuracidade(); }));
-}
-function openLancamentoModal(sellerId) {
-  const s = state.sellers.find(x => x.id === sellerId); if (!s) return;
-  modalSellerId = sellerId; state.ui.sistemaSeller = sellerId; save();
-  document.getElementById("lancamentoName").textContent = s.name;
-  document.getElementById("lancamentoMonth").textContent = monthLabel(currentMonth);
-  renderLancamentoCards(sellerId);
-  document.getElementById("lancamentoModal").classList.add("show");
-}
-function closeLancamentoModal() {
-  document.getElementById("lancamentoModal").classList.remove("show");
-  if (activeView === "matriz") { renderAcuracidade(); renderMatriz(); }
-}
-function renderAuditoriaModal(sellerId) {
-  const days = monthDays(); const m = sellerMetrics(sellerId);
-  document.getElementById("auditoriaSummary").innerHTML =
-    `<span class="pill" style="color:${heatText(m.acc)}">Acuracidade ${pctTxt(m.acc)}</span>` +
-    `<span class="pill" style="color:${heatText(m.ader)}">Aderência ${pctTxt(m.ader)}</span>`;
-  const fields = acuracidadeFieldList();
-  let head = '<thead><tr><th class="name">Indicador</th><th>Check-in</th><th>Relato</th><th>Sistema</th><th>Acurac.</th></tr></thead>';
-  let body = "<tbody>";
-  fields.forEach(f => {
-    if (f.rate) {
-      const sys = getSystemRate(sellerId, f.rateId);
-      body += `<tr><td class="name">% ${f.name}</td><td>—</td><td>—</td><td>${sys!=null?fmt(sys,0)+'%':'—'}</td><td>—</td></tr>`;
-      return;
-    }
-    const cfg = cfgById(f.id);
-    const plan = cfg && cfg.checkin ? accum(sellerId, f.id, "plan", days) : null;
-    const rel = accum(sellerId, f.id, "real", days);
-    const sys = getSystem(sellerId, f.id);
-    const acc = fieldAccuracy(sellerId, f.id, days);
-    body += `<tr><td class="name">${f.sub?'↳ ':''}${f.name}</td><td>${plan==null?'—':fmt(plan)}</td><td>${rel==null?'—':fmt(rel)}</td><td>${sys==null?'—':fmt(sys)}</td><td style="color:${heatText(acc)};font-weight:700">${acc==null?'—':pctTxt(acc)}</td></tr>`;
-  });
-  body += "</tbody>";
-  document.getElementById("auditoriaTable").innerHTML = head + body;
-}
-function openAuditoriaModal(sellerId) {
-  const s = state.sellers.find(x => x.id === sellerId); if (!s) return;
-  modalSellerId = sellerId;
-  document.getElementById("auditoriaName").textContent = s.name;
-  document.getElementById("auditoriaMonth").textContent = monthLabel(currentMonth);
-  renderAuditoriaModal(sellerId);
-  document.getElementById("auditoriaModal").classList.add("show");
-}
-function closeAuditoriaModal() {
-  document.getElementById("auditoriaModal").classList.remove("show");
+    return `<div class="sysgroup" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head" style="color:${ind.color}">${ind.name}</div><div class="sysgroup-fields">` + fields + `</div></div>`;
+  }).join("");
+  document.querySelectorAll("#sistemaCards .syscell").forEach(inp => inp.addEventListener("input", () => setSystem(sistemaSeller, inp.dataset.field, inp.value)));
+  document.querySelectorAll("#sistemaCards .sysratecell").forEach(inp => inp.addEventListener("input", () => setSystemRate(sistemaSeller, inp.dataset.rate, inp.value)));
 }
 
 /* ============================================================ FOCO */
@@ -886,10 +807,8 @@ function sellerMetrics(sellerId) {
     const real = accum(sellerId, ind.id, "real", days), meta = metaMonthFor(ind);
     if (meta && real != null) { projSum += (sellerProjVal(sellerId, ind.id)/meta); projN++; }
     if (ind.checkin && ind.checkout) { const plan = accum(sellerId, ind.id, "plan", days); const r = accum(sellerId, ind.id, "real", days); if (plan) { aderSum += (r||0)/plan; aderN++; } }
-  });
-  acuracidadeFieldList().filter(f => !f.rate).forEach(f => {
-    const acc = fieldAccuracy(sellerId, f.id, days);
-    if (acc != null) { accSum += acc; accN++; }
+    const sys = getSystem(sellerId, ind.id);
+    if (sys != null && sys > 0) { const r = accum(sellerId, ind.id, "real", days) || 0; accSum += Math.max(0, 1 - Math.abs(r - sys)/sys); accN++; }
   });
   return { ritmo: projN ? projSum/projN : null, ader: aderN ? aderSum/aderN : null, acc: accN ? accSum/accN : null };
 }
@@ -1093,7 +1012,7 @@ function exportCsv() {
 }
 function exportJson() { download("backup_gestao_"+todayISO()+".json", JSON.stringify(state, null, 2), "application/json"); toast("Backup exportado"); }
 function download(name, content, type) { const blob = new Blob([content], { type }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url); }
-function importJson(file) { const r = new FileReader(); r.onload = () => { try { state = migrate(JSON.parse(r.result)); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; lancamentoExpanded = state.ui.lancamentoExpanded || {}; renderActive(); toast("Backup importado"); } catch(e){ toast("Arquivo inválido", true); } }; r.readAsText(file); }
+function importJson(file) { const r = new FileReader(); r.onload = () => { try { state = migrate(JSON.parse(r.result)); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); toast("Backup importado"); } catch(e){ toast("Arquivo inválido", true); } }; r.readAsText(file); }
 
 /* ============================================================ TEMA/LOJA/TOAST */
 function applyTheme() { document.documentElement.setAttribute("data-theme", state.theme); document.getElementById("themeToggle").textContent = state.theme === "dark" ? "🌙" : "☀️"; }
@@ -1514,14 +1433,11 @@ function init() {
   document.getElementById("themeToggle").onclick = () => { state.theme = state.theme==="dark"?"light":"dark"; save(); applyTheme(); renderActive(); };
   document.getElementById("matrizReorder").onclick = () => { document.body.classList.toggle("moveon"); toast(document.body.classList.contains("moveon")? "Reordenar: arraste linhas e blocos" : "Reordenar desligado"); renderMatriz(); };
   document.getElementById("matrizCsv").onclick = exportCsv;
+  document.getElementById("goSistema").onclick = () => showView("sistema");
   document.getElementById("storeName").addEventListener("input", e => { state.storeName = e.target.value; save(); });
   document.querySelectorAll("#matrizPeriodo button").forEach(b => b.onclick = () => { document.querySelectorAll("#matrizPeriodo button").forEach(x=>x.classList.remove("active")); b.classList.add("active"); matrizPeriodo = b.dataset.p; state.ui.period = matrizPeriodo; if(matrizPeriodo==="semana"){ matrizWeekIdx = currentWeekIndex(); state.ui.weekIdx = matrizWeekIdx; } save(); renderMatriz(); });
   document.getElementById("diarioSeller").addEventListener("change", e => { diarioSeller = e.target.value; state.ui.diarioSeller = diarioSeller; save(); renderDiario(); });
-  document.getElementById("closeLancamento").onclick = closeLancamentoModal;
-  document.getElementById("lancamentoModal").addEventListener("click", e => { if (e.target.id === "lancamentoModal") closeLancamentoModal(); });
-  document.getElementById("closeAuditoria").onclick = closeAuditoriaModal;
-  document.getElementById("auditoriaModal").addEventListener("click", e => { if (e.target.id === "auditoriaModal") closeAuditoriaModal(); });
-  document.getElementById("auditoriaParaLancamento").onclick = () => { const sid = modalSellerId; closeAuditoriaModal(); if (sid) openLancamentoModal(sid); };
+  document.getElementById("sistemaSeller").addEventListener("change", e => { sistemaSeller = e.target.value; state.ui.sistemaSeller = sistemaSeller; save(); renderSistema(); });
   document.getElementById("openMetaLoja").onclick = openMetaLoja;
   document.getElementById("closeMetaLoja").onclick = () => { document.getElementById("metaLojaModal").classList.remove("show"); renderResumo(); };
   document.getElementById("metaLojaModal").addEventListener("click", e => { if (e.target.id === "metaLojaModal") { e.currentTarget.classList.remove("show"); renderResumo(); } });
