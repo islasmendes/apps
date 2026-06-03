@@ -126,6 +126,8 @@
   .sysfield label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-weight: 700; display: block; margin-bottom: 5px; }
   .sysfield.sub label { color: var(--accent-2); }
   .sysfield input { width: 100%; font-size: 16px; font-weight: 700; }
+  .sysfield.rate label { color: var(--accent); }
+  .sysfield.calc .syscalc { background: var(--cell); border: 1px dashed var(--border); border-radius: 9px; padding: 9px 10px; font-weight: 700; color: var(--text); margin-top: 8px; }
   .month-breakdown { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-top: 6px; }
   .month-breakdown .mb label { display: flex; flex-direction: column; gap: 1px; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-weight: 700; margin-bottom: 5px; }
   .month-breakdown .mb label span { font-size: 9px; color: var(--text-faint); letter-spacing: .3px; }
@@ -703,21 +705,24 @@ function renderSistema() {
   if (!sellers.length) { document.getElementById("sistemaCards").innerHTML = '<div class="empty">Cadastre vendedores na aba Configuração.</div>'; document.getElementById("sistemaRateCards").innerHTML = ""; return; }
   const sel = document.getElementById("sistemaSeller"); sel.innerHTML = sellers.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
   if (!sistemaSeller || !sellers.find(s => s.id === sistemaSeller)) sistemaSeller = sellers[0].id; sel.value = sistemaSeller;
+  const sysQty = (id,name,sub) => `<div class="sysfield ${sub?'sub':''}"><label>${sub?'↳ ':''}${name}</label><input type="number" class="syscell" data-field="${id}" value="${getSystem(sistemaSeller, id) ?? ''}" placeholder="0"></div>`;
+  document.getElementById("sistemaRatesLabel").style.display = "none";
+  document.getElementById("sistemaRateCards").innerHTML = "";
   document.getElementById("sistemaCards").innerHTML = orderedIndicators().map(ind => {
-    if (ind.pctOnly) return "";
-    const fs2 = [];
-    if (ind.checkout) fs2.push({ id: ind.id, name: ind.name, sub: false });
-    (ind.subs||[]).forEach(s => { if (s.checkout) fs2.push({ id: s.id, name: s.name, sub: true }); });
-    if (!fs2.length) return "";
-    return `<div class="sysgroup" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head" style="color:${ind.color}">${ind.name}</div><div class="sysgroup-fields">` +
-      fs2.map(f => `<div class="sysfield ${f.sub?'sub':''}"><label>${f.sub?'↳ ':''}${f.name}</label><input type="number" class="syscell" data-field="${f.id}" value="${getSystem(sistemaSeller, f.id) ?? ''}" placeholder="0"></div>`).join("") +
-      `</div></div>`;
+    let fields = "";
+    if (!ind.pctOnly) {
+      if (ind.checkout) fields += sysQty(ind.id, ind.name, false);
+      (ind.subs||[]).forEach(s => { if (s.checkout) fields += sysQty(s.id, s.name, true); });
+    }
+    (ind.rates||[]).forEach(r => {
+      if (r.manual) fields += `<div class="sysfield rate"><label>% ${r.name} <span class="hint">auditar</span></label><input type="number" class="sysratecell" data-rate="${r.id}" value="${getSystemRate(sistemaSeller, r.id) ?? ''}" placeholder="0"></div>`;
+      else { const rv = rateValue(r, [sistemaSeller]); const tgt = Number(r.target)||0; fields += `<div class="sysfield rate calc"><label>% ${r.name} <span class="hint">auto</span></label><div class="syscalc">${rv==null?'—':fmt(rv,0)+'%'}${tgt?` <span class="muted">/ alvo ${tgt}%</span>`:''}</div></div>`; }
+    });
+    if (!fields) return "";
+    return `<div class="sysgroup" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head" style="color:${ind.color}">${ind.name}</div><div class="sysgroup-fields">` + fields + `</div></div>`;
   }).join("");
-  const manualRates = []; state.indicators.forEach(ind => (ind.rates||[]).forEach(r => { if (r.manual) manualRates.push(r); }));
-  document.getElementById("sistemaRatesLabel").style.display = manualRates.length ? "block" : "none";
-  document.getElementById("sistemaRateCards").innerHTML = manualRates.map(r => `<div class="syscard"><div class="k">${r.name} (%)</div><input type="number" class="sysratecell" data-rate="${r.id}" value="${getSystemRate(sistemaSeller, r.id) ?? ''}" placeholder="0"></div>`).join("");
   document.querySelectorAll("#sistemaCards .syscell").forEach(inp => inp.addEventListener("input", () => setSystem(sistemaSeller, inp.dataset.field, inp.value)));
-  document.querySelectorAll("#sistemaRateCards .sysratecell").forEach(inp => inp.addEventListener("input", () => setSystemRate(sistemaSeller, inp.dataset.rate, inp.value)));
+  document.querySelectorAll("#sistemaCards .sysratecell").forEach(inp => inp.addEventListener("input", () => setSystemRate(sistemaSeller, inp.dataset.rate, inp.value)));
 }
 
 /* ============================================================ FOCO */
@@ -817,7 +822,11 @@ function renderResumo() {
       <td>${fmt(mReal)}</td><td style="color:${vendRed?'var(--danger)':'var(--text-dim)'};font-weight:${vendRed?700:400};">${fmt(metaVend)}${vendRed?' ⚠':''}</td><td style="color:${metaLoja!=null?'var(--ok)':'var(--text-faint)'};font-weight:700;">${metaLoja!=null?fmt(metaLoja):'—'}</td><td style="color:${heatText(mPct)};font-weight:700;">${pctTxt(mPct)}</td>
       <td>${proj==null?'—':fmt(proj)}</td><td><span class="heat" style="background:${heatColor(pPct)};color:${heatText(pPct)}">${pctTxt(pPct)}</span></td></tr>`;
   }
-  inds.forEach(ind => { ind._color = ind.color; body += rowFor(ind, false); (ind.subs||[]).forEach(s => { s._color = ind.color; body += rowFor(s, true); }); });
+  inds.forEach(ind => {
+    ind._color = ind.color;
+    if (!ind.pctOnly) { body += rowFor(ind, false); (ind.subs||[]).forEach(s => { s._color = ind.color; body += rowFor(s, true); }); }
+    (ind.rates||[]).forEach(r => { const rv = rateValue(r, ids); const tgt = Number(r.target)||0; const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null; body += `<tr><td class="name" style="border-left:3px solid ${ind.color}"><span class="tag">%</span> ${r.name}</td><td>—</td><td class="muted">—</td><td>—</td><td>—</td><td class="muted">—</td><td style="color:${tgt?'var(--ok)':'var(--text-faint)'};font-weight:700;">${tgt?tgt+'%':'—'}</td><td style="color:${heatText(rp)};font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td>—</td><td>—</td></tr>`; });
+  });
   body += "</tbody>";
   document.getElementById("resumoTable").innerHTML = head + body;
 }
