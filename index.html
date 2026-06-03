@@ -230,6 +230,7 @@
   </div>
   <div class="spacer"></div>
   <div class="header-controls">
+    <button class="iconbtn" id="trocarLojaTop" title="Trocar de loja / Divisional">🏪 Trocar</button>
     <button class="iconbtn" id="themeToggle" title="Alternar tema" aria-label="Alternar tema">🌙</button>
     <div class="month-pick">Mês <input type="month" id="monthPicker" aria-label="Mês"></div>
     <div class="badge" id="workdaysBadge" title="Dias úteis do mês (edite em Configuração)">Dias úteis <b>26</b></div>
@@ -434,7 +435,7 @@
 
 <div class="modal-bg" id="lojaModal"><div class="modal" style="max-width:420px">
   <h3>🏪 Qual é a sua loja?</h3>
-  <div class="sub">Digite o código da loja (começa com <b>VC</b>). Ex.: VCANT, VCBHZ, VCCMA. Em qualquer aparelho, digitar o mesmo código carrega a mesma configuração.</div>
+  <div class="sub">Digite o código da loja (começa com <b>VC</b>). Ex.: VCANT, VCBHZ, VCCMA. Em qualquer aparelho, digitar o mesmo código carrega a mesma configuração. Para o <b>Divisional</b> (ver todas as lojas), digite <b>RSCEN</b>.</div>
   <input id="lojaCodeInput" placeholder="VCANT" style="text-transform:uppercase; width:100%; font-size:18px; font-weight:800; margin-top:8px;">
   <div class="hint" id="lojaErr" style="color:var(--danger); min-height:16px; margin-top:6px;"></div>
   <div class="row" style="margin-top:12px; justify-content:flex-end;"><button class="btn" id="lojaSubmit">Entrar na loja</button></div>
@@ -1360,6 +1361,62 @@ function renderSync(){
   el.querySelectorAll("[data-del-loja]").forEach(b=>b.onclick=()=>{ if(confirm("Excluir esta loja da nuvem?")){ try{ fbDb.ref("lojas/"+b.dataset.delLoja).remove(); toast("Loja excluída"); }catch(e){ toast("Sem permissão", true); } } });
 }
 
+/* ============================================================ FASE 2.3 — MODO DIVISIONAL (RSCEN) + trocar no topo */
+function divisionalMode(){ return !!(lojaCode && String(lojaCode).toUpperCase().indexOf("RSCEN")===0); }
+function allLojas(){
+  const arr = [];
+  if (!divisionalMode()) arr.push({ id: myLojaId, name: state.storeName || "Minha loja", data: state, self: true });
+  Object.keys(remoteLojas).forEach(id => { if (id===myLojaId && !divisionalMode()) return; const r = remoteLojas[id]; if (r && r.data) arr.push({ id, name: r.name || "Loja", data: r.data, self: false }); });
+  return arr;
+}
+function fbPush(){
+  if (!fbReady || !fbDb || !lojaCode || divisionalMode()) return;
+  clearTimeout(fbPushTimer);
+  fbPushTimer = setTimeout(()=>{ try{ fbDb.ref("lojas/"+lojaCode).set({ name: state.storeName || lojaCode, code: lojaCode, updatedAt: Date.now(), data: JSON.parse(JSON.stringify(state)) }); }catch(e){ console.warn("push falhou", e); } }, 1200);
+}
+function pullLoja(){
+  if (!fbReady || !fbDb || !lojaCode) return;
+  if (divisionalMode()){ state.storeName = "RSCEN — Divisional"; syncStore(); showView("rscen"); toast("Modo Divisional: vendo todas as lojas"); return; }
+  fbDb.ref("lojas/"+lojaCode).once("value").then(snap => {
+    const v = snap.val();
+    if (v && v.data) { state = migrate(v.data); state.storeName = v.name || lojaCode; save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); toast("Loja "+lojaCode+" carregada da nuvem"); }
+    else { state.storeName = lojaCode; save(); fbPush(); syncStore(); renderActive(); toast("Nova loja "+lojaCode+" criada"); }
+  }).catch(e => console.warn("pull falhou", e));
+}
+function submitLoja(){
+  const inp = document.getElementById("lojaCodeInput"); const err = document.getElementById("lojaErr");
+  let code = (inp.value||"").trim().toUpperCase().replace(/\s+/g,"");
+  const okLoja = /^VC[A-Z0-9]+$/.test(code) && code.length>=3;
+  const okDiv = /^RSCEN[A-Z0-9]*$/.test(code);
+  if (!okLoja && !okDiv) { if(err) err.textContent = "Use o código da sua loja (começa com VC, ex.: VCANT) ou RSCEN para o Divisional."; return; }
+  lojaCode = code; localStorage.setItem("gc_loja_code", code); myLojaId = code;
+  document.getElementById("lojaModal").classList.remove("show");
+  if (fbReady) pullLoja(); else { state.storeName = okDiv? "RSCEN — Divisional" : code; save(); syncStore(); renderActive(); }
+}
+function renderSync(){
+  const el = document.getElementById("syncPanel"); if(!el) return;
+  const div = divisionalMode(); const lojas = allLojas();
+  let html = `<h2>Sincronização &amp; Lojas</h2>`;
+  html += `<div class="sub">Tempo real: <b style="color:${fbReady?'var(--ok)':'var(--text-faint)'}">${fbReady?'ligado':'desligado (só local)'}</b> · ${div? '<b style="color:var(--accent-2)">Modo Divisional ('+escapeHtml(lojaCode)+')</b> — vê todas as lojas' : 'Sua loja: <code style="background:var(--cell);border:1px solid var(--border);padding:2px 8px;border-radius:6px;font-weight:800">'+escapeHtml(lojaCode||state.storeName||'—')+'</code>'} <button class="btn sec sm" id="trocarLoja">Trocar</button> ${isAdmin?'<span class="tag" style="background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)">ADMIN</span>':(div?'':'<span class="tag">gestor</span>')}</div>`;
+  if (!div) {
+    html += `<div class="hint" style="margin-top:6px;">Qualquer aparelho que abrir e digitar <b>${escapeHtml(lojaCode||'')}</b> carrega esta mesma configuração (a última sincronizada).</div>`;
+    html += `<div class="row" style="margin-top:10px;"><button class="btn sec" id="reloadCloud">↻ Baixar da nuvem agora</button><button class="btn danger" id="clearMine">🗑 Apagar e recomeçar esta loja</button></div>`;
+  } else {
+    html += `<div class="hint" style="margin-top:6px;">Você está vendo o consolidado de <b>${lojas.length}</b> loja(s) ao vivo. Não cria/edita loja.</div>`;
+  }
+  if (isAdmin) {
+    html += `<div style="margin-top:16px;"><b style="font-size:13px;">Lojas conectadas (admin)</b>` +
+      (lojas.length? lojas.map(L=>`<div class="row" style="align-items:center; margin-top:8px; border-top:1px solid var(--border-soft); padding-top:8px;"><span style="flex:1; min-width:160px;"><b>${escapeHtml(L.name)}</b> <span class="hint">${L.self?'· você':''} · ${escapeHtml(String(L.id))}</span></span>${L.self?'<span class="hint">(use Apagar acima)</span>':`<button class="btn danger sm" data-del-loja="${L.id}">Excluir loja</button>`}</div>`).join("") : '<div class="empty">Nenhuma loja.</div>') + `</div>`;
+  } else if (!div) {
+    html += `<div class="hint" style="margin-top:12px;">Só o <b>admin</b> exclui lojas. ID deste aparelho (para virar admin): <code style="font-size:10px">${escapeHtml(authUid||'—')}</code></div>`;
+  }
+  el.innerHTML = html;
+  const tl=document.getElementById("trocarLoja"); if(tl) tl.onclick=trocarLoja;
+  const rc=document.getElementById("reloadCloud"); if(rc) rc.onclick=()=>{ pullLoja(); };
+  const cm=document.getElementById("clearMine"); if(cm) cm.onclick=()=>{ if(confirm("Apagar os dados desta loja e recomeçar? (admin remove também da nuvem)")){ try{ if(fbReady&&fbDb&&lojaCode) fbDb.ref("lojas/"+lojaCode).remove(); }catch(e){} localStorage.removeItem(LS_KEY); location.reload(); } };
+  el.querySelectorAll("[data-del-loja]").forEach(b=>b.onclick=()=>{ if(confirm("Excluir esta loja da nuvem?")){ try{ fbDb.ref("lojas/"+b.dataset.delLoja).remove(); toast("Loja excluída"); }catch(e){ toast("Sem permissão", true); } } });
+}
+
 function init() {
   applyTheme(); syncStore();
   document.getElementById("monthPicker").value = currentMonth; monthData(); save();
@@ -1397,6 +1454,7 @@ function init() {
   const _ls=document.getElementById("lojaSubmit"); if(_ls) _ls.onclick=submitLoja;
   const _lc=document.getElementById("lojaCodeInput"); if(_lc) _lc.addEventListener("keydown",e=>{ if(e.key==="Enter") submitLoja(); });
   if(!lojaCode && typeof askLoja==="function") askLoja();
+  const _tlt=document.getElementById("trocarLojaTop"); if(_tlt) _tlt.onclick=trocarLoja;
 }
 function currentWeekIndex() { const weeks = weeksOf(currentMonth); if (todayISO() !== currentMonth) return weeks.length-1; const day = new Date().getDate(); for (let i=0;i<weeks.length;i++) if (weeks[i].includes(day)) return i; return weeks.length-1; }
 function randColor(){ const c=["#4f8cff","#22d3aa","#ffb74d","#a78bfa","#46d39a","#f472b6","#fb7185","#38bdf8","#facc15"]; return c[Math.floor(Math.random()*c.length)]; }
