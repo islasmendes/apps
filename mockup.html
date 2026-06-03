@@ -36,7 +36,6 @@
   .flex-between{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;}
   .btn{cursor:pointer;border:none;border-radius:10px;padding:8px 14px;font-size:12.5px;font-weight:700;font-family:var(--font);background:var(--panel-2);color:var(--text);border:1px solid var(--border);}
   .btn:hover{border-color:var(--accent);}
-  /* régua de dias */
   .daystrip{display:flex;gap:5px;flex-wrap:wrap;margin:6px 0 14px;}
   .daystrip button{width:34px;height:38px;border-radius:9px;border:1px solid var(--border);background:var(--cell);color:var(--text-dim);font-weight:700;cursor:pointer;font-family:var(--font);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;font-size:13px;}
   .daystrip button .wd{font-size:8px;color:var(--text-faint);margin-top:2px;text-transform:uppercase;}
@@ -50,8 +49,15 @@
   th{background:var(--panel-2);color:var(--text-dim);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;}
   td.name,th.name{text-align:left;position:sticky;left:0;background:var(--panel);font-weight:700;border-right:2px solid var(--border);z-index:2;}
   .heat{border-radius:7px;font-weight:700;padding:3px 7px;display:inline-block;min-width:30px;}
-  .parecer{text-align:left;color:var(--text-dim);font-weight:400;white-space:normal;min-width:260px;max-width:400px;font-size:12px;}
+  .loja-input{background:transparent;border:1px dashed transparent;color:var(--text);font-weight:800;font-family:var(--font);width:96px;border-radius:6px;padding:3px 6px;font-size:13px;}
+  .loja-input:hover{border-color:var(--border);}
+  .loja-input:focus{border-color:var(--accent);outline:none;background:var(--cell);}
+  th.parecer-h,td.parecer{text-align:left;width:280px;min-width:280px;max-width:280px;}
+  .parecer-scroll{overflow-x:auto;white-space:nowrap;color:var(--text-dim);font-weight:400;font-size:12px;padding-bottom:5px;}
+  .parecer-scroll::-webkit-scrollbar{height:7px;}
+  .parecer-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
   .si{color:var(--ok);font-weight:700;} .nao{color:var(--text-faint);font-weight:700;}
+  .total td{font-weight:800;background:var(--panel-2);}
   .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--text-dim);margin-top:10px;}
   .legend span{display:inline-flex;align-items:center;gap:5px;}
   .legend i{width:12px;height:12px;border-radius:3px;display:inline-block;}
@@ -59,7 +65,6 @@
   .tw{display:inline-block;width:16px;color:var(--accent);font-weight:800;}
   .vend td.name{padding-left:34px;font-weight:600;color:var(--text-dim);background:var(--panel-2);}
   .vend td{background:color-mix(in srgb,var(--panel-2) 60%,var(--panel));}
-  .total td{font-weight:800;background:var(--panel-2);}
   .blkhead{font-weight:800;border-left:3px solid;}
   .editchip{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);}
   .note{font-size:12px;color:var(--text-faint);margin-top:8px;}
@@ -71,14 +76,14 @@
   <div class="logo">R</div>
   <div>
     <div class="t1">RSCEN — Painel do Divisional</div>
-    <div class="t2">Visão consolidada · tempo real · mesma estrutura/link do app</div>
+    <div class="t2">Visão consolidada · tempo real · abas dentro do app (mesmo link)</div>
   </div>
   <div class="spacer"></div>
   <div class="live"><span class="dot"></span> Ao vivo · há 2 min</div>
   <div class="badge">Junho 2026</div>
 </header>
 
-<div class="mock-banner">⚠ Prévia (mockup) com dados fictícios. Aprovando este visual, ligamos o Firebase e isto vira abas dentro do app (mesmo link), ao vivo e compartilhado.</div>
+<div class="mock-banner">⚠ Prévia (mockup) com dados fictícios. Aprovando, ligamos o Firebase e isto vira abas no app (mesmo link), ao vivo e compartilhado.</div>
 
 <nav class="tabs" id="tabs">
   <button data-v="fech" class="active">Fechamento Diário</button>
@@ -92,9 +97,9 @@
       <div class="flex-between">
         <div>
           <h2>Fechamento Diário — RSCEN</h2>
-          <div class="sub">Escolha o dia. Cada loja edita a sua linha; só o <b>%</b> é automático (Real ÷ Meta). O Divisional vê tudo ao vivo.</div>
+          <div class="sub">Escolha o dia. O nome da loja é <b>editável</b> (cada gerente põe o seu). Só o <b>%</b> é automático (Real ÷ Meta). Total RSCEN no rodapé.</div>
         </div>
-        <button class="btn" title="Pré-preenche o Real com o que foi lançado no check-out do dia">↺ Puxar do dia</button>
+        <button class="btn" title="Pré-preenche o Real com o que foi lançado no check-out do dia (vínculo Fechamento ↔ Check-in/out)">↺ Puxar do dia</button>
       </div>
       <div class="daystrip" id="daystrip"></div>
       <div class="table-wrap">
@@ -109,7 +114,7 @@
               <th rowspan="2" style="border-left:3px solid #a78bfa;color:#a78bfa">Troca<br><span style="font-size:9px;opacity:.7">qtd</span></th>
               <th rowspan="2" style="border-left:3px solid #38bdf8;color:#38bdf8">Puxada</th>
               <th rowspan="2" style="border-left:3px solid var(--danger);color:var(--danger)">Queda<br><span style="font-size:9px;opacity:.7">qtd</span></th>
-              <th rowspan="2" class="name" style="left:auto;border-left:3px solid var(--info)">Parecer do Gestor</th>
+              <th rowspan="2" class="parecer-h" style="left:auto;border-left:3px solid var(--info);color:var(--info)">Parecer do Gestor</th>
             </tr>
             <tr>
               <th style="border-left:3px solid var(--ok)">Meta</th><th>Real</th><th>Prev</th><th>%</th>
@@ -126,9 +131,8 @@
         <span><i style="background:var(--warn)"></i> 50–89%</span>
         <span><i style="background:var(--ok)"></i> ≥90%</span>
         <span><i style="background:var(--info)"></i> ≥120%</span>
-        <span style="margin-left:auto">Dias com <b style="color:var(--ok)">▬</b> embaixo já têm lançamento.</span>
+        <span style="margin-left:auto">No Parecer, arraste a <b>barra</b> para o lado para ler tudo (o resto fica fixo).</span>
       </div>
-      <div class="note">Clique em outro dia para ver o fechamento daquele dia. Meta/Real/Prev são digitados; o % se calcula sozinho.</div>
     </div>
   </section>
 
@@ -138,7 +142,7 @@
       <div class="flex-between">
         <div>
           <h2>RSCEN+ · Matriz de Oportunidades por Loja</h2>
-          <div class="sub">É a Matriz atual, por LOJA. <b>Total RSCEN</b> no topo. Clique no <b>＋</b> de uma loja para abrir os vendedores.</div>
+          <div class="sub">É a <b>Matriz atual</b>, por LOJA, com <b>Total RSCEN</b> no topo. Clique no <b>＋</b> para abrir os vendedores. <span style="color:var(--accent-2)">Os indicadores são dinâmicos (padrão da RSCEN) — aqui é só exemplo.</span></div>
         </div>
         <div class="editchip">🌳 RSCEN → Loja → Vendedores</div>
       </div>
@@ -169,7 +173,6 @@
         <span><i style="background:var(--warn)"></i> 50–89%</span>
         <span><i style="background:var(--ok)"></i> ≥90%</span>
         <span><i style="background:var(--info)"></i> ≥120%</span>
-        <span style="margin-left:auto">Clique em <b style="color:var(--accent)">＋ VCANT</b> para abrir os vendedores.</span>
       </div>
     </div>
   </section>
@@ -178,10 +181,10 @@
 <script>
 function heat(p){ if(p==null) return ['transparent','var(--text-faint)']; let c; if(p<0.5)c='--danger'; else if(p<0.9)c='--warn'; else if(p<1.2)c='--ok'; else c='--info'; return ['color-mix(in srgb, var('+c+') 26%, transparent)','var('+c+')']; }
 function pctTxt(p){ return p==null?'—':Math.round(p*100)+'%'; }
+function heatTxt(p){ return heat(p)[1]; }
 
-/* ===== Régua de dias (junho 2026, 30 dias; hoje = 3) ===== */
+/* ===== Régua de dias (junho 2026; hoje = 3) ===== */
 const DIM=30, SELDEFAULT=3; const dn=['D','S','T','Q','Q','S','S'];
-// junho/2026: dia 1 = segunda (getDay 1)
 function wd(d){ return new Date(2026,5,d).getDay(); }
 const diasComLancamento={1:true,2:true,3:true};
 let selDay=SELDEFAULT;
@@ -193,45 +196,52 @@ function renderDays(){
 }
 function pickDay(d){ selDay=d; renderDays(); renderFech(); }
 
-/* dados de fechamento por dia (ficticios) */
-const lojasFech=['VCANT','ANT','BHZ','BRO','CHA','LCI','LEX','PAS','RAC','SMS'];
-function gen(seed){ // gera linha pseudo a partir de seed
-  const r=(a,b)=>Math.max(0,Math.round(a+(Math.sin(seed*9.7)+1)/2*(b-a)));
-  const vM=3,vR=r(0,4),vP=r(vR,vR+1);
-  const aM=35,aR=r(15,38),aP=r(aR,aR+4);
-  const cM=14,cR=r(3,15),cP=r(cR,cR+2);
-  return {vM,vR,vP,aM,aR,aP,cM,cR,cP,fN:r(4,14),f9:r(0,5),fA:r(0,8),troca:r(0,5),pux:(seed%3===0),queda:r(0,3)};
-}
-const pareceres=['Dia produtivo, boa conversão; resgatamos fichas paradas.','Dia fraco, baixo fluxo; equipe focada em reverter.','Recorde de agendamentos; foco em comparecimento amanhã.','Aprovações travadas; cliente retorna no fim de semana.','Venda positiva, subimos no fim do dia.'];
+/* dados distintos por loja (dia de hoje) */
+const lojasBase=[
+  {loja:'VCANT', v:[3,4,5], a:[35,38,42], c:[14,15,17], f:[14,3,5], troca:5, pux:true,  queda:3, parecer:'Dia produtivo: boa conversão de leads, resgatamos 2 fichas que estavam paradas há uma semana e fechamos 4 vendas, sendo 1 com carro troca avaliado acima da tabela. Amanhã com 8 agendamentos confirmados e expectativa de mais 2 fechamentos.'},
+  {loja:'Contagem', v:[3,1,2], a:[35,28,30], c:[10,10,11], f:[9,3,4], troca:3, pux:false, queda:2, parecer:'Movimento fraco pela manhã, melhorou à tarde. 1 venda concretizada. Aprovação de financiamento travada por documentação; cliente retorna amanhã para concluir.'},
+  {loja:'BH Norte', v:[4,0,1], a:[39,16,20], c:[17,4,6], f:[9,1,2], troca:1, pux:false, queda:0, parecer:'Dia abaixo do esperado, baixo fluxo de loja e poucos leads recebidos. Equipe segue firme e determinada a reverter o cenário nos próximos dias.'},
+  {loja:'Betim', v:[2,2,3], a:[27,24,27], c:[8,6,7], f:[7,3,3], troca:3, pux:true,  queda:1, parecer:'Dia produtivo com resgate de negociação antiga e bom volume de carro troca no auto avaliar. Dois clientes ficaram de retornar no sábado.'},
+  {loja:'Sete Lagoas', v:[3,3,4], a:[28,31,34], c:[14,11,12], f:[11,3,6], troca:3, pux:false, queda:2, parecer:'Venda positiva e bons comparecimentos de agendamentos trabalhados ontem. No fim do dia subimos mais uma venda; foco amanhã em fichas.'},
+  {loja:'Divinópolis', v:[1,1,2], a:[15,13,15], c:[6,5,6], f:[4,2,2], troca:2, pux:true,  queda:1, parecer:'Time enxuto hoje (1 folga), mas mantivemos o ritmo. Conseguimos segurar a venda e deixamos 3 comparecimentos para o D+1.'},
+];
 function fechDataDay(day){
-  if(day>SELDEFAULT) return null; // dias futuros: sem lancamento
+  if(day>SELDEFAULT) return null;
   const scale = day===SELDEFAULT?1:0.7;
-  return lojasFech.map((loja,i)=>{ const g=gen((day*13+i*7)); 
-    const sc=x=>Math.round(x*scale);
-    return {loja, vM:g.vM, vR:sc(g.vR), vP:sc(g.vP), aM:g.aM, aR:sc(g.aR), aP:sc(g.aP), cM:g.cM, cR:sc(g.cR), cP:sc(g.cP), fN:sc(g.fN), f9:sc(g.f9), fA:sc(g.fA), troca:sc(g.troca), pux:g.pux, queda:sc(g.queda), parecer:pareceres[i%pareceres.length]}; });
+  const sc=x=>Math.round(x*scale);
+  return lojasBase.map(b=>({ loja:b.loja, vM:b.v[0], vR:sc(b.v[1]), vP:sc(b.v[2]), aM:b.a[0], aR:sc(b.a[1]), aP:sc(b.a[2]), cM:b.c[0], cR:sc(b.c[1]), cP:sc(b.c[2]), fN:sc(b.f[0]), f9:sc(b.f[1]), fA:sc(b.f[2]), troca:sc(b.troca), pux:b.pux, queda:sc(b.queda), parecer:b.parecer }));
 }
 function mrp(m,r,p){ const pct=m?r/m:null; const [bg,fg]=heat(pct); return `<td class="muted">${m}</td><td><span class="heat" style="background:${bg};color:${fg}">${r}</span></td><td class="muted">${p}</td><td style="color:${fg};font-weight:700">${pctTxt(pct)}</td>`; }
 function renderFech(){
   const data=fechDataDay(selDay);
   const tb=document.getElementById('fechBody');
   if(!data){ tb.innerHTML=`<tr><td class="name">—</td><td colspan="19" style="text-align:left;color:var(--text-faint);padding:16px">Dia ${selDay} ainda sem lançamento. (No app real, cada loja preenche aqui.)</td></tr>`; return; }
-  tb.innerHTML=data.map(r=>`<tr><td class="name">${r.loja}</td>`+
+  let body=data.map(r=>`<tr><td class="name"><input class="loja-input" value="${r.loja}"></td>`+
     mrp(r.vM,r.vR,r.vP)+mrp(r.aM,r.aR,r.aP)+mrp(r.cM,r.cR,r.cP)+
     `<td class="muted">${r.fN}</td><td class="muted">${r.f9}</td><td>${r.fA}</td>`+
-    `<td><b>${r.troca}</b></td><td class="${r.pux?'si':'nao'}">${r.pux?'Sim':'Não'}</td><td class="${r.queda?'nao':''}" style="${r.queda?'color:var(--danger);font-weight:700':''}">${r.queda}</td>`+
-    `<td class="parecer">${r.parecer}</td></tr>`).join('');
+    `<td><b>${r.troca}</b></td><td class="${r.pux?'si':'nao'}">${r.pux?'Sim':'Não'}</td><td style="${r.queda?'color:var(--danger);font-weight:700':'color:var(--text-faint)'}">${r.queda}</td>`+
+    `<td class="parecer"><div class="parecer-scroll">${r.parecer}</div></td></tr>`).join('');
+  // total RSCEN (rodape)
+  const sum=(k)=>data.reduce((a,r)=>a+r[k],0);
+  const t={vM:sum('vM'),vR:sum('vR'),vP:sum('vP'),aM:sum('aM'),aR:sum('aR'),aP:sum('aP'),cM:sum('cM'),cR:sum('cR'),cP:sum('cP'),fN:sum('fN'),f9:sum('f9'),fA:sum('fA'),troca:sum('troca'),queda:sum('queda'),pux:data.filter(r=>r.pux).length};
+  body+=`<tr class="total"><td class="name">⌂ Total RSCEN</td>`+
+    mrp(t.vM,t.vR,t.vP)+mrp(t.aM,t.aR,t.aP)+mrp(t.cM,t.cR,t.cP)+
+    `<td>${t.fN}</td><td>${t.f9}</td><td>${t.fA}</td>`+
+    `<td>${t.troca}</td><td class="si">${t.pux}/${data.length}</td><td style="color:var(--danger)">${t.queda}</td>`+
+    `<td class="parecer"><div class="parecer-scroll" style="color:var(--text-faint)">Consolidado da divisão (${data.length} lojas).</div></td></tr>`;
+  tb.innerHTML=body;
 }
 
-/* ===== RSCEN+ árvore (com Total RSCEN) ===== */
-function blocks(vals){ return vals.map(([r,m,proj])=>{ const p=m?r/m:null; const [bg,fg]=heat(p); const pp=m?proj/m:null; const [,pfg]=heat(pp); return `<td><span class="heat" style="background:${bg};color:${fg}">${r}</span></td><td style="color:${fg};font-weight:700">${pctTxt(p)}</td><td style="color:${pfg}">${proj}</td>`; }).join(''); }
+/* ===== RSCEN+ árvore (Total no topo) ===== */
+function blocks(vals){ return vals.map(([r,m,proj])=>{ const p=m?r/m:null; const [bg,fg]=heat(p); const pp=m?proj/m:null; return `<td><span class="heat" style="background:${bg};color:${fg}">${r}</span></td><td style="color:${fg};font-weight:700">${pctTxt(p)}</td><td style="color:${heatTxt(pp)}">${proj}</td>`; }).join(''); }
 const lojas=[
   { loja:'VCANT', expandable:true, vals:[[420,500,520],[180,210,225],[95,120,118],[60,90,74],[32,32,40]],
     vend:[ {n:'Islas', vals:[[230,260,285],[100,110,124],[52,62,64],[34,46,42],[18,16,22]]},
            {n:'Ana',   vals:[[190,240,235],[80,100,101],[43,58,54],[26,44,32],[14,16,18]]} ]},
-  { loja:'BHZ', vals:[[300,420,360],[120,180,150],[70,110,90],[40,80,55],[18,32,22]] },
-  { loja:'BRO', vals:[[480,460,560],[210,200,235],[130,120,150],[88,70,100],[36,30,42]] },
-  { loja:'CHA', vals:[[260,420,300],[110,180,135],[55,110,70],[30,80,40],[12,32,16]] },
-  { loja:'LCI', vals:[[390,400,470],[170,180,200],[96,100,116],[60,70,72],[30,28,36]] },
+  { loja:'Contagem', vals:[[300,420,360],[120,180,150],[70,110,90],[40,80,55],[18,32,22]] },
+  { loja:'Betim', vals:[[480,460,560],[210,200,235],[130,120,150],[88,70,100],[36,30,42]] },
+  { loja:'BH Norte', vals:[[260,420,300],[110,180,135],[55,110,70],[30,80,40],[12,32,16]] },
+  { loja:'Divinópolis', vals:[[390,400,470],[170,180,200],[96,100,116],[60,70,72],[30,28,36]] },
 ];
 function totalVals(){ const t=[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]; lojas.forEach(l=>l.vals.forEach((v,bi)=>{t[bi][0]+=v[0];t[bi][1]+=v[1];t[bi][2]+=v[2];})); return t; }
 function rowLoja(l,i){
