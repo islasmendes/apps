@@ -247,6 +247,7 @@
   <button data-view="fechamento">Fechamento Diário</button>
   <button data-view="rscen">RSCEN+</button>
   <button data-view="config">Regras de Negócio</button>
+  <button data-view="kpis">KPIs</button>
 </nav>
 
 <main>
@@ -370,13 +371,6 @@
         </div>
       </div>
     </div>
-    <div class="panel">
-      <div class="flex-between">
-        <div><h2>Indicadores</h2><div class="sub">Principal → sub-indicadores (qtd) e taxas (%). A taxa é A÷B com campos que você escolhe.</div></div>
-        <button class="btn" id="addIndicator">+ Indicador principal</button>
-      </div>
-      <div id="indicatorList" style="margin-top:14px;"></div>
-    </div>
     <div class="panel" id="syncPanel"></div>
     <div class="panel">
       <h2>Backup &amp; dados</h2>
@@ -415,6 +409,16 @@
         <span><i style="background:var(--ok)"></i> ≥90%</span>
         <span><i style="background:var(--info)"></i> ≥120%</span>
       </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-kpis">
+    <div class="panel">
+      <div class="flex-between">
+        <div><h2>KPIs · Indicadores</h2><div class="sub">Principal → sub-indicadores (qtd) e taxas (%). A taxa é A÷B com campos que você escolhe.</div></div>
+        <button class="btn" id="addIndicator">+ Indicador principal</button>
+      </div>
+      <div id="indicatorList" style="margin-top:14px;"></div>
     </div>
   </section>
 </main>
@@ -588,7 +592,7 @@ function fmt(n, dec = 0) { if (n == null || isNaN(n)) return "—"; return Numbe
 function pctTxt(p) { return p == null ? "—" : Math.round(p * 100) + "%"; }
 
 /* ===== Abas ===== */
-const views = ["matriz","resumo","foco","diario","sistema","fechamento","rscen","config"];
+const views = ["matriz","resumo","foco","diario","sistema","fechamento","rscen","config","kpis"];
 let activeView = state.ui.view || "matriz";
 function showView(v) { activeView = v; state.ui.view = v; save(); document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.view === v)); views.forEach(x => document.getElementById("view-"+x).classList.toggle("active", x === v)); renderActive(); }
 function renderActive() {
@@ -600,6 +604,7 @@ function renderActive() {
   else if (activeView === "sistema") renderSistema();
   else if (activeView === "fechamento") renderFechamento();
   else if (activeView === "rscen") renderArvore();
+  else if (activeView === "kpis") renderIndicatorConfig();
   else if (activeView === "config") { renderConfig(); if (typeof renderSync === "function") renderSync(); }
 }
 function updateWorkdaysBadge() { const b = document.querySelector("#workdaysBadge b"); if (b) b.textContent = diasUteisOf(currentMonth); }
