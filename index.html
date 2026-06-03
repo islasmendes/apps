@@ -6,6 +6,7 @@
 <title>Gestão Comercial — Matriz de Oportunidades</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
   :root {
     --bg: #050506; --bg-soft: #0d0d11; --panel: #111114; --panel-2: #18181d;
@@ -375,6 +376,7 @@
       </div>
       <div id="indicatorList" style="margin-top:14px;"></div>
     </div>
+    <div class="panel" id="syncPanel"></div>
     <div class="panel">
       <h2>Backup &amp; dados</h2>
       <div class="sub">Salvo neste navegador, por mês. Exporte um backup para não perder nada.</div>
@@ -589,7 +591,7 @@ function renderActive() {
   else if (activeView === "sistema") renderSistema();
   else if (activeView === "fechamento") renderFechamento();
   else if (activeView === "rscen") renderArvore();
-  else if (activeView === "config") renderConfig();
+  else if (activeView === "config") { renderConfig(); if (typeof renderSync === "function") renderSync(); }
 }
 function updateWorkdaysBadge() { const b = document.querySelector("#workdaysBadge b"); if (b) b.textContent = diasUteisOf(currentMonth); }
 
@@ -1240,6 +1242,44 @@ function renderArvore(){
   const tbl=document.getElementById("arvoreTable");
   tbl.innerHTML="<thead>"+head1+head2+"</thead><tbody>"+body+"</tbody>";
   tbl.querySelectorAll('tr.tree-row[data-loja]').forEach(tr=>{ tr.onclick=()=>{ const id=tr.dataset.loja; arvOpenLojas[id]=!arvOpenLojas[id]; tbl.querySelectorAll('.arv-'+id).forEach(r=>r.style.display=arvOpenLojas[id]?'table-row':'none'); const tw=tr.querySelector('.tw'); if(tw) tw.textContent=arvOpenLojas[id]?'－':'＋'; }; });
+}
+
+/* ============================================================ FASE 2.1 — AUTH ANÔNIMO + ADMIN + LIMPEZA */
+let isAdmin = false;
+function fbInit(){
+  try{
+    if (typeof firebase === "undefined" || !firebase.initializeApp) { setFbBadge(false); return; }
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fbDb = firebase.database();
+    const auth = firebase.auth();
+    auth.onAuthStateChanged(user => {
+      if (!user) return;
+      myLojaId = user.uid; fbReady = true; setFbBadge(false);
+      try { fbDb.ref("admins/"+user.uid).on("value", s => { isAdmin = (s.val()===true); if(activeView==="config") renderSync(); }); } catch(e){}
+      fbDb.ref("lojas").on("value", snap => { remoteLojas = snap.val() || {}; setFbBadge(true); if(activeView==="fechamento"||activeView==="rscen") renderActive(); if(activeView==="config") renderSync(); },
+        err => { console.warn("leitura lojas negada (regras/auth):", err && err.message); setFbBadge(false); });
+      fbDb.ref(".info/connected").on("value", s => setFbBadge(!!(s && s.val())));
+      fbPush();
+    });
+    auth.signInAnonymously().catch(e => { console.warn("Login anônimo falhou — habilite Anonymous em Authentication:", e && e.message); setFbBadge(false); });
+  }catch(e){ console.warn("Firebase init falhou:", e); setFbBadge(false); }
+}
+function renderSync(){
+  const el = document.getElementById("syncPanel"); if(!el) return;
+  const lojas = allLojas();
+  let html = `<h2>Sincronização &amp; Lojas</h2>`;
+  html += `<div class="sub">Tempo real: <b style="color:${fbReady?'var(--ok)':'var(--text-faint)'}">${fbReady?'ligado':'desligado (só local)'}</b> · Seu ID: <code style="background:var(--cell);border:1px solid var(--border);padding:2px 6px;border-radius:6px;font-size:11px">${escapeHtml(myLojaId)}</code> <button class="btn sec sm" id="copyId">copiar</button> ${isAdmin?'<span class="tag" style="background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)">ADMIN</span>':'<span class="tag">gestor</span>'}</div>`;
+  html += `<div class="row" style="margin-top:10px;"><button class="btn danger" id="clearMine">🗑 Limpar meus dados (esta loja)</button></div>`;
+  if (isAdmin) {
+    html += `<div style="margin-top:16px;"><b style="font-size:13px;">Lojas conectadas (admin)</b>` +
+      (lojas.length? lojas.map(L=>`<div class="row" style="align-items:center; margin-top:8px; border-top:1px solid var(--border-soft); padding-top:8px;"><span style="flex:1; min-width:160px;"><b>${escapeHtml(L.name)}</b> <span class="hint">${L.self?'· você':''} · ${escapeHtml(String(L.id).slice(0,10))}…</span></span>${L.self?'<span class="hint">(use Limpar acima)</span>':`<button class="btn danger sm" data-del-loja="${L.id}">Excluir loja</button>`}</div>`).join("") : '<div class="empty">Nenhuma loja.</div>') + `</div>`;
+  } else {
+    html += `<div class="hint" style="margin-top:12px;">Só o <b>admin</b> pode excluir outras lojas. Para virar admin, me envie o seu ID acima (ou cadastre-o em <code>/admins</code> no Firebase).</div>`;
+  }
+  el.innerHTML = html;
+  const cp=document.getElementById("copyId"); if(cp) cp.onclick=()=>{ try{ navigator.clipboard && navigator.clipboard.writeText(myLojaId); }catch(e){} toast("ID copiado"); };
+  const cm=document.getElementById("clearMine"); if(cm) cm.onclick=()=>{ if(confirm("Limpar os dados desta loja (local e na nuvem)? Não dá para desfazer.")){ try{ if(fbReady&&fbDb) fbDb.ref("lojas/"+myLojaId).remove(); }catch(e){} localStorage.removeItem(LS_KEY); location.reload(); } };
+  el.querySelectorAll("[data-del-loja]").forEach(b=>b.onclick=()=>{ if(confirm("Excluir esta loja da nuvem? O gestor dela perderá a sincronização até reenviar.")){ try{ fbDb.ref("lojas/"+b.dataset.delLoja).remove(); toast("Loja excluída"); }catch(e){ toast("Sem permissão", true); } } });
 }
 
 function init() {
