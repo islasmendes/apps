@@ -432,6 +432,14 @@
   <div class="hint" style="margin-top:10px;">Dias trabalhados no mês: <b id="escalaCount" class="neon">0</b></div>
 </div></div>
 
+<div class="modal-bg" id="lojaModal"><div class="modal" style="max-width:420px">
+  <h3>🏪 Qual é a sua loja?</h3>
+  <div class="sub">Digite o código da loja (começa com <b>VC</b>). Ex.: VCANT, VCBHZ, VCCMA. Em qualquer aparelho, digitar o mesmo código carrega a mesma configuração.</div>
+  <input id="lojaCodeInput" placeholder="VCANT" style="text-transform:uppercase; width:100%; font-size:18px; font-weight:800; margin-top:8px;">
+  <div class="hint" id="lojaErr" style="color:var(--danger); min-height:16px; margin-top:6px;"></div>
+  <div class="row" style="margin-top:12px; justify-content:flex-end;"><button class="btn" id="lojaSubmit">Entrar na loja</button></div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1282,6 +1290,76 @@ function renderSync(){
   el.querySelectorAll("[data-del-loja]").forEach(b=>b.onclick=()=>{ if(confirm("Excluir esta loja da nuvem? O gestor dela perderá a sincronização até reenviar.")){ try{ fbDb.ref("lojas/"+b.dataset.delLoja).remove(); toast("Loja excluída"); }catch(e){ toast("Sem permissão", true); } } });
 }
 
+/* ============================================================ FASE 2.2 — LOJA POR CÓDIGO (sem login) */
+let lojaCode = localStorage.getItem("gc_loja_code") || null;
+let authUid = null;
+
+function fbInit(){
+  try{
+    if (typeof firebase === "undefined" || !firebase.initializeApp) { setFbBadge(false); return; }
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fbDb = firebase.database();
+    const auth = firebase.auth();
+    auth.onAuthStateChanged(user => {
+      if (!user) return;
+      authUid = user.uid; fbReady = true; if (lojaCode) myLojaId = lojaCode; setFbBadge(false);
+      try { fbDb.ref("admins/"+authUid).on("value", s => { isAdmin = (s.val()===true); if(activeView==="config") renderSync(); }); } catch(e){}
+      fbDb.ref("lojas").on("value", snap => { remoteLojas = snap.val() || {}; setFbBadge(true); if(activeView==="fechamento"||activeView==="rscen") renderActive(); if(activeView==="config") renderSync(); },
+        err => { console.warn("leitura lojas negada:", err && err.message); setFbBadge(false); });
+      fbDb.ref(".info/connected").on("value", s => setFbBadge(!!(s && s.val())));
+      if (lojaCode) pullLoja(); else if(typeof askLoja==="function") askLoja();
+    });
+    auth.signInAnonymously().catch(e => { console.warn("Login anônimo falhou — habilite Anonymous:", e && e.message); setFbBadge(false); });
+  }catch(e){ console.warn("Firebase init falhou:", e); setFbBadge(false); }
+}
+function fbPush(){
+  if (!fbReady || !fbDb || !lojaCode) return;
+  clearTimeout(fbPushTimer);
+  fbPushTimer = setTimeout(()=>{ try{ fbDb.ref("lojas/"+lojaCode).set({ name: state.storeName || lojaCode, code: lojaCode, updatedAt: Date.now(), data: JSON.parse(JSON.stringify(state)) }); }catch(e){ console.warn("push falhou", e); } }, 1200);
+}
+function pullLoja(){
+  if (!fbReady || !fbDb || !lojaCode) return;
+  fbDb.ref("lojas/"+lojaCode).once("value").then(snap => {
+    const v = snap.val();
+    if (v && v.data) { state = migrate(v.data); state.storeName = v.name || lojaCode; save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); toast("Loja "+lojaCode+" carregada da nuvem"); }
+    else { state.storeName = lojaCode; save(); fbPush(); syncStore(); renderActive(); toast("Nova loja "+lojaCode+" criada"); }
+  }).catch(e => { console.warn("pull falhou", e); });
+}
+function askLoja(){
+  const m = document.getElementById("lojaModal"); if(!m) return;
+  const inp = document.getElementById("lojaCodeInput");
+  if (inp) inp.value = (state.storeName||"").toUpperCase().indexOf("VC")===0 ? state.storeName.toUpperCase() : "VC";
+  m.classList.add("show"); if(inp) setTimeout(()=>{ try{ inp.focus(); }catch(e){} },60);
+}
+function submitLoja(){
+  const inp = document.getElementById("lojaCodeInput"); const err = document.getElementById("lojaErr");
+  let code = (inp.value||"").trim().toUpperCase().replace(/\s+/g,"");
+  if (!/^VC[A-Z0-9]+$/.test(code) || code.length < 3) { if(err) err.textContent = "O código deve começar com VC e ter pelo menos 3 letras (ex.: VCANT, VCBHZ)."; return; }
+  lojaCode = code; localStorage.setItem("gc_loja_code", code); myLojaId = code;
+  document.getElementById("lojaModal").classList.remove("show");
+  if (fbReady) pullLoja(); else { state.storeName = code; save(); syncStore(); renderActive(); }
+}
+function trocarLoja(){ if(confirm("Trocar de loja? O app vai recarregar e perguntar o novo código.")){ localStorage.removeItem("gc_loja_code"); location.reload(); } }
+
+function renderSync(){
+  const el = document.getElementById("syncPanel"); if(!el) return;
+  const lojas = allLojas();
+  let html = `<h2>Sincronização &amp; Lojas</h2>`;
+  html += `<div class="sub">Tempo real: <b style="color:${fbReady?'var(--ok)':'var(--text-faint)'}">${fbReady?'ligado':'desligado (só local)'}</b> · Sua loja: <code style="background:var(--cell);border:1px solid var(--border);padding:2px 8px;border-radius:6px;font-weight:800">${escapeHtml(lojaCode||state.storeName||'—')}</code> <button class="btn sec sm" id="trocarLoja">Trocar loja</button> ${isAdmin?'<span class="tag" style="background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)">ADMIN</span>':'<span class="tag">gestor</span>'}</div>`;
+  html += `<div class="hint" style="margin-top:6px;">Qualquer aparelho que abrir e digitar <b>${escapeHtml(lojaCode||'sua loja')}</b> carrega esta mesma configuração (a última sincronizada).</div>`;
+  html += `<div class="row" style="margin-top:10px;"><button class="btn danger" id="clearMine">🗑 Apagar e recomeçar esta loja</button></div>`;
+  if (isAdmin) {
+    html += `<div style="margin-top:16px;"><b style="font-size:13px;">Lojas conectadas (admin)</b>` +
+      (lojas.length? lojas.map(L=>`<div class="row" style="align-items:center; margin-top:8px; border-top:1px solid var(--border-soft); padding-top:8px;"><span style="flex:1; min-width:160px;"><b>${escapeHtml(L.name)}</b> <span class="hint">${L.self?'· você':''} · ${escapeHtml(String(L.id))}</span></span>${L.self?'<span class="hint">(use Apagar acima)</span>':`<button class="btn danger sm" data-del-loja="${L.id}">Excluir loja</button>`}</div>`).join("") : '<div class="empty">Nenhuma loja.</div>') + `</div>`;
+  } else {
+    html += `<div class="hint" style="margin-top:12px;">Só o <b>admin</b> exclui lojas. ID deste aparelho (para virar admin): <code style="font-size:10px">${escapeHtml(authUid||'—')}</code></div>`;
+  }
+  el.innerHTML = html;
+  const tl=document.getElementById("trocarLoja"); if(tl) tl.onclick=trocarLoja;
+  const cm=document.getElementById("clearMine"); if(cm) cm.onclick=()=>{ if(confirm("Apagar os dados desta loja e recomeçar? (admin remove também da nuvem)")){ try{ if(fbReady&&fbDb&&lojaCode) fbDb.ref("lojas/"+lojaCode).remove(); }catch(e){} localStorage.removeItem(LS_KEY); location.reload(); } };
+  el.querySelectorAll("[data-del-loja]").forEach(b=>b.onclick=()=>{ if(confirm("Excluir esta loja da nuvem?")){ try{ fbDb.ref("lojas/"+b.dataset.delLoja).remove(); toast("Loja excluída"); }catch(e){ toast("Sem permissão", true); } } });
+}
+
 function init() {
   applyTheme(); syncStore();
   document.getElementById("monthPicker").value = currentMonth; monthData(); save();
@@ -1316,6 +1394,9 @@ function init() {
   document.getElementById("fechPull").onclick = fechPull;
   showView(activeView);
   if (typeof fbInit === "function") fbInit();
+  const _ls=document.getElementById("lojaSubmit"); if(_ls) _ls.onclick=submitLoja;
+  const _lc=document.getElementById("lojaCodeInput"); if(_lc) _lc.addEventListener("keydown",e=>{ if(e.key==="Enter") submitLoja(); });
+  if(!lojaCode && typeof askLoja==="function") askLoja();
 }
 function currentWeekIndex() { const weeks = weeksOf(currentMonth); if (todayISO() !== currentMonth) return weeks.length-1; const day = new Date().getDate(); for (let i=0;i<weeks.length;i++) if (weeks[i].includes(day)) return i; return weeks.length-1; }
 function randColor(){ const c=["#4f8cff","#22d3aa","#ffb74d","#a78bfa","#46d39a","#f472b6","#fb7185","#38bdf8","#facc15"]; return c[Math.floor(Math.random()*c.length)]; }
