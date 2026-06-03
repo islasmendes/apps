@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestão Comercial — Matriz de Oportunidades</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
   :root {
     --bg: #050506; --bg-soft: #0d0d11; --panel: #111114; --panel-2: #18181d;
@@ -230,6 +232,7 @@
     <button class="iconbtn" id="themeToggle" title="Alternar tema" aria-label="Alternar tema">🌙</button>
     <div class="month-pick">Mês <input type="month" id="monthPicker" aria-label="Mês"></div>
     <div class="badge" id="workdaysBadge" title="Dias úteis do mês (edite em Configuração)">Dias úteis <b>26</b></div>
+    <div class="badge" id="fbBadge" title="Tempo real">○ Local</div>
   </div>
 </header>
 
@@ -479,7 +482,7 @@ function migrate(s) {
   (s.indicators || []).forEach(i => { if (i.pctOnly == null) i.pctOnly = false; });
   return s;
 }
-function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); } }
+function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); } if (typeof fbPush === "function") fbPush(); }
 
 let currentMonth = todayISO();
 function monthData(m = currentMonth) {
@@ -1108,6 +1111,137 @@ function renderArvore(){
   const lr=document.getElementById("arvLoja"); if(lr) lr.onclick=()=>{ arvOpen=!arvOpen; tbl.querySelectorAll('.arv-v').forEach(r=>r.style.display=arvOpen?'table-row':'none'); const tw=document.getElementById('arvTw'); if(tw) tw.textContent=arvOpen?'－':'＋'; };
 }
 
+/* ============================================================ FASE 2 — TEMPO REAL (Firebase) */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDZHUUAzhK5VDyrgpj4wcFJhrtMoJB2lnY",
+  authDomain: "gestao-altaperformance.firebaseapp.com",
+  databaseURL: "https://gestao-altaperformance-default-rtdb.firebaseio.com",
+  projectId: "gestao-altaperformance",
+  storageBucket: "gestao-altaperformance.firebasestorage.app",
+  messagingSenderId: "943349612077",
+  appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
+};
+const FB_LOJA_KEY = "gc_loja_id";
+let myLojaId = localStorage.getItem(FB_LOJA_KEY);
+if (!myLojaId) { myLojaId = uid() + uid(); localStorage.setItem(FB_LOJA_KEY, myLojaId); }
+let remoteLojas = {};
+let fbDb = null, fbReady = false, fbPushTimer = null;
+
+function setFbBadge(connected){ const el = document.getElementById("fbBadge"); if(!el) return; const n = Object.keys(remoteLojas).length || (fbReady?1:0); if(!fbReady){ el.innerHTML = '<span style="color:var(--text-faint)">○ Local</span>'; el.title="Sem tempo real (offline ou firewall). App funciona local."; return; } el.innerHTML = connected? `<span style="color:var(--ok)">● Ao vivo</span> <b>${n}</b>` : '<span style="color:var(--warn)">● conectando…</span>'; el.title = connected? (n+" loja(s) sincronizada(s)") : "conectando ao tempo real"; }
+function fbInit(){
+  try{
+    if (typeof firebase === "undefined" || !firebase.initializeApp) { setFbBadge(false); return; }
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fbDb = firebase.database(); fbReady = true; setFbBadge(false);
+    fbDb.ref("lojas").on("value", snap => { remoteLojas = snap.val() || {}; setFbBadge(true); if(activeView==="fechamento"||activeView==="rscen") renderActive(); });
+    fbDb.ref(".info/connected").on("value", s => setFbBadge(!!(s && s.val())));
+    fbPush();
+  }catch(e){ console.warn("Firebase init falhou:", e); setFbBadge(false); }
+}
+function fbPush(){
+  if (!fbReady || !fbDb) return;
+  clearTimeout(fbPushTimer);
+  fbPushTimer = setTimeout(()=>{ try{ fbDb.ref("lojas/"+myLojaId).set({ name: state.storeName || "Loja", updatedAt: Date.now(), data: JSON.parse(JSON.stringify(state)) }); }catch(e){ console.warn("push falhou", e); } }, 1200);
+}
+function allLojas(){
+  const arr = [{ id: myLojaId, name: state.storeName || "Minha loja", data: state, self: true }];
+  Object.keys(remoteLojas).forEach(id => { if(id===myLojaId) return; const r = remoteLojas[id]; if(r && r.data) arr.push({ id, name: r.name || "Loja", data: r.data, self: false }); });
+  return arr;
+}
+function withState(s, fn){ const o = state; state = s; try { return fn(); } finally { state = o; } }
+function lojaIndByName(data, name){ return (data.indicators||[]).find(i => (i.name||"").toLowerCase() === (name||"").toLowerCase()); }
+
+/* ---------- Fechamento Diário (multi-loja) ---------- */
+function lojaFechOf(L, day){ const d = L.data && L.data.months && L.data.months[currentMonth] && L.data.months[currentMonth].fechamento; return (d && d[day]) || {}; }
+function renderFechamento(){
+  renderFechDays();
+  const day = fechDay; const lojas = allLojas();
+  let head=`<thead><tr><th class="name" rowspan="2">Loja</th>
+    <th colspan="4" style="border-left:3px solid var(--ok);color:var(--ok)">Venda</th>
+    <th colspan="4" style="border-left:3px solid var(--accent);color:var(--accent)">Agendamento</th>
+    <th colspan="4" style="border-left:3px solid var(--accent-2);color:var(--accent-2)">Comparecimento</th>
+    <th colspan="3" style="border-left:3px solid var(--warn);color:var(--warn)">Fichas</th>
+    <th rowspan="2" style="border-left:3px solid #a78bfa;color:#a78bfa">Troca<br><span style="font-size:9px;opacity:.7">qtd</span></th>
+    <th rowspan="2" style="border-left:3px solid #38bdf8;color:#38bdf8">Puxada</th>
+    <th rowspan="2" style="border-left:3px solid var(--danger);color:var(--danger)">Queda<br><span style="font-size:9px;opacity:.7">qtd</span></th>
+    <th rowspan="2" class="parecer-h" style="border-left:3px solid var(--info);color:var(--info)">Parecer do Gestor</th></tr>
+    <tr><th style="border-left:3px solid var(--ok)">Meta</th><th>Real</th><th>Prev</th><th>%</th>
+    <th style="border-left:3px solid var(--accent)">Meta</th><th>Real</th><th>Prev</th><th>%</th>
+    <th style="border-left:3px solid var(--accent-2)">Meta</th><th>Real</th><th>Prev</th><th>%</th>
+    <th style="border-left:3px solid var(--warn)">Novas</th><th>D90</th><th>Aprov</th></tr></thead>`;
+  const numC=(self,key,val)=> self? `<td><input class="cellinput fechcell" data-key="${key}" value="${val??''}" placeholder="0"></td>` : `<td>${val==null||val===''?'—':val}</td>`;
+  const pctC=(blk,r,m)=>{ const p=fpct(r,m); return `<td class="pctcell" data-blk="${blk}" style="color:${heatText(p)};font-weight:700">${p==null?'—':Math.round(p*100)+'%'}</td>`; };
+  let rows="";
+  lojas.forEach(L=>{
+    const f=lojaFechOf(L,day); const self=L.self;
+    const lojaCell = self? `<td class="name"><input class="loja-input" id="fechLoja" value="${escapeHtml(L.name)}" title="Nome da loja"></td>` : `<td class="name">${escapeHtml(L.name)}</td>`;
+    const pux = self? `<td><select class="fechsel" data-key="pux"><option value="">—</option><option value="1" ${f.pux===true?'selected':''}>Sim</option><option value="0" ${f.pux===false?'selected':''}>Não</option></select></td>` : `<td class="${f.pux?'si':'nao'}">${f.pux===true?'Sim':(f.pux===false?'Não':'—')}</td>`;
+    const par = self? `<td class="parecer"><div class="parecer-input" contenteditable="true">${escapeHtml(f.parecer||'')}</div></td>` : `<td class="parecer"><div class="parecer-input">${escapeHtml(f.parecer||'—')}</div></td>`;
+    rows += `<tr ${self?'id="fechSelfRow"':''}>`+lojaCell+
+      numC(self,'vM',f.vM)+numC(self,'vR',f.vR)+numC(self,'vP',f.vP)+pctC('v',f.vR,f.vM)+
+      numC(self,'aM',f.aM)+numC(self,'aR',f.aR)+numC(self,'aP',f.aP)+pctC('a',f.aR,f.aM)+
+      numC(self,'cM',f.cM)+numC(self,'cR',f.cR)+numC(self,'cP',f.cP)+pctC('c',f.cR,f.cM)+
+      numC(self,'fN',f.fN)+numC(self,'f9',f.f9)+numC(self,'fA',f.fA)+
+      numC(self,'troca',f.troca)+pux+numC(self,'queda',f.queda)+par+`</tr>`;
+  });
+  document.getElementById("fechTable").innerHTML = head+"<tbody>"+rows+`<tr class="total" id="fechTotal"></tr>`+"</tbody>";
+  recalcFechTotal();
+  const selfRow=document.getElementById("fechSelfRow");
+  if(selfRow){
+    selfRow.querySelectorAll(".fechcell").forEach(inp=>inp.addEventListener("input",()=>{ const v=inp.value===''?'':Number(inp.value); setFech(day,inp.dataset.key,v); recalcFechPctMulti(); }));
+    selfRow.querySelectorAll(".fechsel").forEach(s=>s.addEventListener("change",()=>{ setFech(day,s.dataset.key, s.value===''?'':(s.value==='1')); recalcFechTotal(); }));
+    selfRow.querySelectorAll(".parecer-input[contenteditable]").forEach(p=>p.addEventListener("input",()=>setFech(day,'parecer',p.textContent)));
+    const lj=document.getElementById("fechLoja"); if(lj) lj.addEventListener("change",()=>{ state.storeName=lj.value; const hdr=document.getElementById("storeName"); if(hdr) hdr.value=lj.value; save(); });
+    attachGridNav(selfRow.closest("table"));
+  }
+}
+function recalcFechPctMulti(){ const f=getFech(fechDay); const row=document.getElementById("fechSelfRow"); if(!row) return; const upd=(blk,r,m)=>{ const el=row.querySelector(`.pctcell[data-blk="${blk}"]`); if(el){ const p=fpct(r,m); el.style.color=heatText(p); el.textContent=p==null?'—':Math.round(p*100)+'%'; } }; upd('v',f.vR,f.vM); upd('a',f.aR,f.aM); upd('c',f.cR,f.cM); recalcFechTotal(); }
+function recalcFechTotal(){ const tr=document.getElementById("fechTotal"); if(!tr) return; const day=fechDay; const lojas=allLojas(); const T={}; ['vM','vR','vP','aM','aR','aP','cM','cR','cP','fN','f9','fA','troca','queda'].forEach(k=>T[k]=0); let pux=0,puxN=0; lojas.forEach(L=>{ const f=lojaFechOf(L,day); ['vM','vR','vP','aM','aR','aP','cM','cR','cP','fN','f9','fA','troca','queda'].forEach(k=>T[k]+=Number(f[k]||0)); if(f.pux===true)pux++; if(f.pux!=null)puxN++; });
+  const cell=(m,r,p)=>{ const pc=fpct(r,m); return `<td class="muted">${m}</td><td><span class="heat" style="background:${heatColor(pc)};color:${heatText(pc)}">${r}</span></td><td class="muted">${p}</td><td style="color:${heatText(pc)};font-weight:700">${pc==null?'—':Math.round(pc*100)+'%'}</td>`; };
+  tr.innerHTML=`<td class="name">⌂ Total RSCEN</td>`+cell(T.vM,T.vR,T.vP)+cell(T.aM,T.aR,T.aP)+cell(T.cM,T.cR,T.cP)+`<td>${T.fN}</td><td>${T.f9}</td><td>${T.fA}</td><td>${T.troca}</td><td class="si">${pux}/${lojas.length}</td><td style="color:var(--danger);font-weight:700">${T.queda}</td><td class="parecer"><div class="parecer-input" style="color:var(--text-faint)">Consolidado de ${lojas.length} loja(s).</div></td>`;
+}
+
+/* ---------- Árvore RSCEN+ (multi-loja, principal Real/%/Proj) ---------- */
+let arvOpenLojas = {};
+function lojaIndVals(loja, localInd, sellerIds){
+  return withState(loja.data, ()=>{
+    const li = lojaIndByName(loja.data, localInd.name); if(!li) return null;
+    const ids = sellerIds || (loja.data.sellers||[]).map(s=>s.id); const factor = sellerIds? 1 : (ids.length||1);
+    if(localInd.pctOnly){ const r=(li.rates||[])[0]; if(!r) return {pctOnly:true,rate:null,tgt:0}; return {pctOnly:true, rate: rateValue(r, ids), tgt: Number(r.target)||0}; }
+    let real=0,has=false; ids.forEach(id=>{ const v=accum(id, li.id, "real", monthDays()); if(v!=null){real+=v;has=true;} });
+    const meta=metaMonthFor(li)*factor; const proj=teamProjVal(ids, li.id);
+    return {pctOnly:false, real:has?real:null, meta, proj};
+  });
+}
+function arvCellFromVals(localInd, v){
+  if(localInd.pctOnly){ if(!v) return `<td class="muted">—</td><td class="muted">—</td>`; const rp=v.tgt?(v.rate!=null?(v.rate/100)/(v.tgt/100):null):null; return `<td style="border-left:3px solid ${localInd.color};color:${heatText(rp)};font-weight:700">${v.rate==null?'—':fmt(v.rate,0)+'%'}</td><td class="muted">${v.tgt?v.tgt+'%':'—'}</td>`; }
+  if(!v) return `<td class="muted" style="border-left:3px solid ${localInd.color}">—</td><td class="muted">—</td><td class="muted">—</td>`;
+  const pct=(v.meta&&v.real!=null)?v.real/v.meta:null; const w=pct==null?0:Math.min(100,pct*100); const pp=v.meta?(v.proj/v.meta):null;
+  return `<td style="border-left:3px solid ${localInd.color}"><span class="heat" style="background:${heatColor(pct)};color:${heatText(pct)}">${v.real==null?'—':fmt(v.real)}</span></td><td style="color:${heatText(pct)};font-weight:700">${pct==null?'—':pctTxt(pct)}${pct==null?'':`<div class="barwrap"><i style="width:${w}%;background:${heatBase(pct)}"></i></div>`}</td><td style="color:${heatText(pp)}">${v.proj==null?'—':fmt(v.proj)}</td>`;
+}
+function renderArvore(){
+  const localInds = orderedIndicators(); const lojas = allLojas();
+  let head1=`<tr><th class="name" rowspan="2">Loja / Vendedor</th>`, head2="<tr>";
+  localInds.forEach(ind=>{ const cc=ind.pctOnly?2:3; head1+=`<th colspan="${cc}" style="background:color-mix(in srgb, ${ind.color} 22%, var(--panel-2));color:${ind.color};border-left:3px solid ${ind.color};" class="block-head">${ind.name}</th>`; if(ind.pctOnly){ head2+=`<th style="border-left:3px solid ${ind.color};">${((ind.rates||[])[0]||{}).name||'%'}</th><th>alvo</th>`; } else { head2+=`<th style="border-left:3px solid ${ind.color};">Real</th><th>%</th><th>Proj.</th>`; } });
+  head1+="</tr>"; head2+="</tr>";
+  // Total RSCEN (soma das lojas)
+  const totalCells = localInds.map(li=>{
+    if(li.pctOnly){ let s=0,c=0; lojas.forEach(L=>{ const v=lojaIndVals(L,li); if(v&&v.rate!=null){s+=v.rate;c++;} }); const tgt=Number(((li.rates||[])[0]||{}).target)||0; const rate=c?s/c:null; const rp=tgt?(rate!=null?(rate/100)/(tgt/100):null):null; return `<td style="border-left:3px solid ${li.color};color:${heatText(rp)};font-weight:700">${rate==null?'—':fmt(rate,0)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`; }
+    let real=0,meta=0,proj=0,has=false; lojas.forEach(L=>{ const v=lojaIndVals(L,li); if(v){ if(v.real!=null){real+=v.real;has=true;} meta+=v.meta||0; proj+=v.proj||0; } }); return arvCellFromVals(li, {pctOnly:false, real:has?real:null, meta, proj});
+  }).join("");
+  let body=`<tr class="total"><td class="name">⌂ Total RSCEN</td>${totalCells}</tr>`;
+  lojas.forEach(L=>{
+    const open = !!arvOpenLojas[L.id];
+    const cells = localInds.map(li=>arvCellFromVals(li, lojaIndVals(L,li))).join("");
+    body += `<tr class="tree-row" data-loja="${L.id}"><td class="name"><span class="tw">${open?'－':'＋'}</span> <b>${escapeHtml(L.name)}</b>${L.self?' <span class="tag" style="background:color-mix(in srgb,var(--accent-2) 18%,transparent);color:var(--accent-2)">você</span>':''}</td>${cells}</tr>`;
+    const sellers = (L.data.sellers||[]);
+    sellers.forEach(s=>{ const vcells = localInds.map(li=>arvCellFromVals(li, lojaIndVals(L, li, [s.id]))).join(""); body += `<tr class="vend arv-v arv-${L.id}" style="display:${open?'table-row':'none'}"><td class="name">↳ ${escapeHtml(s.name)}</td>${vcells}</tr>`; });
+  });
+  const tbl=document.getElementById("arvoreTable");
+  tbl.innerHTML="<thead>"+head1+head2+"</thead><tbody>"+body+"</tbody>";
+  tbl.querySelectorAll('tr.tree-row[data-loja]').forEach(tr=>{ tr.onclick=()=>{ const id=tr.dataset.loja; arvOpenLojas[id]=!arvOpenLojas[id]; tbl.querySelectorAll('.arv-'+id).forEach(r=>r.style.display=arvOpenLojas[id]?'table-row':'none'); const tw=tr.querySelector('.tw'); if(tw) tw.textContent=arvOpenLojas[id]?'－':'＋'; }; });
+}
+
 function init() {
   applyTheme(); syncStore();
   document.getElementById("monthPicker").value = currentMonth; monthData(); save();
@@ -1141,6 +1275,7 @@ function init() {
   document.getElementById("resetAll").onclick = () => { if(confirm("Apagar TODOS os dados deste navegador?")){ localStorage.removeItem(LS_KEY); state = defaultState(); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); toast("Tudo apagado"); } };
   document.getElementById("fechPull").onclick = fechPull;
   showView(activeView);
+  if (typeof fbInit === "function") fbInit();
 }
 function currentWeekIndex() { const weeks = weeksOf(currentMonth); if (todayISO() !== currentMonth) return weeks.length-1; const day = new Date().getDate(); for (let i=0;i<weeks.length;i++) if (weeks[i].includes(day)) return i; return weeks.length-1; }
 function randColor(){ const c=["#4f8cff","#22d3aa","#ffb74d","#a78bfa","#46d39a","#f472b6","#fb7185","#38bdf8","#facc15"]; return c[Math.floor(Math.random()*c.length)]; }
