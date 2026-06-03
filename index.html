@@ -711,8 +711,8 @@ function renderSistema() {
   document.getElementById("sistemaCards").innerHTML = orderedIndicators().map(ind => {
     let fields = "";
     if (!ind.pctOnly) {
-      if (ind.checkout) fields += sysQty(ind.id, ind.name, false);
-      (ind.subs||[]).forEach(s => { if (s.checkout) fields += sysQty(s.id, s.name, true); });
+      fields += sysQty(ind.id, ind.name, false);
+      (ind.subs||[]).forEach(s => { fields += sysQty(s.id, s.name, true); });
     }
     (ind.rates||[]).forEach(r => {
       if (r.manual) fields += `<div class="sysfield rate"><label>% ${r.name} <span class="hint">auditar</span></label><input type="number" class="sysratecell" data-rate="${r.id}" value="${getSystemRate(sistemaSeller, r.id) ?? ''}" placeholder="0"></div>`;
