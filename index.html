@@ -143,6 +143,26 @@
   .escala-cal .ed.on { background: color-mix(in srgb, var(--accent-2) 24%, var(--cell)); border-color: var(--accent-2); color: var(--text); }
   .escala-cal .ed.disabled { opacity: .3; cursor: not-allowed; }
   .escala-cal .ed.blank { border: none; background: transparent; cursor: default; }
+  .daystrip { display: flex; gap: 5px; flex-wrap: wrap; margin: 6px 0 14px; }
+  .daystrip button { width: 34px; height: 38px; border-radius: 9px; border: 1px solid var(--border); background: var(--cell); color: var(--text-dim); font-weight: 700; cursor: pointer; font-family: var(--font); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; font-size: 13px; }
+  .daystrip button .wd { font-size: 8px; color: var(--text-faint); margin-top: 2px; text-transform: uppercase; }
+  .daystrip button.sel { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .daystrip button.sun { opacity: .45; }
+  .daystrip button.has { box-shadow: inset 0 -3px 0 var(--ok); }
+  .loja-input { background: transparent; border: 1px dashed transparent; color: var(--text); font-weight: 800; font-family: var(--font); width: 110px; border-radius: 6px; padding: 3px 6px; font-size: 13px; }
+  .loja-input:hover { border-color: var(--border); }
+  .loja-input:focus { border-color: var(--accent); outline: none; background: var(--cell); }
+  th.parecer-h, td.parecer { text-align: left; width: 280px; min-width: 280px; max-width: 280px; }
+  .parecer-input { overflow-x: auto; white-space: nowrap; color: var(--text-dim); font-weight: 400; font-size: 12px; padding: 5px 6px; min-height: 30px; border: 1px solid var(--border); border-radius: 8px; background: var(--cell); outline: none; }
+  .parecer-input:focus { border-color: var(--accent); }
+  .parecer-input::-webkit-scrollbar { height: 7px; }
+  .parecer-input::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+  .si { color: var(--ok); font-weight: 700; } .nao { color: var(--text-faint); font-weight: 700; }
+  tr.total td { font-weight: 800; background: var(--panel-2); }
+  .tree-row { cursor: pointer; }
+  .tw { display: inline-block; width: 16px; color: var(--accent); font-weight: 800; }
+  tr.vend td.name { padding-left: 30px; font-weight: 600; color: var(--text-dim); background: var(--panel-2); }
+  tr.vend td { background: color-mix(in srgb, var(--panel-2) 60%, var(--panel)); }
   /* Indicator config */
   .ind-card { border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; background: var(--panel-2); }
   .ind-card .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -219,6 +239,8 @@
   <button data-view="foco">Foco &amp; Ranking</button>
   <button data-view="diario">Check-in / Check-out</button>
   <button data-view="sistema">Sistema (Auditoria)</button>
+  <button data-view="fechamento">Fechamento Diário</button>
+  <button data-view="rscen">RSCEN+</button>
   <button data-view="config">Regras de Negócio</button>
 </nav>
 
@@ -362,6 +384,33 @@
       <details class="help"><summary>Como funciona o armazenamento?</summary><div>Tudo é salvo localmente (localStorage) no navegador de cada gestor — sem servidor e sem login. Cada mês é guardado separadamente: troque o mês no topo para ver/editar o período. Limpar o cache apaga os dados, por isso use o backup.</div></details>
     </div>
   </section>
+
+  <section class="view" id="view-fechamento">
+    <div class="panel">
+      <div class="flex-between">
+        <div><h2>Fechamento Diário</h2><div class="sub">Resumo do dia + parecer. Escolha o dia. Só o <b>%</b> é automático (Real ÷ Meta). Outras lojas entram quando o tempo real for ligado.</div></div>
+        <button class="ghost-btn" id="fechPull" title="Pré-preenche o Real com o que foi lançado no check-out do dia">↺ Puxar do dia</button>
+      </div>
+      <div class="daystrip" id="fechDays"></div>
+      <div class="table-wrap"><table id="fechTable"></table></div>
+      <div class="hint" style="margin-top:8px;">No <b>Parecer</b>, arraste a barra para o lado para ler tudo (o resto fica fixo). Meta/Real/Prev são digitados; o % se calcula sozinho.</div>
+    </div>
+  </section>
+
+  <section class="view" id="view-rscen">
+    <div class="panel">
+      <div class="flex-between">
+        <div><h2>RSCEN+ · Árvore de Resultados</h2><div class="sub">A Matriz atual, por loja. <b>Total RSCEN</b> no topo; clique no <b>＋</b> da loja para abrir os vendedores. Outras lojas entram com o tempo real.</div></div>
+      </div>
+      <div class="table-wrap"><table id="arvoreTable"></table></div>
+      <div class="legend">
+        <span><i style="background:var(--danger)"></i> &lt;50%</span>
+        <span><i style="background:var(--warn)"></i> 50–89%</span>
+        <span><i style="background:var(--ok)"></i> ≥90%</span>
+        <span><i style="background:var(--info)"></i> ≥120%</span>
+      </div>
+    </div>
+  </section>
 </main>
 
 <div class="modal-bg" id="metaLojaModal"><div class="modal">
@@ -434,9 +483,9 @@ function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } c
 
 let currentMonth = todayISO();
 function monthData(m = currentMonth) {
-  if (!state.months[m]) state.months[m] = { workdays: autoWorkdays(m), daily: {}, system: {}, systemRate: {}, metaLoja: {} };
+  if (!state.months[m]) state.months[m] = { workdays: autoWorkdays(m), daily: {}, system: {}, systemRate: {}, metaLoja: {}, fechamento: {} };
   const md = state.months[m];
-  md.daily = md.daily || {}; md.system = md.system || {}; md.systemRate = md.systemRate || {}; md.metaLoja = md.metaLoja || {};
+  md.daily = md.daily || {}; md.system = md.system || {}; md.systemRate = md.systemRate || {}; md.metaLoja = md.metaLoja || {}; md.fechamento = md.fechamento || {};
   return md;
 }
 
@@ -525,7 +574,7 @@ function fmt(n, dec = 0) { if (n == null || isNaN(n)) return "—"; return Numbe
 function pctTxt(p) { return p == null ? "—" : Math.round(p * 100) + "%"; }
 
 /* ===== Abas ===== */
-const views = ["matriz","resumo","foco","diario","sistema","config"];
+const views = ["matriz","resumo","foco","diario","sistema","fechamento","rscen","config"];
 let activeView = state.ui.view || "matriz";
 function showView(v) { activeView = v; state.ui.view = v; save(); document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.view === v)); views.forEach(x => document.getElementById("view-"+x).classList.toggle("active", x === v)); renderActive(); }
 function renderActive() {
@@ -535,6 +584,8 @@ function renderActive() {
   else if (activeView === "foco") renderFoco();
   else if (activeView === "diario") renderDiario();
   else if (activeView === "sistema") renderSistema();
+  else if (activeView === "fechamento") renderFechamento();
+  else if (activeView === "rscen") renderArvore();
   else if (activeView === "config") renderConfig();
 }
 function updateWorkdaysBadge() { const b = document.querySelector("#workdaysBadge b"); if (b) b.textContent = diasUteisOf(currentMonth); }
@@ -952,6 +1003,111 @@ let toastTimer; function toast(msg, err) { const t = document.getElementById("to
 function applyTabOrder(){ const nav=document.getElementById("tabs"); const order=state.ui.tabOrder; if(!order) return; order.forEach(v=>{ const btn=nav.querySelector(`button[data-view="${v}"]`); if(btn) nav.appendChild(btn); }); }
 function reorderTabs(fromV,toV){ const nav=document.getElementById("tabs"); const order=[...nav.querySelectorAll("button")].map(b=>b.dataset.view); const fi=order.indexOf(fromV), ti=order.indexOf(toV); if(fi<0||ti<0) return; order.splice(ti,0,order.splice(fi,1)[0]); state.ui.tabOrder=order; save(); applyTabOrder(); }
 function setupTabDnD(){ const nav=document.getElementById("tabs"); let dragV=null; nav.querySelectorAll("button").forEach(btn=>{ btn.setAttribute("draggable","true"); btn.addEventListener("dragstart",e=>{ dragV=btn.dataset.view; btn.classList.add("dragging"); if(e.dataTransfer) e.dataTransfer.effectAllowed="move"; }); btn.addEventListener("dragend",()=>{ btn.classList.remove("dragging"); dragV=null; }); btn.addEventListener("dragover",e=>{ e.preventDefault(); btn.classList.add("drag-over"); }); btn.addEventListener("dragleave",()=>btn.classList.remove("drag-over")); btn.addEventListener("drop",e=>{ e.preventDefault(); btn.classList.remove("drag-over"); const t=btn.dataset.view; if(dragV&&t&&dragV!==t) reorderTabs(dragV,t); }); }); }
+/* ============================================================ FECHAMENTO DIÁRIO */
+let fechDay = (todayISO()===currentMonth ? new Date().getDate() : 1);
+function getFech(day){ return monthData().fechamento[day] || {}; }
+function setFech(day,key,val){ const md=monthData(); md.fechamento[day]=md.fechamento[day]||{}; if(val===''||val==null||(typeof val==='number'&&isNaN(val))) delete md.fechamento[day][key]; else md.fechamento[day][key]=val; save(); renderFechDays(); }
+function fechHasData(day){ const f=monthData().fechamento[day]; return f && Object.keys(f).length>0; }
+function fpct(r,m){ return m? r/m : null; }
+function renderFechDays(){
+  const n=daysInMonth(currentMonth), dn=["D","S","T","Q","Q","S","S"];
+  const el=document.getElementById("fechDays"); if(!el) return;
+  el.innerHTML = Array.from({length:n},(_,i)=>i+1).map(d=>{
+    const w=weekday(currentMonth,d); const cls=[d===fechDay?'sel':'', w===0?'sun':'', fechHasData(d)?'has':''].join(' ');
+    return `<button class="${cls}" data-d="${d}">${d}<span class="wd">${dn[w]}</span></button>`;
+  }).join("");
+  el.querySelectorAll("button").forEach(b=>b.onclick=()=>{ fechDay=+b.dataset.d; renderFechamento(); });
+}
+function fechNumCell(day,key,val){ return `<td><input class="cellinput fechcell" data-day="${day}" data-key="${key}" value="${val??''}" placeholder="0"></td>`; }
+function renderFechamento(){
+  const day=fechDay; const f=getFech(day); const loja=state.storeName||"Minha loja";
+  let head=`<thead><tr><th class="name" rowspan="2">Loja</th>
+    <th colspan="4" style="border-left:3px solid var(--ok);color:var(--ok)">Venda</th>
+    <th colspan="4" style="border-left:3px solid var(--accent);color:var(--accent)">Agendamento</th>
+    <th colspan="4" style="border-left:3px solid var(--accent-2);color:var(--accent-2)">Comparecimento</th>
+    <th colspan="3" style="border-left:3px solid var(--warn);color:var(--warn)">Fichas</th>
+    <th rowspan="2" style="border-left:3px solid #a78bfa;color:#a78bfa">Troca<br><span style="font-size:9px;opacity:.7">qtd</span></th>
+    <th rowspan="2" style="border-left:3px solid #38bdf8;color:#38bdf8">Puxada</th>
+    <th rowspan="2" style="border-left:3px solid var(--danger);color:var(--danger)">Queda<br><span style="font-size:9px;opacity:.7">qtd</span></th>
+    <th rowspan="2" class="parecer-h" style="border-left:3px solid var(--info);color:var(--info)">Parecer do Gestor</th></tr>
+    <tr><th style="border-left:3px solid var(--ok)">Meta</th><th>Real</th><th>Prev</th><th>%</th>
+    <th style="border-left:3px solid var(--accent)">Meta</th><th>Real</th><th>Prev</th><th>%</th>
+    <th style="border-left:3px solid var(--accent-2)">Meta</th><th>Real</th><th>Prev</th><th>%</th>
+    <th style="border-left:3px solid var(--warn)">Novas</th><th>D90</th><th>Aprov</th></tr></thead>`;
+  function pctTd(id,r,m){ const p=fpct(r,m); return `<td id="${id}" style="color:${heatText(p)};font-weight:700">${p==null?'—':Math.round(p*100)+'%'}</td>`; }
+  let row=`<tr><td class="name"><input class="loja-input" id="fechLoja" value="${escapeHtml(loja)}" title="Nome da loja"></td>`+
+    fechNumCell(day,'vM',f.vM)+fechNumCell(day,'vR',f.vR)+fechNumCell(day,'vP',f.vP)+pctTd('pctV',f.vR,f.vM)+
+    fechNumCell(day,'aM',f.aM)+fechNumCell(day,'aR',f.aR)+fechNumCell(day,'aP',f.aP)+pctTd('pctA',f.aR,f.aM)+
+    fechNumCell(day,'cM',f.cM)+fechNumCell(day,'cR',f.cR)+fechNumCell(day,'cP',f.cP)+pctTd('pctC',f.cR,f.cM)+
+    fechNumCell(day,'fN',f.fN)+fechNumCell(day,'f9',f.f9)+fechNumCell(day,'fA',f.fA)+
+    fechNumCell(day,'troca',f.troca)+
+    `<td><select class="fechsel" data-day="${day}" data-key="pux"><option value="">—</option><option value="1" ${f.pux===true?'selected':''}>Sim</option><option value="0" ${f.pux===false?'selected':''}>Não</option></select></td>`+
+    fechNumCell(day,'queda',f.queda)+
+    `<td class="parecer"><div class="parecer-input" contenteditable="true" data-day="${day}">${escapeHtml(f.parecer||'')}</div></td></tr>`;
+  document.getElementById("fechTable").innerHTML = head+"<tbody>"+row+`<tr class="total" id="fechTotal"></tr>`+"</tbody>";
+  recalcFechTotal();
+  document.querySelectorAll("#fechTable .fechcell").forEach(inp=>inp.addEventListener("input",()=>{ const v=inp.value===''?'':Number(inp.value); setFech(+inp.dataset.day,inp.dataset.key,v); recalcFechPct(); }));
+  document.querySelectorAll("#fechTable .fechsel").forEach(s=>s.addEventListener("change",()=>{ setFech(+s.dataset.day,s.dataset.key, s.value===''?'':(s.value==='1')); recalcFechTotal(); }));
+  document.querySelectorAll("#fechTable .parecer-input[contenteditable]").forEach(p=>p.addEventListener("input",()=>setFech(+p.dataset.day,'parecer',p.textContent)));
+  const lj=document.getElementById("fechLoja"); if(lj) lj.addEventListener("change",()=>{ state.storeName=lj.value; const hdr=document.getElementById("storeName"); if(hdr) hdr.value=lj.value; save(); });
+  attachGridNav(document.getElementById("fechTable"));
+  renderFechDays();
+}
+function recalcFechPct(){ const f=getFech(fechDay); const set=(id,r,m)=>{ const el=document.getElementById(id); if(el){ const p=fpct(r,m); el.style.color=heatText(p); el.textContent=p==null?'—':Math.round(p*100)+'%'; } }; set('pctV',f.vR,f.vM); set('pctA',f.aR,f.aM); set('pctC',f.cR,f.cM); recalcFechTotal(); }
+function recalcFechTotal(){ const f=getFech(fechDay); const tr=document.getElementById("fechTotal"); if(!tr) return; const cell=(m,r,p)=>{ const pc=fpct(r,m); return `<td class="muted">${m||0}</td><td><span class="heat" style="background:${heatColor(pc)};color:${heatText(pc)}">${r||0}</span></td><td class="muted">${p||0}</td><td style="color:${heatText(pc)};font-weight:700">${pc==null?'—':Math.round(pc*100)+'%'}</td>`; };
+  tr.innerHTML=`<td class="name">⌂ Total RSCEN</td>`+cell(f.vM,f.vR,f.vP)+cell(f.aM,f.aR,f.aP)+cell(f.cM,f.cR,f.cP)+`<td>${f.fN||0}</td><td>${f.f9||0}</td><td>${f.fA||0}</td><td>${f.troca||0}</td><td class="${f.pux?'si':'nao'}">${f.pux===true?'Sim':(f.pux===false?'Não':'—')}</td><td style="color:var(--danger);font-weight:700">${f.queda||0}</td><td class="parecer"><div class="parecer-input" style="color:var(--text-faint)">Consolidado (1 loja — multi-loja com o tempo real).</div></td>`;
+}
+function fechPull(){
+  const day=fechDay; const sellers=orderedSellers().map(s=>s.id);
+  function sumDay(matchFn){ let s=0,has=false; state.indicators.forEach(ind=>{ if(ind.pctOnly) return; if(matchFn(ind)){ sellers.forEach(id=>{ const c=getCell(id,ind.id,day); if(c.real!=null){s+=Number(c.real);has=true;} }); } }); return has?s:null; }
+  const nm=ind=>ind.name.toLowerCase();
+  const venda=sumDay(ind=>ind.role==='venda'||nm(ind).includes('venda'));
+  const agto=sumDay(ind=>nm(ind).includes('agend'));
+  const comp=sumDay(ind=>nm(ind).includes('compar'));
+  const fichas=sumDay(ind=>ind.role==='fichas'||nm(ind).includes('fich')||nm(ind).includes('financ'));
+  const troca=sumDay(ind=>nm(ind).includes('troca'));
+  let n=0;
+  if(venda!=null){setFech(day,'vR',venda);n++;} if(agto!=null){setFech(day,'aR',agto);n++;} if(comp!=null){setFech(day,'cR',comp);n++;} if(fichas!=null){setFech(day,'fN',fichas);n++;} if(troca!=null){setFech(day,'troca',troca);n++;}
+  renderFechamento(); toast(n?("Puxado do dia ("+n+" campos)"):"Nada lançado nesse dia ainda", !n);
+}
+
+/* ============================================================ ÁRVORE RSCEN+ */
+let arvOpen = false;
+function arvPctCell(real, meta){ const pct=(meta&&real!=null)?real/meta:null; const w=pct==null?0:Math.min(100,pct*100); return `<td style="color:${heatText(pct)};font-weight:700;">${pct==null?'—':pctTxt(pct)}${pct==null?'':`<div class="barwrap"><i style="width:${w}%;background:${heatBase(pct)}"></i></div>`}</td>`; }
+function arvCells(ids, ind, factor){
+  const days=monthDays(); let html="";
+  if(ind.pctOnly){ (ind.rates||[]).forEach(r=>{ const rv=rateValue(r,ids); const tgt=Number(r.target)||0; const rp=tgt?(rv!=null?(rv/100)/(tgt/100):null):null; html+=`<td style="border-left:3px solid ${ind.color};color:${heatText(rp)};font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`; }); return html; }
+  let real=0,has=false; ids.forEach(id=>{const v=accum(id,ind.id,"real",days); if(v!=null){real+=v;has=true;}});
+  const meta=metaMonthFor(ind)*factor; const pct=(meta&&has)?real/meta:null;
+  html+=`<td style="border-left:3px solid ${ind.color};"><span class="heat" style="background:${heatColor(pct)};color:${heatText(pct)}">${has?fmt(real):'—'}</span></td>`+arvPctCell(has?real:null,meta);
+  const proj=has?teamProjVal(ids,ind.id):null; const pp=meta?(proj/meta):null; html+=`<td style="color:${heatText(pp)};">${proj==null?'—':fmt(proj)}</td>`;
+  if(expandedBlocks[ind.id]!==false){
+    (ind.subs||[]).forEach(s=>{ let sr=0,h=false; ids.forEach(id=>{const v=accum(id,s.id,"real",days); if(v!=null){sr+=v;h=true;}}); html+=`<td>${h?fmt(sr):'—'}</td>`; });
+    (ind.rates||[]).forEach(r=>{ const rv=rateValue(r,ids); const tgt=Number(r.target)||0; const rp=tgt?(rv!=null?(rv/100)/(tgt/100):null):null; html+=`<td style="color:${heatText(rp)};font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`; });
+  }
+  return html;
+}
+function renderArvore(){
+  const inds=orderedIndicators(); const sellers=orderedSellers();
+  function colCount(ind){ if(ind.pctOnly) return Math.max(1,(ind.rates?.length||0))*2; const exp=expandedBlocks[ind.id]!==false; let c=3; if(exp)c+=(ind.subs?.length||0)+(ind.rates?.length||0)*2; return c; }
+  let head1=`<tr><th class="name" rowspan="2">Loja / Vendedor</th>`, head2="<tr>";
+  inds.forEach(ind=>{ const exp=expandedBlocks[ind.id]!==false; head1+=`<th colspan="${colCount(ind)}" style="background:color-mix(in srgb, ${ind.color} 22%, var(--panel-2));color:${ind.color};border-left:3px solid ${ind.color};" class="block-head" data-ablock="${ind.id}"><span class="block-toggle">${ind.pctOnly?'':(exp?'▾':'▸')}</span>${ind.name}</th>`;
+    if(ind.pctOnly){ (ind.rates||[]).forEach(r=>head2+=`<th style="border-left:3px solid ${ind.color};">${r.name}</th><th>alvo</th>`); return; }
+    head2+=`<th style="border-left:3px solid ${ind.color};">Real</th><th>%</th><th>Proj.</th>`;
+    if(exp){ (ind.subs||[]).forEach(s=>head2+=`<th style="color:var(--accent-2);">${s.name}</th>`); (ind.rates||[]).forEach(r=>head2+=`<th style="color:var(--accent);">${r.name}</th><th>alvo</th>`); } });
+  head1+="</tr>"; head2+="</tr>";
+  const tbl=document.getElementById("arvoreTable");
+  if(!sellers.length){ tbl.innerHTML='<tbody><tr><td class="empty">Cadastre vendedores em Regras de Negócio.</td></tr></tbody>'; return; }
+  const allIds=sellers.map(s=>s.id);
+  let body=`<tr class="total"><td class="name">⌂ Total RSCEN</td>`+inds.map(ind=>arvCells(allIds,ind,allIds.length||1)).join("")+"</tr>";
+  const loja=state.storeName||"Minha loja";
+  body+=`<tr class="tree-row" id="arvLoja"><td class="name"><span class="tw" id="arvTw">${arvOpen?'－':'＋'}</span> <b>${escapeHtml(loja)}</b></td>`+inds.map(ind=>arvCells(allIds,ind,allIds.length||1)).join("")+"</tr>";
+  sellers.forEach((s,vi)=>{ body+=`<tr class="vend arv-v" data-vi="${vi}" style="display:${arvOpen?'table-row':'none'}"><td class="name">↳ ${escapeHtml(s.name)}</td>`+inds.map(ind=>arvCells([s.id],ind,1)).join("")+"</tr>"; });
+  tbl.innerHTML="<thead>"+head1+head2+"</thead><tbody>"+body+"</tbody>";
+  tbl.querySelectorAll('[data-ablock]').forEach(el=>{ el.onclick=()=>{ const ind=state.indicators.find(i=>i.id===el.dataset.ablock); if(ind&&ind.pctOnly) return; const id=el.dataset.ablock; expandedBlocks[id]=expandedBlocks[id]===false?true:false; save(); renderArvore(); }; });
+  const lr=document.getElementById("arvLoja"); if(lr) lr.onclick=()=>{ arvOpen=!arvOpen; tbl.querySelectorAll('.arv-v').forEach(r=>r.style.display=arvOpen?'table-row':'none'); const tw=document.getElementById('arvTw'); if(tw) tw.textContent=arvOpen?'－':'＋'; };
+}
+
 function init() {
   applyTheme(); syncStore();
   document.getElementById("monthPicker").value = currentMonth; monthData(); save();
@@ -983,6 +1139,7 @@ function init() {
   document.getElementById("importJsonBtn").onclick = () => document.getElementById("importJson").click();
   document.getElementById("importJson").addEventListener("change", e => { if(e.target.files[0]) importJson(e.target.files[0]); });
   document.getElementById("resetAll").onclick = () => { if(confirm("Apagar TODOS os dados deste navegador?")){ localStorage.removeItem(LS_KEY); state = defaultState(); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); toast("Tudo apagado"); } };
+  document.getElementById("fechPull").onclick = fechPull;
   showView(activeView);
 }
 function currentWeekIndex() { const weeks = weeksOf(currentMonth); if (todayISO() !== currentMonth) return weeks.length-1; const day = new Date().getDate(); for (let i=0;i<weeks.length;i++) if (weeks[i].includes(day)) return i; return weeks.length-1; }
