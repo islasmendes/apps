@@ -302,7 +302,7 @@
         <span><i style="background:var(--ok)"></i> ≥90%</span>
         <span><i style="background:var(--info)"></i> ≥120%</span>
       </div>
-      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> = acumulado (mês: gestor <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> ou check-out). <b>%</b> = Real ÷ meta mensal; sem meta mensal, usa meta/dia × dias trabalhados na escala (passe o mouse em —). <b>Proj.</b> = ritmo na escala do consultor até o fim do mês (usa o mesmo Real da coluna). <b>Semana:</b> só KPIs do diário. Clique no <b>nome</b> para lançar o sistema.</div>
+      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>%</b> = realizado ÷ meta do período. <b>Acumulado mês:</b> se o gestor lançou no sistema <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span>, esse valor vale na matriz (acuracidade continua comparando com o relato do check-out). <b>Semana:</b> só indicadores com check-in ou check-out no diário, soma dos dias da semana. <b>Clique no nome</b> para lançar o sistema.</div>
     </div>
     <div class="panel">
       <div class="flex-between">
