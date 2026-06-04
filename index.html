@@ -306,7 +306,7 @@
         <span><i style="background:var(--ok)"></i> ≥90%</span>
         <span><i style="background:var(--info)"></i> ≥120%</span>
       </div>
-      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> = acumulado (mês: gestor <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> ou check-out). <b>%</b> = Real ÷ meta mensal; sem meta mensal, usa meta/dia × dias na escala. <b>Proj.</b> = média diária × dias que faltam + realizado (mesmo Real da coluna): por CV na <b>escala</b>; equipe em <b>dias úteis + sáb</b> (sem dom). % da Proj. na equipe vs <b>meta da loja</b>. <b>Semana:</b> só KPIs do diário.</div>
+      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> (e tudo que deriva dele): valor do <b>gestor</b> <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> se lançado; senão soma do <b>check-out</b>. <b>%</b> = Real ÷ meta mensal; sem meta mensal, meta/dia × dias na escala. <b>Proj.</b> = média diária × dias que faltam + realizado, com o <b>mesmo Real</b>: CV na escala; equipe em úteis+sáb (sem dom). % Proj. equipe vs meta da loja. <b>Semana:</b> só KPIs do diário.</div>
     </div>
     <div class="panel">
       <div class="flex-between">
@@ -688,6 +688,7 @@ function visibleRates(ind) {
   if (!indShowInSemana(ind)) return [];
   return rates.filter(r => !r.manual);
 }
+/** Real na matriz (mês): gestor (sistema) prevalece; senão soma check-out. Usado em Real, % e Proj. */
 function matrizFieldValue(sellerId, fieldId, days, periodo, m = currentMonth) {
   if (periodo === "mes") { const sys = getSystem(sellerId, fieldId, m); if (sys != null) return sys; }
   return accum(sellerId, fieldId, "real", days, m);
@@ -792,18 +793,27 @@ function matrizMetaForProj(cfg, ids, isTeam) {
 }
 
 function renderMatriz() {
+  const tbl = document.getElementById("matrizTable");
+  if (!tbl) return;
+  try {
   const inds = orderedIndicators().filter(ind => indShowInSemana(ind)), sellers = orderedSellers(), days = daysForPeriod();
   const moveOn = document.body.classList.contains("moveon");
-  document.getElementById("matrizReorder").classList.toggle("active", moveOn);
+  const reorderBtn = document.getElementById("matrizReorder");
+  if (reorderBtn) reorderBtn.classList.toggle("active", moveOn);
 
   const wpick = document.getElementById("matrizSemanaPick");
-  if (matrizPeriodo === "semana") {
+  if (wpick && matrizPeriodo === "semana") {
     const weeks = weeksOf(currentMonth); wpick.style.display = "block";
     wpick.innerHTML = '<div class="seg">' + weeks.map((w, i) => `<button data-w="${i}" class="${i===matrizWeekIdx?'active':''}">Sem ${i+1} (${w[0]}–${w[w.length-1]})</button>`).join("") + '</div>';
     wpick.querySelectorAll("button").forEach(b => b.onclick = () => { matrizWeekIdx = +b.dataset.w; state.ui.weekIdx = matrizWeekIdx; save(); renderMatriz(); });
-  } else wpick.style.display = "none";
+  } else if (wpick) wpick.style.display = "none";
 
-  if (!sellers.length) { document.getElementById("matrizTable").innerHTML = '<tbody><tr><td class="empty">Nenhum vendedor cadastrado.<br><button class="btn" onclick="document.querySelector(\'nav.tabs [data-view=config]\').click()">Ir para Regras de Negócio</button></td></tr></tbody>'; document.getElementById("acuracidadeTable").innerHTML = ""; return; }
+  if (!sellers.length) { tbl.innerHTML = '<tbody><tr><td class="empty">Nenhum vendedor cadastrado.<br><button class="btn" onclick="document.querySelector(\'nav.tabs [data-view=config]\').click()">Ir para Regras de Negócio</button></td></tr></tbody>'; document.getElementById("acuracidadeTable").innerHTML = ""; return; }
+  if (!inds.length) {
+    tbl.innerHTML = '<tbody><tr><td class="empty">Nenhum indicador neste modo.<br>Em <b>Semana</b>, só entram KPIs com check-in/out. Use <b>Acumulado Mês</b> ou cadastre indicadores em KPIs.</td></tr></tbody>';
+    renderAcuracidade();
+    return;
+  }
 
   function colCount(ind) {
     const subs = visibleSubs(ind), rates = visibleRates(ind);
@@ -852,12 +862,11 @@ function renderMatriz() {
         : null;
       const metaProj = matrizMetaForProj(ind, ids, isTeam);
       const pp = metaProj && proj != null ? proj / metaProj : null;
-      const ewd = elapsedWorkdays(), twd = workdaysOf();
       const projTitle = isTeam
-        ? ` title="Projeção loja: ${fmt(real)} ÷ ${ewd} dias (úteis+sáb, sem dom) × ${twd} no mês = ${proj != null ? fmt(proj) : '—'}. % vs meta da loja em KPIs."`
+        ? ' title="Projeção loja: mesmo Real da coluna; ritmo em dias úteis+sáb (sem dom). % vs meta da loja."'
         : (fromSystem
-          ? ` title="Projeção na sua escala com o Real do sistema: (realizado ÷ dias trabalhados) × dias totais na escala no mês."`
-          : ` title="Projeção na sua escala: ex. 50 em 10 dias = 5/dia; × dias restantes + 50 = fechamento do mês."`);
+          ? ' title="Projeção na escala com o Real do gestor (sistema): média diária × dias restantes + realizado."'
+          : ' title="Projeção na escala com Real do check-out: ex. 50 em 10 dias → 5/dia; faltam 15 → +75 → 125 no mês."');
       html += `<td style="color:${pp != null ? heatText(pp) : 'var(--text-dim)'}; cursor:help; font-weight:${pp != null ? 700 : 400};"${projTitle}>${proj == null ? "—" : fmt(proj)}</td>`;
     }
     if (expandedBlocks[ind.id] !== false) {
@@ -882,12 +891,16 @@ function renderMatriz() {
   const allIds = sellers.map(s => s.id);
   inds.forEach(ind => body += blockCells(allIds, ind, true));
   body += "</tr>";
-  document.getElementById("matrizTable").innerHTML = "<thead>"+head1+head2+"</thead><tbody>"+body+"</tbody>";
+  tbl.innerHTML = "<thead>"+head1+head2+"</thead><tbody>"+body+"</tbody>";
 
-  document.querySelectorAll('#matrizTable [data-block]').forEach(el => { el.onclick = (e) => { if (e.target.classList.contains('draghandle')) return; const ind = state.indicators.find(i=>i.id===el.dataset.block); if (ind && ind.pctOnly) return; const id = el.dataset.block; expandedBlocks[id] = expandedBlocks[id] === false ? true : false; save(); renderMatriz(); }; });
-  if (!moveOn) document.querySelectorAll('#matrizTable tbody tr[data-seller] td.name.seller-link').forEach(td => { td.onclick = (e) => { if (e.target.classList.contains('draghandle')) return; const sid = td.closest('tr').dataset.seller; if (sid) openLancamentoModal(sid); }; });
+  tbl.querySelectorAll('[data-block]').forEach(el => { el.onclick = (e) => { if (e.target.classList.contains('draghandle')) return; const ind = state.indicators.find(i=>i.id===el.dataset.block); if (ind && ind.pctOnly) return; const id = el.dataset.block; expandedBlocks[id] = expandedBlocks[id] === false ? true : false; save(); renderMatriz(); }; });
+  if (!moveOn) tbl.querySelectorAll('tbody tr[data-seller] td.name.seller-link').forEach(td => { td.onclick = (e) => { if (e.target.classList.contains('draghandle')) return; const sid = td.closest('tr').dataset.seller; if (sid) openLancamentoModal(sid); }; });
   if (moveOn) setupMatrixDnD();
   renderAcuracidade();
+  } catch (err) {
+    console.error("renderMatriz", err);
+    tbl.innerHTML = '<tbody><tr><td class="empty">Erro ao montar a matriz. Abra o console (F12) ou recarregue com Ctrl+Shift+R.<br><span class="muted">' + escapeHtml(err.message) + '</span></td></tr></tbody>';
+  }
 }
 
 function acuracidadeFieldList() {
