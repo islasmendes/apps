@@ -1218,25 +1218,27 @@ function renderIndicatorConfig() {
 }
 function validateMeta(cfg){
   const cap = capacityOf(cfg), mc = Number(cfg.metaMonth) || 0;
-  if (mc && cap < mc) return `Capacidade ${cap} < meta do consultor (${mc})`;
+  if (mc && cap < mc) return `Meta do consultor (${mc}) acima da capacidade pelos dias (${cap})`;
   return "";
 }
+/** Aderência só no indicador principal: capacidade > meta CV; equipe (CV×N) > meta loja. */
 function metaAdherenceHtml(cfg, fieldId) {
   const nS = activeSellerCount(), cap = capacityOf(cfg), mc = metaMonthFor(cfg), metaVend = metaEquipeTotal(cfg), ml = getMetaLoja(fieldId);
-  const parts = [];
+  const lines = [];
   if (mc && cap) {
-    if (cap < mc) parts.push(`<span style="color:var(--warn)">⚠ Capacidade ${fmt(cap)} &lt; meta consultor ${fmt(mc)}</span>`);
-    else parts.push(`<span style="color:var(--ok)">✓ Meta consultor aderente</span>`);
+    const cvOk = cap > mc;
+    lines.push(`<div>${cvOk ? "✓" : "⚠"} Meta consultor <b>${fmt(mc)}</b> ${cvOk ? "&lt;" : "&gt;"} <b>${fmt(cap)}</b> capacidade${cvOk ? " · <span style=\"color:var(--ok)\">Aderente</span>" : ""}</div>`);
   }
-  if (nS && mc) parts.push(`<span class="muted">Equipe (${nS} CV): <b>${fmt(metaVend)}</b></span>`);
   if (ml != null && nS && mc) {
-    const ok = metaVend <= ml;
-    parts.push(`<span style="color:${ok?'var(--ok)':'var(--warn)'}">${ok?'✓':'⚠'} Loja ${fmt(ml)} ${ok?'≥':'&lt;'} equipe ${fmt(metaVend)}</span>`);
+    const lojaOk = metaVend > ml;
+    lines.push(`<div>${lojaOk ? "✓" : "⚠"} Meta loja <b>${fmt(ml)}</b> ${lojaOk ? "&lt;" : "&gt;"} <b>${fmt(metaVend)}</b> equipe (${nS} CV)${lojaOk ? " · <span style=\"color:var(--ok)\">Aderente</span>" : ""}</div>`);
+  } else if (nS && mc) {
+    lines.push(`<div class="muted">Equipe (${nS} CV): <b>${fmt(metaVend)}</b> — informe a meta da loja para conferir aderência.</div>`);
   }
-  return parts.length ? `<div class="meta-adherence">${parts.join("")}</div>` : "";
+  if (!lines.length) return "";
+  return `<div class="meta-adherence" style="color:var(--text-dim);">${lines.join("")}</div>`;
 }
 function metaGoalsQtyHtml(cfg, fieldId) {
-  const validMsg = validateMeta(cfg);
   const cap = capacityOf(cfg);
   const du = diasUteisOf(), sb = sabadosOf(), dom = countSundays(currentMonth);
   return `<div class="meta-goals-block"><div class="row" style="align-items:flex-end;">
@@ -1244,9 +1246,9 @@ function metaGoalsQtyHtml(cfg, fieldId) {
     <div class="field"><label>Meta / sábado</label><input type="number" value="${cfg.metaSat??0}" data-meta="metaSat" title="× ${sb} sábados"></div>
     <div class="field"><label>Meta / domingo</label><input type="number" value="${cfg.metaSun??0}" data-meta="metaSun" title="× ${dom} domingos"></div>
     <div class="field"><label>Meta do consultor</label><input type="number" value="${cfg.metaMonth??0}" data-meta="metaMonth" title="Meta mensal por vendedor"></div>
-    <div class="field"><label>Capacidade/mês</label><div style="padding:8px 0; color:${validMsg?'var(--danger)':'var(--ok)'}; font-weight:700;" title="${cfg.metaDay||0}×${du} + ${cfg.metaSat||0}×${sb} + ${cfg.metaSun||0}×${dom}">${fmt(cap)} ${validMsg?'⚠':'✓'}</div></div>
+    <div class="field"><label>Capacidade/mês</label><div style="padding:8px 0; font-weight:700; color:var(--text);" title="${cfg.metaDay||0}×${du} + ${cfg.metaSat||0}×${sb} + ${cfg.metaSun||0}×${dom}">${fmt(cap)}</div></div>
     <div class="field"><label>Meta da loja</label><input type="number" class="metaloja-inp" data-field="${fieldId}" value="${getMetaLoja(fieldId) ?? ''}" placeholder="—" title="Total sistêmico da loja no mês"></div>
-  </div>${validMsg?`<div class="hint" style="color:var(--danger)">⚠ ${validMsg}</div>`:""}${metaAdherenceHtml(cfg, fieldId)}</div>`;
+  </div>${metaAdherenceHtml(cfg, fieldId)}</div>`;
 }
 function findIndByRate(rid){ return state.indicators.find(i => (i.rates||[]).some(r=>r.id===rid)); }
 function findIndBySub(sid){ return state.indicators.find(i => (i.subs||[]).some(s=>s.id===sid)); }
