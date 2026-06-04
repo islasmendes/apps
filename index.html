@@ -306,7 +306,7 @@
         <span><i style="background:var(--ok)"></i> ≥90%</span>
         <span><i style="background:var(--info)"></i> ≥120%</span>
       </div>
-      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> = acumulado (mês: gestor <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> ou check-out). <b>%</b> = Real ÷ meta mensal; sem meta mensal, usa meta/dia × dias trabalhados na escala (passe o mouse em —). <b>Proj.</b> = ritmo na escala do consultor até o fim do mês (usa o mesmo Real da coluna). <b>Semana:</b> só KPIs do diário. Clique no <b>nome</b> para lançar o sistema.</div>
+      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> = acumulado (mês: gestor <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> ou check-out). <b>%</b> = Real ÷ meta mensal; sem meta mensal, usa meta/dia × dias na escala. <b>Proj.</b> = média diária × dias que faltam + realizado (mesmo Real da coluna): por CV na <b>escala</b>; equipe em <b>dias úteis + sáb</b> (sem dom). % da Proj. na equipe vs <b>meta da loja</b>. <b>Semana:</b> só KPIs do diário.</div>
     </div>
     <div class="panel">
       <div class="flex-between">
@@ -754,13 +754,14 @@ function metaForMatriz(cfg, ids, days, periodo, isTeam) {
 function metaUsesDailyFallback(cfg, periodo) {
   return periodo === "mes" && !(metaMonthFor(cfg) > 0);
 }
+/** Projeção consultor (matriz): média na escala × dias do mês na escala (= real + média × dias restantes). */
 function sellerProjFromReal(sellerId, fieldId, realVal, m = currentMonth) {
   if (realVal == null) return null;
   const elapsed = sellerElapsedWorked(sellerId, m);
   if (!elapsed) return null;
   return (realVal / elapsed) * sellerWorkedCount(sellerId, m);
 }
-function teamProjValMatriz(ids, fieldId) {
+function matrizProjConsultor(ids, fieldId) {
   let sum = 0, has = false;
   ids.forEach(id => {
     const v = matrizFieldValue(id, fieldId, monthDays(), "mes");
@@ -771,10 +772,27 @@ function teamProjValMatriz(ids, fieldId) {
   });
   return has ? sum : null;
 }
+/** Projeção equipe (matriz): ritmo em dias úteis + sábado (sem domingo). */
+function matrizProjEquipe(realVal, m = currentMonth) {
+  if (realVal == null) return null;
+  const elapsed = elapsedWorkdays(m), total = workdaysOf(m);
+  if (!elapsed) return null;
+  return (realVal / elapsed) * total;
+}
+/** Meta para cor/% da coluna Proj.: loja = meta da loja; CV = meta mensal ou estimativa meta/dia na escala. */
+function matrizMetaForProj(cfg, ids, isTeam) {
+  if (isTeam) {
+    const ml = getMetaLoja(cfg.id);
+    return ml != null && ml > 0 ? ml : null;
+  }
+  const mm = metaMonthFor(cfg);
+  if (mm > 0) return mm;
+  const cap = sellerMetaCapacity(cfg, ids[0]);
+  return cap > 0 ? cap : null;
+}
 
 function renderMatriz() {
   const inds = orderedIndicators().filter(ind => indShowInSemana(ind)), sellers = orderedSellers(), days = daysForPeriod();
-  const ewd = elapsedWorkdays(currentMonth), twd = workdaysOf(currentMonth);
   const moveOn = document.body.classList.contains("moveon");
   document.getElementById("matrizReorder").classList.toggle("active", moveOn);
 
@@ -829,12 +847,18 @@ function renderMatriz() {
     const heatTitle = fromSystem ? ' title="Valor do sistema (gestor)"' : "";
     html += `<td style="border-left:3px solid ${ind.color};"><span class="${heatCls}" style="background:${heatColor(pct)}; color:${heatText(pct)}"${heatTitle}>${has?fmt(real):'—'}</span></td>` + pctCell(has ? real : null, meta, dailyFb);
     if (periodo === "mes") {
-      const proj = has ? teamProjValMatriz(ids, ind.id) : null;
-      const pp = meta && proj != null ? proj / meta : null;
-      const projTitle = fromSystem
-        ? ' title="Projeção linear com o Real do sistema: acumulado informado ÷ dias já trabalhados na escala × total de dias do mês na escala"'
-        : ' title="Projeção pelo ritmo na escala: Real ÷ dias já trabalhados × total de dias do mês na escala"';
-      html += `<td style="color:${heatText(pp)}; cursor:help;"${projTitle}>${proj == null ? "—" : fmt(proj)}</td>`;
+      const proj = has && real != null
+        ? (isTeam ? matrizProjEquipe(real) : matrizProjConsultor(ids, ind.id))
+        : null;
+      const metaProj = matrizMetaForProj(ind, ids, isTeam);
+      const pp = metaProj && proj != null ? proj / metaProj : null;
+      const ewd = elapsedWorkdays(), twd = workdaysOf();
+      const projTitle = isTeam
+        ? ` title="Projeção loja: ${fmt(real)} ÷ ${ewd} dias (úteis+sáb, sem dom) × ${twd} no mês = ${proj != null ? fmt(proj) : '—'}. % vs meta da loja em KPIs."`
+        : (fromSystem
+          ? ` title="Projeção na sua escala com o Real do sistema: (realizado ÷ dias trabalhados) × dias totais na escala no mês."`
+          : ` title="Projeção na sua escala: ex. 50 em 10 dias = 5/dia; × dias restantes + 50 = fechamento do mês."`);
+      html += `<td style="color:${pp != null ? heatText(pp) : 'var(--text-dim)'}; cursor:help; font-weight:${pp != null ? 700 : 400};"${projTitle}>${proj == null ? "—" : fmt(proj)}</td>`;
     }
     if (expandedBlocks[ind.id] !== false) {
       subs.forEach(s => {
