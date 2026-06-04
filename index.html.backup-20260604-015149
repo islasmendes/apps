@@ -105,8 +105,6 @@
   /* Matrix compact + responsive */
   #matrizTable th, #matrizTable td, #acuracidadeTable th, #acuracidadeTable td, #resumoTable th, #resumoTable td { padding: 7px 8px; }
   .heat { border-radius: 7px; font-weight: 700; padding: 4px 7px; display: inline-block; min-width: 34px; }
-  .heat.matriz-from-sys { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-2) 55%, transparent); }
-  .heat.matriz-from-sys::after { content: "⚙"; font-size: 9px; margin-left: 3px; opacity: .75; vertical-align: super; }
   .block-head { font-weight: 800; letter-spacing: .3px; cursor: pointer; user-select: none; }
   .block-toggle { font-size: 10px; opacity: .7; margin-right: 4px; }
   .barwrap { height: 4px; background: var(--border-soft); border-radius: 3px; margin-top: 4px; overflow: hidden; }
@@ -302,7 +300,7 @@
         <span><i style="background:var(--ok)"></i> ≥90%</span>
         <span><i style="background:var(--info)"></i> ≥120%</span>
       </div>
-      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>%</b> = realizado ÷ meta do período. <b>Acumulado mês:</b> se o gestor lançou no sistema <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span>, esse valor vale na matriz (acuracidade continua comparando com o relato do check-out). <b>Semana:</b> só indicadores com check-in ou check-out no diário, soma dos dias da semana. <b>Clique no nome</b> para lançar o sistema.</div>
+      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>%</b> = realizado ÷ meta do período. <b>Proj.</b> = projeção no ritmo atual = (realizado ÷ dias úteis decorridos) × dias úteis do mês — estima onde o mês fecha se mantiver o ritmo. Cores conforme a faixa acima. Sub-indicadores mostram só a quantidade (Real); para ver percentual, crie uma <b>Taxa</b> (valor atual × alvo). <b>Clique no nome</b> do consultor para lançar os números do sistema.</div>
     </div>
     <div class="panel">
       <div class="flex-between">
@@ -661,60 +659,9 @@ let matrizPeriodo = state.ui.period || "mes";
 let matrizWeekIdx = state.ui.weekIdx || 0;
 let expandedBlocks = state.ui.expanded;
 function daysForPeriod() { if (matrizPeriodo === "semana") { const w = weeksOf(currentMonth); return w[Math.min(matrizWeekIdx, w.length - 1)] || monthDays(); } return monthDays(); }
-function cfgHasDiario(cfg) { return !!(cfg && (cfg.checkin || cfg.checkout)); }
-function indShowInSemana(ind) {
-  if (matrizPeriodo !== "semana") return true;
-  if (ind.pctOnly) return false;
-  if (cfgHasDiario(ind)) return true;
-  if ((ind.subs || []).some(cfgHasDiario)) return true;
-  return false;
-}
-function visibleSubs(ind) {
-  const subs = ind.subs || [];
-  if (matrizPeriodo !== "semana") return subs;
-  return subs.filter(cfgHasDiario);
-}
-function visibleRates(ind) {
-  const rates = ind.rates || [];
-  if (matrizPeriodo !== "semana") return rates;
-  if (!indShowInSemana(ind)) return [];
-  return rates.filter(r => !r.manual);
-}
-function matrizFieldValue(sellerId, fieldId, days, periodo, m = currentMonth) {
-  if (periodo === "mes") { const sys = getSystem(sellerId, fieldId, m); if (sys != null) return sys; }
-  return accum(sellerId, fieldId, "real", days, m);
-}
-function matrizRealForSellers(ids, fieldId, days, periodo) {
-  let real = 0, has = false, fromSystem = false;
-  ids.forEach(id => {
-    const v = matrizFieldValue(id, fieldId, days, periodo);
-    if (v != null) { real += v; has = true; if (periodo === "mes" && getSystem(id, fieldId) != null) fromSystem = true; }
-  });
-  return { real, has, fromSystem };
-}
-function rateValueForMatriz(rate, sellerIds, days, periodo, m = currentMonth) {
-  if (rate.manual) {
-    if (periodo === "semana") return null;
-    let s = 0, c = 0;
-    sellerIds.forEach(id => { const v = getSystemRate(id, rate.id, m); if (v != null) { s += v; c++; } });
-    return c ? s / c : null;
-  }
-  let num = 0, den = 0, hasN = false, hasD = false;
-  sellerIds.forEach(id => {
-    const a = matrizFieldValue(id, rate.numId, days, periodo, m);
-    const b = matrizFieldValue(id, rate.denId, days, periodo, m);
-    if (a != null) { num += a; hasN = true; }
-    if (b != null) { den += b; hasD = true; }
-  });
-  if (!hasN && !hasD) return null;
-  let A = num, B = den;
-  if (rate.invert) { const t = A; A = B; B = t; }
-  if (!B) return null;
-  return (A / B) * 100;
-}
 
 function renderMatriz() {
-  const inds = orderedIndicators().filter(ind => indShowInSemana(ind)), sellers = orderedSellers(), days = daysForPeriod();
+  const inds = orderedIndicators(), sellers = orderedSellers(), days = daysForPeriod();
   const ewd = elapsedWorkdays(currentMonth), twd = workdaysOf(currentMonth);
   const moveOn = document.body.classList.contains("moveon");
   document.getElementById("matrizReorder").classList.toggle("active", moveOn);
@@ -729,50 +676,33 @@ function renderMatriz() {
   if (!sellers.length) { document.getElementById("matrizTable").innerHTML = '<tbody><tr><td class="empty">Nenhum vendedor cadastrado.<br><button class="btn" onclick="document.querySelector(\'nav.tabs [data-view=config]\').click()">Ir para Regras de Negócio</button></td></tr></tbody>'; document.getElementById("acuracidadeTable").innerHTML = ""; return; }
 
   function colCount(ind) {
-    const subs = visibleSubs(ind), rates = visibleRates(ind);
-    if (ind.pctOnly) return Math.max(1, rates.length) * 2;
+    if (ind.pctOnly) return Math.max(1, (ind.rates?.length || 0)) * 2;
     const exp = expandedBlocks[ind.id] !== false; let c = 2 + (matrizPeriodo === "mes" ? 1 : 0);
-    if (exp) c += subs.length * 1 + rates.length * 2; return c;
+    if (exp) c += (ind.subs?.length || 0) * 1 + (ind.rates?.length || 0) * 2; return c;
   }
   let head1 = '<tr><th class="name" rowspan="2">Vendedor</th>', head2 = "<tr>";
   inds.forEach(ind => {
-    const subs = visibleSubs(ind), rates = visibleRates(ind);
     const exp = expandedBlocks[ind.id] !== false;
     head1 += `<th colspan="${colCount(ind)}" style="background:color-mix(in srgb, ${ind.color} 22%, var(--panel-2)); color:${ind.color}; border-left:3px solid ${ind.color};" class="block-head" data-block="${ind.id}">${moveOn?'<span class="draghandle" draggable="true" data-dragind="'+ind.id+'">⋮⋮</span>':''}<span class="block-toggle">${ind.pctOnly?'':(exp?'▾':'▸')}</span>${ind.name}</th>`;
-    if (ind.pctOnly) { rates.forEach(r => head2 += `<th style="border-left:3px solid ${ind.color};">${r.name}</th><th>alvo</th>`); return; }
+    if (ind.pctOnly) { (ind.rates||[]).forEach(r => head2 += `<th style="border-left:3px solid ${ind.color};">${r.name}</th><th>alvo</th>`); return; }
     head2 += `<th style="border-left:3px solid ${ind.color};">Real</th><th>%</th>`;
     if (matrizPeriodo === "mes") head2 += `<th>Proj.</th>`;
-    if (exp) { subs.forEach(s => head2 += `<th style="color:var(--accent-2);">${s.name}</th>`); rates.forEach(r => head2 += `<th style="color:var(--accent);">${r.name}</th><th>alvo</th>`); }
+    if (exp) { (ind.subs||[]).forEach(s => head2 += `<th style="color:var(--accent-2);">${s.name}</th>`); (ind.rates||[]).forEach(r => head2 += `<th style="color:var(--accent);">${r.name}</th><th>alvo</th>`); }
   });
   head1 += "</tr>"; head2 += "</tr>";
 
   function pctCell(real, meta) { const pct = (meta && real != null) ? real / meta : null; const w = pct == null ? 0 : Math.min(100, pct * 100); return `<td style="color:${heatText(pct)}; font-weight:700;">${pct==null?'—':pctTxt(pct)}${pct==null?'':`<div class="barwrap"><i style="width:${w}%; background:${heatBase(pct)}"></i></div>`}</td>`; }
   function blockCells(ids, ind, isTeam) {
-    const factor = isTeam ? ids.length : 1;
-    const subs = visibleSubs(ind), rates = visibleRates(ind);
-    const periodo = matrizPeriodo;
-    let html = "";
-    if (ind.pctOnly) {
-      rates.forEach(r => { const rv = rateValueForMatriz(r, ids, days, periodo); const tgt = Number(r.target)||0; const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null; html += `<td style="border-left:3px solid ${ind.color}; color:${heatText(rp)}; font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`; });
-      return html;
-    }
-    const { real, has, fromSystem } = matrizRealForSellers(ids, ind.id, days, periodo);
-    const meta = (periodo === "mes" ? metaMonthFor(ind) : weekMeta(ind, days)) * factor;
+    const factor = isTeam ? ids.length : 1; let html = "";
+    if (ind.pctOnly) { (ind.rates||[]).forEach(r => { const rv = rateValue(r, ids); const tgt = Number(r.target)||0; const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null; html += `<td style="border-left:3px solid ${ind.color}; color:${heatText(rp)}; font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`; }); return html; }
+    let real = 0, has = false; ids.forEach(id => { const v = accum(id, ind.id, "real", days); if (v != null) { real += v; has = true; } });
+    const meta = (matrizPeriodo === "mes" ? metaMonthFor(ind) : weekMeta(ind, days)) * factor;
     const pct = (meta && has) ? real / meta : null;
-    const heatCls = fromSystem ? "heat matriz-from-sys" : "heat";
-    const heatTitle = fromSystem ? ' title="Valor do sistema (gestor)"' : "";
-    html += `<td style="border-left:3px solid ${ind.color};"><span class="${heatCls}" style="background:${heatColor(pct)}; color:${heatText(pct)}"${heatTitle}>${has?fmt(real):'—'}</span></td>` + pctCell(has?real:null, meta);
-    if (periodo === "mes") { const proj = ids.some(id => accum(id, ind.id, "real", monthDays()) != null) ? teamProjVal(ids, ind.id) : null; const pp = meta && proj != null ? (proj/meta) : null; html += `<td style="color:${heatText(pp)};">${proj==null?'—':fmt(proj)}</td>`; }
+    html += `<td style="border-left:3px solid ${ind.color};"><span class="heat" style="background:${heatColor(pct)}; color:${heatText(pct)}">${has?fmt(real):'—'}</span></td>` + pctCell(has?real:null, meta);
+    if (matrizPeriodo === "mes") { const proj = has ? teamProjVal(ids, ind.id) : null; const pp = meta ? (proj/meta) : null; html += `<td style="color:${heatText(pp)};">${proj==null?'—':fmt(proj)}</td>`; }
     if (expandedBlocks[ind.id] !== false) {
-      subs.forEach(s => {
-        const { real: sr, has: h, fromSystem: fs } = matrizRealForSellers(ids, s.id, days, periodo);
-        const sMeta = (periodo === "mes" ? metaMonthFor(s) : weekMeta(s, days)) * factor;
-        const sp = (sMeta && h) ? sr / sMeta : null;
-        const subCls = fs ? "heat matriz-from-sys" : "";
-        const subTitle = fs ? ' title="Valor do sistema (gestor)"' : "";
-        html += `<td>${h ? (fs ? `<span class="${subCls}"${subTitle}>${fmt(sr)}</span>` : fmt(sr)) : '—'}</td>`;
-      });
-      rates.forEach(r => { const rv = rateValueForMatriz(r, ids, days, periodo); const tgt = Number(r.target)||0; const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null; html += `<td style="color:${heatText(rp)}; font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`; });
+      (ind.subs||[]).forEach(s => { let sr = 0, h = false; ids.forEach(id => { const v = accum(id, s.id, "real", days); if (v != null) { sr += v; h = true; } }); const sMeta = (matrizPeriodo === "mes" ? metaMonthFor(s) : weekMeta(s, days)) * factor; const sp = (sMeta&&h)? sr/sMeta : null; html += `<td>${h?fmt(sr):'—'}</td>`; });
+      (ind.rates||[]).forEach(r => { const rv = rateValue(r, ids); const tgt = Number(r.target)||0; const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null; html += `<td style="color:${heatText(rp)}; font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`; });
     }
     return html;
   }
