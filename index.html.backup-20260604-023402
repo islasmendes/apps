@@ -249,9 +249,6 @@
   .modal h3 { margin: 0 0 4px; }
   .meta-loja-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
   .meta-loja-row.sub { padding-left: 18px; }
-  .meta-goals-block { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
-  .meta-goals-block .field input { min-width: 56px; }
-  .meta-adherence { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; font-size: 12px; }
   @media (max-width: 640px) { main { padding: 12px; } .titles .t1 { font-size: 13px; } }
 </style>
 </head>
@@ -322,12 +319,12 @@
       <div class="flex-between">
         <div><h2>Resumo Geral da Equipe</h2><div class="sub">Totais consolidados — meta dos vendedores e meta real da loja, com projeção.</div></div>
         <div class="row" style="align-items:center;">
-          <button class="ghost-btn" id="goKpisMetas" title="Cadastrar metas por indicador">⚙ Metas em KPIs</button>
+          <button class="ghost-btn" id="openMetaLoja">🚩 Metas da Loja</button>
           <div class="seg" id="resumoWeeks"></div>
         </div>
       </div>
       <div class="table-wrap" style="margin-top:12px;"><table id="resumoTable"></table></div>
-      <div class="hint" style="margin-top:10px;">Meta Vend. = meta do consultor × N vendedores · Meta Loja = cadastro em <b>KPIs</b> (por indicador/sub/taxa). O % e a projeção usam a Meta Loja quando definida. Meta Vend. em <b style="color:var(--danger)">vermelho</b> = soma dos consultores abaixo da meta da loja.</div>
+      <div class="hint" style="margin-top:10px;">Meta Vend. = soma das metas dos vendedores · Meta Loja = meta real/sistêmica (botão 🚩). O % e a projeção comparam com a Meta Loja quando ela está definida. Meta Vend. em <b style="color:var(--danger)">vermelho</b> = abaixo da meta de loja (risco de não bater o real).</div>
     </div>
   </section>
 
@@ -443,6 +440,12 @@
   </section>
 </main>
 
+<div class="modal-bg" id="metaLojaModal"><div class="modal">
+  <div class="flex-between"><h3>🚩 Metas da Loja — <span id="metaLojaMonth"></span></h3><button class="iconbtn" id="closeMetaLoja">✕</button></div>
+  <div class="sub">Meta real/sistêmica do mês por indicador. Usada como referência no Resumo (o % e a projeção comparam com ela).</div>
+  <div id="metaLojaList" style="margin-top:8px;"></div>
+</div></div>
+
 <div class="modal-bg" id="escalaModal"><div class="modal">
   <div class="flex-between"><h3>📅 Escala — <span id="escalaName"></span> · <span id="escalaMonth"></span></h3><button class="iconbtn" id="closeEscala">✕</button></div>
   <div class="sub">Dias marcados = trabalhados. Desmarque as folgas. Domingos só contam se "Trabalha domingo" estiver ligado.</div>
@@ -524,11 +527,7 @@ function migrate(s) {
   if (!s.ui.lancamentoExpanded) s.ui.lancamentoExpanded = {};
   if (s.ui.view === "sistema") s.ui.view = "matriz";
   if (s.ui.tabOrder) s.ui.tabOrder = s.ui.tabOrder.filter(v => v !== "sistema");
-  (s.indicators || []).forEach(i => {
-    if (i.pctOnly == null) i.pctOnly = false;
-    if (i.metaSun == null) i.metaSun = 0;
-    (i.subs || []).forEach(sub => { if (sub.metaSun == null) sub.metaSun = 0; });
-  });
+  (s.indicators || []).forEach(i => { if (i.pctOnly == null) i.pctOnly = false; });
   return s;
 }
 function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); } if (typeof fbPush === "function") fbPush(); }
@@ -555,9 +554,7 @@ function countSundays(m){ let c=0; const n=daysInMonth(m); for(let d=1;d<=n;d++)
 function diasUteisOf(m=currentMonth){ const md=monthData(m); return md.diasUteis!=null?Number(md.diasUteis):countWeekdays(m); }
 function sabadosOf(m=currentMonth){ const md=monthData(m); return md.sabados!=null?Number(md.sabados):countSaturdays(m); }
 function workdaysOf(m=currentMonth){ return diasUteisOf(m)+sabadosOf(m); }
-function capacityOf(cfg, m = currentMonth){ return (Number(cfg.metaDay)||0)*diasUteisOf(m)+(Number(cfg.metaSat)||0)*sabadosOf(m)+(Number(cfg.metaSun)||0)*countSundays(m); }
-function activeSellerCount(){ return orderedSellers().length || 0; }
-function metaEquipeTotal(cfg){ return metaMonthFor(cfg)*activeSellerCount(); }
+function capacityOf(cfg){ return (Number(cfg.metaDay)||0)*diasUteisOf()+(Number(cfg.metaSat)||0)*sabadosOf(); }
 function defaultWorks(m,day){ return !isSunday(m,day); }
 function sched(sellerId,m){ const md=monthData(m); return md.sched && md.sched[sellerId]; }
 function sellerWorks(sellerId,day,m=currentMonth){ const s=sched(sellerId,m); if(s) return !!s[day]; return defaultWorks(m,day); }
@@ -602,11 +599,7 @@ function monthDays(m = currentMonth) { return Array.from({ length: daysInMonth(m
 
 /* Metas */
 function metaMonthFor(cfg) { return Number(cfg.metaMonth) || 0; }
-function metaForDay(cfg, m, day) {
-  if (isSaturday(m, day)) return Number(cfg.metaSat) || 0;
-  if (isSunday(m, day)) return cfg.sundayOnly ? (Number(cfg.metaDay) || 0) : (Number(cfg.metaSun) || 0);
-  return Number(cfg.metaDay) || 0;
-}
+function metaForDay(cfg, m, day) { if (isSaturday(m, day)) return Number(cfg.metaSat) || 0; if (isSunday(m, day)) return 0; return Number(cfg.metaDay) || 0; }
 function weekMeta(cfg, days) { let s = 0; days.forEach(d => { s += metaForDay(cfg, currentMonth, d); }); return s; }
 function getMetaLoja(fieldId, m = currentMonth) { const md = monthData(m); return md.metaLoja[fieldId] != null ? Number(md.metaLoja[fieldId]) : null; }
 function setMetaLoja(fieldId, val, m = currentMonth) { const md = monthData(m); if (val === "" || val == null || isNaN(val)) delete md.metaLoja[fieldId]; else md.metaLoja[fieldId] = Number(val); save(); }
@@ -1141,17 +1134,26 @@ function renderResumo() {
   inds.forEach(ind => {
     ind._color = ind.color;
     if (!ind.pctOnly) { body += rowFor(ind, false); (ind.subs||[]).forEach(s => { s._color = ind.color; body += rowFor(s, true); }); }
-    (ind.rates||[]).forEach(r => {
-      const rv = rateValue(r, ids); const tgt = Number(r.target)||0; const ml = getMetaLoja(r.id);
-      const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null;
-      const mlDisp = ml != null ? fmt(ml,0)+'%' : '—';
-      body += `<tr><td class="name" style="border-left:3px solid ${ind.color}"><span class="tag">%</span> ${r.name}</td><td>—</td><td class="muted">—</td><td>—</td><td>—</td><td class="muted">—</td><td style="color:${ml!=null?'var(--ok)':'var(--text-faint)'};font-weight:700;">${mlDisp}</td><td style="color:${heatText(rp)};font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td>—</td><td>—</td></tr>`;
-    });
+    (ind.rates||[]).forEach(r => { const rv = rateValue(r, ids); const tgt = Number(r.target)||0; const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null; body += `<tr><td class="name" style="border-left:3px solid ${ind.color}"><span class="tag">%</span> ${r.name}</td><td>—</td><td class="muted">—</td><td>—</td><td>—</td><td class="muted">—</td><td style="color:${tgt?'var(--ok)':'var(--text-faint)'};font-weight:700;">${tgt?tgt+'%':'—'}</td><td style="color:${heatText(rp)};font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td>—</td><td>—</td></tr>`; });
   });
   body += "</tbody>";
   document.getElementById("resumoTable").innerHTML = head + body;
 }
 
+/* Metas da Loja modal */
+function openMetaLoja() {
+  document.getElementById("metaLojaMonth").textContent = monthLabel(currentMonth);
+  const list = document.getElementById("metaLojaList");
+  let html = "";
+  orderedIndicators().forEach(ind => {
+    if (ind.pctOnly) return;
+    html += `<div class="meta-loja-row"><span style="border-left:3px solid ${ind.color}; padding-left:8px;"><b>${ind.name}</b> <span class="hint">(Meta Vend.: ${fmt(metaMonthFor(ind)*(state.sellers.length||1))})</span></span><input type="number" class="metaloja-inp" data-field="${ind.id}" value="${getMetaLoja(ind.id) ?? ''}" placeholder="—" style="width:100px;"></div>`;
+    (ind.subs||[]).forEach(s => { html += `<div class="meta-loja-row sub"><span class="muted">↳ ${s.name}</span><input type="number" class="metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:100px;"></div>`; });
+  });
+  list.innerHTML = html;
+  list.querySelectorAll(".metaloja-inp").forEach(inp => inp.addEventListener("input", () => setMetaLoja(inp.dataset.field, inp.value)));
+  document.getElementById("metaLojaModal").classList.add("show");
+}
 let escalaSellerId = null;
 function ensureSched(sellerId){ const md=monthData(); md.sched=md.sched||{}; if(!md.sched[sellerId]){ const o={}; const n=daysInMonth(currentMonth); for(let d=1;d<=n;d++) if(defaultWorks(currentMonth,d)) o[d]=1; md.sched[sellerId]=o; } return md.sched[sellerId]; }
 function openEscala(sellerId){ const s=state.sellers.find(x=>x.id===sellerId); if(!s) return; escalaSellerId=sellerId; document.getElementById("escalaName").textContent=s.name; document.getElementById("escalaMonth").textContent=monthLabel(currentMonth); document.getElementById("escalaSunday").checked=sellerWorksAnySunday(sellerId); renderEscalaCal(); document.getElementById("escalaModal").classList.add("show"); }
@@ -1164,7 +1166,7 @@ function renderConfig() {
   document.getElementById("diasUteis").value = diasUteisOf(currentMonth);
   document.getElementById("sabados").value = sabadosOf(currentMonth);
   document.getElementById("domingos").textContent = countSundays(currentMonth);
-  document.getElementById("workdaysHint").innerHTML = `Total trabalhado (não-domingo): <b>${workdaysOf(currentMonth)}</b> dias. Capacidade = meta/dia×úteis + meta/sáb×sábados + meta/dom×domingos. Meta do consultor = meta mensal por CV (cadastro em KPIs).`;
+  document.getElementById("workdaysHint").innerHTML = `Total trabalhado (não-domingo): <b>${workdaysOf(currentMonth)}</b> dias. Regra: <b>meta/dia × dias úteis + meta/sábado × sábados ≥ meta/mês</b>.`;
   const sl = document.getElementById("sellerList");
   const sellers = orderedSellers();
   const LIMIT = 14;
@@ -1189,6 +1191,7 @@ function escapeHtml(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":
 function renderIndicatorConfig() {
   const fields = allFields(); const list = document.getElementById("indicatorList");
   list.innerHTML = orderedIndicators().map(ind => {
+    const validMsg = ind.pctOnly ? "" : validateMeta(ind);
     let html = `<div class="ind-card" data-ind="${ind.id}" style="border:1px solid ${ind.color}; box-shadow:0 0 0 1px color-mix(in srgb, ${ind.color} 50%, transparent), 0 0 18px color-mix(in srgb, ${ind.color} 24%, transparent);"><div class="head">
       <span class="swatch" style="background:${ind.color}"></span>
       <input type="text" value="${escapeHtml(ind.name)}" data-k="name" class="ind-field" style="font-weight:700; min-width:150px;">
@@ -1198,74 +1201,40 @@ function renderIndicatorConfig() {
       <label class="switch"><input type="checkbox" class="ind-field" data-k="checkout" ${ind.checkout?'checked':''}><span class="track"></span>Check-out</label>`}
       <span class="spacer" style="flex:1"></span>
       <button class="iconbtn" data-del-ind="${ind.id}" title="Excluir">✕</button></div>`;
-    if (!ind.pctOnly) html += metaGoalsQtyHtml(ind, ind.id);
+    if (!ind.pctOnly) html += `<div class="row" style="margin-top:10px;">
+      <div class="field"><label>Meta / dia</label><input type="number" value="${ind.metaDay}" data-meta="metaDay"></div>
+      <div class="field"><label>Meta / sábado</label><input type="number" value="${ind.metaSat}" data-meta="metaSat"></div>
+      <div class="field"><label>Meta / mês</label><input type="number" value="${ind.metaMonth}" data-meta="metaMonth"></div>
+      <div class="field"><label>Capacidade/mês</label><div style="padding:8px 0; color:${validMsg?'var(--danger)':'var(--ok)'}; font-weight:700;" title="meta/dia × dias úteis + meta/sábado × sábados">${capacityOf(ind)} ${validMsg?'⚠':'✓'}</div></div>
+      </div>${validMsg?`<div class="hint" style="color:var(--danger)">⚠ ${validMsg}</div>`:''}`;
     if (!ind.pctOnly) {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
-      (ind.subs||[]).forEach(s => {
-        html += `<div class="sub-row" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`;
-        html += `<div style="padding:0 0 8px 28px; width:100%;">${metaAdherenceHtml(s, s.id)}</div>`;
-      });
+      (ind.subs||[]).forEach(s => { html += `<div class="sub-row" data-sub="${s.id}"><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:140px;"><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:64px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:64px;"><span class="hint">mês</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`; });
       html += `</div>`;
     }
     html += `<div class="rate-list"><div class="flex-between"><b style="font-size:12.5px;">Taxas (A ÷ B)</b><button class="btn sec sm" data-add-rate="${ind.id}">+ taxa</button></div>`;
     const opts = fields.map(f => `<option value="${f.id}">${f.kind==='sub'?'↳ ':''}${escapeHtml(f.name)}</option>`).join("");
-    (ind.rates||[]).forEach(r => { html += `<div class="rate-row" data-rate="${r.id}"><span class="tag">%</span><input type="text" value="${escapeHtml(r.name)}" data-rk="name" class="rate-field" style="min-width:120px;"><label class="switch"><input type="checkbox" class="rate-field" data-rk="manual" ${r.manual?'checked':''}><span class="track"></span>Manual</label>${r.manual?'':`<select data-rk="numId" class="rate-field">${opts}</select><b>÷</b><select data-rk="denId" class="rate-field">${opts}</select><label class="switch"><input type="checkbox" class="rate-field" data-rk="invert" ${r.invert?'checked':''}><span class="track"></span>Inverter</label>`}<span class="hint">alvo %</span><input type="number" value="${r.target}" data-rk="target" class="rate-field" style="width:56px;" title="Meta do consultor (%)"><span class="hint">loja %</span><input type="number" class="rate-field metaloja-inp" data-field="${r.id}" value="${getMetaLoja(r.id) ?? ''}" placeholder="—" style="width:56px;" title="Meta da loja (%)"><button class="iconbtn" data-del-rate="${r.id}">✕</button></div>`; });
+    (ind.rates||[]).forEach(r => { html += `<div class="rate-row" data-rate="${r.id}"><span class="tag">%</span><input type="text" value="${escapeHtml(r.name)}" data-rk="name" class="rate-field" style="min-width:120px;"><label class="switch"><input type="checkbox" class="rate-field" data-rk="manual" ${r.manual?'checked':''}><span class="track"></span>Manual</label>${r.manual?'':`<select data-rk="numId" class="rate-field">${opts}</select><b>÷</b><select data-rk="denId" class="rate-field">${opts}</select><label class="switch"><input type="checkbox" class="rate-field" data-rk="invert" ${r.invert?'checked':''}><span class="track"></span>Inverter</label>`}<span class="hint">alvo %</span><input type="number" value="${r.target}" data-rk="target" class="rate-field" style="width:64px;"><button class="iconbtn" data-del-rate="${r.id}">✕</button></div>`; });
     html += `</div></div>`;
     return html;
   }).join("") || '<div class="empty">Nenhum indicador.</div>';
   list.querySelectorAll('[data-rate]').forEach(row => { const ind = findIndByRate(row.dataset.rate); const r = ind && ind.rates.find(x=>x.id===row.dataset.rate); if(r && !r.manual){ const num=row.querySelector('[data-rk="numId"]'); const den=row.querySelector('[data-rk="denId"]'); if(num)num.value=r.numId||''; if(den)den.value=r.denId||''; } });
   bindIndicatorEvents();
 }
-function validateMeta(cfg){
-  const cap = capacityOf(cfg), mc = Number(cfg.metaMonth) || 0;
-  if (mc && cap < mc) return `Capacidade ${cap} < meta do consultor (${mc})`;
-  return "";
-}
-function metaAdherenceHtml(cfg, fieldId) {
-  const nS = activeSellerCount(), cap = capacityOf(cfg), mc = metaMonthFor(cfg), metaVend = metaEquipeTotal(cfg), ml = getMetaLoja(fieldId);
-  const parts = [];
-  if (mc && cap) {
-    if (cap < mc) parts.push(`<span style="color:var(--warn)">⚠ Capacidade ${fmt(cap)} &lt; meta consultor ${fmt(mc)}</span>`);
-    else parts.push(`<span style="color:var(--ok)">✓ Meta consultor aderente</span>`);
-  }
-  if (nS && mc) parts.push(`<span class="muted">Equipe (${nS} CV): <b>${fmt(metaVend)}</b></span>`);
-  if (ml != null && nS && mc) {
-    const ok = metaVend <= ml;
-    parts.push(`<span style="color:${ok?'var(--ok)':'var(--warn)'}">${ok?'✓':'⚠'} Loja ${fmt(ml)} ${ok?'≥':'&lt;'} equipe ${fmt(metaVend)}</span>`);
-  }
-  return parts.length ? `<div class="meta-adherence">${parts.join("")}</div>` : "";
-}
-function metaGoalsQtyHtml(cfg, fieldId) {
-  const validMsg = validateMeta(cfg);
-  const cap = capacityOf(cfg);
-  const du = diasUteisOf(), sb = sabadosOf(), dom = countSundays(currentMonth);
-  return `<div class="meta-goals-block"><div class="row" style="align-items:flex-end;">
-    <div class="field"><label>Meta / dia</label><input type="number" value="${cfg.metaDay??0}" data-meta="metaDay" title="Seg–sex × ${du} dias úteis"></div>
-    <div class="field"><label>Meta / sábado</label><input type="number" value="${cfg.metaSat??0}" data-meta="metaSat" title="× ${sb} sábados"></div>
-    <div class="field"><label>Meta / domingo</label><input type="number" value="${cfg.metaSun??0}" data-meta="metaSun" title="× ${dom} domingos"></div>
-    <div class="field"><label>Meta do consultor</label><input type="number" value="${cfg.metaMonth??0}" data-meta="metaMonth" title="Meta mensal por vendedor"></div>
-    <div class="field"><label>Capacidade/mês</label><div style="padding:8px 0; color:${validMsg?'var(--danger)':'var(--ok)'}; font-weight:700;" title="${cfg.metaDay||0}×${du} + ${cfg.metaSat||0}×${sb} + ${cfg.metaSun||0}×${dom}">${fmt(cap)} ${validMsg?'⚠':'✓'}</div></div>
-    <div class="field"><label>Meta da loja</label><input type="number" class="metaloja-inp" data-field="${fieldId}" value="${getMetaLoja(fieldId) ?? ''}" placeholder="—" title="Total sistêmico da loja no mês"></div>
-  </div>${validMsg?`<div class="hint" style="color:var(--danger)">⚠ ${validMsg}</div>`:""}${metaAdherenceHtml(cfg, fieldId)}</div>`;
-}
+function validateMeta(cfg){ const du = diasUteisOf(currentMonth), sb = sabadosOf(currentMonth); const cap = (Number(cfg.metaDay)||0)*du + (Number(cfg.metaSat)||0)*sb; if (Number(cfg.metaMonth) && cap < Number(cfg.metaMonth)) return `meta/dia×${du} + meta/sáb×${sb} = ${cap} < meta mês (${cfg.metaMonth})`; return ""; }
 function findIndByRate(rid){ return state.indicators.find(i => (i.rates||[]).some(r=>r.id===rid)); }
 function findIndBySub(sid){ return state.indicators.find(i => (i.subs||[]).some(s=>s.id===sid)); }
 function bindIndicatorEvents() {
   const list = document.getElementById("indicatorList");
   list.querySelectorAll(".ind-card").forEach(card => { const ind = state.indicators.find(i=>i.id===card.dataset.ind); if(!ind) return;
     card.querySelectorAll(".ind-field").forEach(f => f.addEventListener("change", () => { const k=f.dataset.k; ind[k] = f.type==="checkbox"? f.checked : f.value; save(); renderIndicatorConfig(); }));
-    card.querySelectorAll("[data-meta]").forEach(f => f.addEventListener("change", () => { ind[f.dataset.meta]=Number(f.value)||0; save(); renderIndicatorConfig(); }));
-    card.querySelectorAll(".metaloja-inp[data-field]").forEach(f => f.addEventListener("input", () => { setMetaLoja(f.dataset.field, f.value); renderIndicatorConfig(); })); });
+    card.querySelectorAll("[data-meta]").forEach(f => f.addEventListener("change", () => { ind[f.dataset.meta]=Number(f.value)||0; save(); renderIndicatorConfig(); })); });
   list.querySelectorAll("[data-del-ind]").forEach(b => b.addEventListener("click", () => { if(confirm("Excluir este indicador?")){ state.indicators = state.indicators.filter(i=>i.id!==b.dataset.delInd); save(); renderIndicatorConfig(); } }));
-  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0 }); save(); renderIndicatorConfig(); }));
-  list.querySelectorAll(".sub-row").forEach(row => { const ind = findIndBySub(row.dataset.sub); const s = ind && ind.subs.find(x=>x.id===row.dataset.sub); if(!s) return;
-    row.querySelectorAll(".sub-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => { const k=f.dataset.sk; s[k]= f.type==="checkbox"? f.checked : (["metaDay","metaSat","metaSun","metaMonth"].includes(k)? Number(f.value)||0 : f.value); save(); renderIndicatorConfig(); }));
-    row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => { setMetaLoja(f.dataset.field, f.value); renderIndicatorConfig(); })); });
+  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaMonth:0 }); save(); renderIndicatorConfig(); }));
+  list.querySelectorAll(".sub-row").forEach(row => { const ind = findIndBySub(row.dataset.sub); const s = ind && ind.subs.find(x=>x.id===row.dataset.sub); if(!s) return; row.querySelectorAll(".sub-field").forEach(f => f.addEventListener("change", () => { const k=f.dataset.sk; s[k]= f.type==="checkbox"? f.checked : (["metaDay","metaSat","metaMonth"].includes(k)? Number(f.value)||0 : f.value); save(); renderIndicatorConfig(); })); });
   list.querySelectorAll("[data-del-sub]").forEach(b => b.addEventListener("click", () => { const ind = findIndBySub(b.dataset.delSub); ind.subs = ind.subs.filter(s=>s.id!==b.dataset.delSub); save(); renderIndicatorConfig(); }));
   list.querySelectorAll("[data-add-rate]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addRate); const f = allFields(); ind.rates = ind.rates||[]; ind.rates.push({ id:uid(), name:"Nova taxa %", numId:(f[0]&&f[0].id)||"", denId:(f[1]&&f[1].id)||(f[0]&&f[0].id)||"", invert:false, target:0, manual:false }); save(); renderIndicatorConfig(); }));
-  list.querySelectorAll(".rate-row").forEach(row => { const ind = findIndByRate(row.dataset.rate); const r = ind && ind.rates.find(x=>x.id===row.dataset.rate); if(!r) return;
-    row.querySelectorAll(".rate-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => { const k=f.dataset.rk; r[k]= f.type==="checkbox"? f.checked : (k==="target"? Number(f.value)||0 : f.value); save(); renderIndicatorConfig(); }));
-    row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => { setMetaLoja(f.dataset.field, f.value); renderIndicatorConfig(); })); });
+  list.querySelectorAll(".rate-row").forEach(row => { const ind = findIndByRate(row.dataset.rate); const r = ind && ind.rates.find(x=>x.id===row.dataset.rate); if(!r) return; row.querySelectorAll(".rate-field").forEach(f => f.addEventListener("change", () => { const k=f.dataset.rk; r[k]= f.type==="checkbox"? f.checked : (k==="target"? Number(f.value)||0 : f.value); save(); renderIndicatorConfig(); })); });
   list.querySelectorAll("[data-del-rate]").forEach(b => b.addEventListener("click", () => { const ind = findIndByRate(b.dataset.delRate); ind.rates = ind.rates.filter(r=>r.id!==b.dataset.delRate); save(); renderIndicatorConfig(); }));
 }
 
@@ -1708,8 +1677,9 @@ function init() {
   document.getElementById("closeAuditoria").onclick = closeAuditoriaModal;
   document.getElementById("auditoriaModal").addEventListener("click", e => { if (e.target.id === "auditoriaModal") closeAuditoriaModal(); });
   document.getElementById("auditoriaParaLancamento").onclick = () => { const sid = modalSellerId; closeAuditoriaModal(); if (sid) openLancamentoModal(sid); };
-  const goKpis = document.getElementById("goKpisMetas");
-  if (goKpis) goKpis.onclick = () => { showView("kpis"); toast("Cadastre metas em cada indicador abaixo"); };
+  document.getElementById("openMetaLoja").onclick = openMetaLoja;
+  document.getElementById("closeMetaLoja").onclick = () => { document.getElementById("metaLojaModal").classList.remove("show"); renderResumo(); };
+  document.getElementById("metaLojaModal").addEventListener("click", e => { if (e.target.id === "metaLojaModal") { e.currentTarget.classList.remove("show"); renderResumo(); } });
   document.getElementById("closeEscala").onclick = () => { document.getElementById("escalaModal").classList.remove("show"); renderConfig(); };
   document.getElementById("escalaModal").addEventListener("click", e => { if (e.target.id === "escalaModal") { e.currentTarget.classList.remove("show"); renderConfig(); } });
   document.getElementById("escalaSunday").addEventListener("change", e => { const sc = ensureSched(escalaSellerId); const n = daysInMonth(currentMonth); if(!e.target.checked){ for(let d=1;d<=n;d++) if(isSunday(currentMonth,d)) delete sc[d]; } save(); renderEscalaCal(); });
@@ -1718,7 +1688,7 @@ function init() {
   document.getElementById("autoWorkdays").onclick = () => { const md = monthData(); delete md.diasUteis; delete md.sabados; save(); renderConfig(); updateWorkdaysBadge(); toast("Recalculado automático"); };
   document.getElementById("addSeller").onclick = () => { const i = document.getElementById("newSeller"); const v = i.value.trim(); if(!v) return; const sid = uid(); state.sellers.push({ id: sid, name: v }); i.value=""; save(); renderConfig(); openEscala(sid); toast("Vendedor adicionado"); };
   document.getElementById("newSeller").addEventListener("keydown", e => { if(e.key==="Enter") document.getElementById("addSeller").click(); });
-  document.getElementById("addIndicator").onclick = () => { state.indicators.push({ id:uid(), name:"Novo indicador", abbr:"NOVO", color:randColor(), checkin:true, checkout:true, role:"", pctOnly:false, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, subs:[], rates:[] }); save(); renderIndicatorConfig(); toast("Indicador adicionado"); };
+  document.getElementById("addIndicator").onclick = () => { state.indicators.push({ id:uid(), name:"Novo indicador", abbr:"NOVO", color:randColor(), checkin:true, checkout:true, role:"", pctOnly:false, metaDay:0, metaSat:0, metaMonth:0, subs:[], rates:[] }); save(); renderIndicatorConfig(); toast("Indicador adicionado"); };
   document.getElementById("exportJson").onclick = exportJson;
   document.getElementById("importJsonBtn").onclick = () => document.getElementById("importJson").click();
   document.getElementById("importJson").addEventListener("change", e => { if(e.target.files[0]) importJson(e.target.files[0]); });
