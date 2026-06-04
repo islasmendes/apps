@@ -251,7 +251,8 @@
   .meta-loja-row.sub { padding-left: 18px; }
   .meta-goals-block { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
   .meta-goals-block .field input { min-width: 56px; }
-  .meta-adherence { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; font-size: 12px; }
+  .meta-adherence { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-soft); font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
+  .meta-adh-line.meta-adh-bad { color: var(--danger); }
   @media (max-width: 640px) { main { padding: 12px; } .titles .t1 { font-size: 13px; } }
 </style>
 </head>
@@ -1203,7 +1204,6 @@ function renderIndicatorConfig() {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
       (ind.subs||[]).forEach(s => {
         html += `<div class="sub-row" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`;
-        html += `<div style="padding:0 0 8px 28px; width:100%;">${metaAdherenceHtml(s, s.id)}</div>`;
       });
       html += `</div>`;
     }
@@ -1224,29 +1224,54 @@ function validateMeta(cfg){
 /** Aderência só no indicador principal: capacidade > meta CV; equipe (CV×N) > meta loja. */
 function metaAdherenceHtml(cfg, fieldId) {
   const nS = activeSellerCount(), cap = capacityOf(cfg), mc = metaMonthFor(cfg), metaVend = metaEquipeTotal(cfg), ml = getMetaLoja(fieldId);
+  const okLbl = '<span style="color:var(--ok);font-weight:600">Aderente</span>';
+  const badLbl = '<span style="color:var(--danger);font-weight:700">Não aderente</span>';
   const lines = [];
   if (mc && cap) {
     const cvOk = cap > mc;
-    lines.push(`<div>${cvOk ? "✓" : "⚠"} Meta consultor <b>${fmt(mc)}</b> ${cvOk ? "&lt;" : "&gt;"} <b>${fmt(cap)}</b> capacidade${cvOk ? " · <span style=\"color:var(--ok)\">Aderente</span>" : ""}</div>`);
+    if (cvOk) lines.push(`<div class="meta-adh-line">✓ Meta consultor <b>${fmt(mc)}</b> &lt; <b>${fmt(cap)}</b> capacidade · ${okLbl}</div>`);
+    else lines.push(`<div class="meta-adh-line meta-adh-bad">⚠ Meta consultor <b>${fmt(mc)}</b> &gt; <b style="color:var(--danger)">${fmt(cap)}</b> capacidade · ${badLbl}</div>`);
   }
   if (ml != null && nS && mc) {
     const lojaOk = metaVend > ml;
-    lines.push(`<div>${lojaOk ? "✓" : "⚠"} Meta loja <b>${fmt(ml)}</b> ${lojaOk ? "&lt;" : "&gt;"} <b>${fmt(metaVend)}</b> equipe (${nS} CV)${lojaOk ? " · <span style=\"color:var(--ok)\">Aderente</span>" : ""}</div>`);
+    if (lojaOk) lines.push(`<div class="meta-adh-line">✓ Meta loja <b>${fmt(ml)}</b> &lt; <b>${fmt(metaVend)}</b> equipe (${nS} CV) · ${okLbl}</div>`);
+    else lines.push(`<div class="meta-adh-line meta-adh-bad">⚠ Meta loja <b>${fmt(ml)}</b> &gt; <b style="color:var(--danger)">${fmt(metaVend)}</b> equipe (${nS} CV) · ${badLbl}</div>`);
   } else if (nS && mc) {
-    lines.push(`<div class="muted">Equipe (${nS} CV): <b>${fmt(metaVend)}</b> — informe a meta da loja para conferir aderência.</div>`);
+    lines.push(`<div class="meta-adh-line muted">Equipe (${nS} CV): <b>${fmt(metaVend)}</b> — informe a meta da loja para conferir aderência.</div>`);
   }
   if (!lines.length) return "";
-  return `<div class="meta-adherence" style="color:var(--text-dim);">${lines.join("")}</div>`;
+  return `<div class="meta-adherence" data-adherence-field="${fieldId}">${lines.join("")}</div>`;
+}
+function cfgForFieldId(fieldId) {
+  for (const ind of state.indicators) {
+    if (ind.id === fieldId) return ind;
+    const s = (ind.subs || []).find(x => x.id === fieldId);
+    if (s) return s;
+  }
+  return null;
+}
+function refreshMetaAdherence(fieldId) {
+  const cfg = cfgForFieldId(fieldId);
+  if (!cfg) return;
+  const block = document.querySelector(`[data-goals-field="${fieldId}"]`);
+  if (!block) return;
+  const adh = block.querySelector(".meta-adherence");
+  const html = metaAdherenceHtml(cfg, fieldId);
+  if (!html) { if (adh) adh.remove(); return; }
+  if (adh) adh.outerHTML = html;
+  else block.insertAdjacentHTML("beforeend", html);
+}
+function onMetaLojaInput(fieldId, val) {
+  setMetaLoja(fieldId, val);
+  refreshMetaAdherence(fieldId);
 }
 function metaGoalsQtyHtml(cfg, fieldId) {
-  const cap = capacityOf(cfg);
   const du = diasUteisOf(), sb = sabadosOf(), dom = countSundays(currentMonth);
-  return `<div class="meta-goals-block"><div class="row" style="align-items:flex-end;">
+  return `<div class="meta-goals-block" data-goals-field="${fieldId}"><div class="row" style="align-items:flex-end;">
     <div class="field"><label>Meta / dia</label><input type="number" value="${cfg.metaDay??0}" data-meta="metaDay" title="Seg–sex × ${du} dias úteis"></div>
     <div class="field"><label>Meta / sábado</label><input type="number" value="${cfg.metaSat??0}" data-meta="metaSat" title="× ${sb} sábados"></div>
     <div class="field"><label>Meta / domingo</label><input type="number" value="${cfg.metaSun??0}" data-meta="metaSun" title="× ${dom} domingos"></div>
     <div class="field"><label>Meta do consultor</label><input type="number" value="${cfg.metaMonth??0}" data-meta="metaMonth" title="Meta mensal por vendedor"></div>
-    <div class="field"><label>Capacidade/mês</label><div style="padding:8px 0; font-weight:700; color:var(--text);" title="${cfg.metaDay||0}×${du} + ${cfg.metaSat||0}×${sb} + ${cfg.metaSun||0}×${dom}">${fmt(cap)}</div></div>
     <div class="field"><label>Meta da loja</label><input type="number" class="metaloja-inp" data-field="${fieldId}" value="${getMetaLoja(fieldId) ?? ''}" placeholder="—" title="Total sistêmico da loja no mês"></div>
   </div>${metaAdherenceHtml(cfg, fieldId)}</div>`;
 }
@@ -1256,18 +1281,18 @@ function bindIndicatorEvents() {
   const list = document.getElementById("indicatorList");
   list.querySelectorAll(".ind-card").forEach(card => { const ind = state.indicators.find(i=>i.id===card.dataset.ind); if(!ind) return;
     card.querySelectorAll(".ind-field").forEach(f => f.addEventListener("change", () => { const k=f.dataset.k; ind[k] = f.type==="checkbox"? f.checked : f.value; save(); renderIndicatorConfig(); }));
-    card.querySelectorAll("[data-meta]").forEach(f => f.addEventListener("change", () => { ind[f.dataset.meta]=Number(f.value)||0; save(); renderIndicatorConfig(); }));
-    card.querySelectorAll(".metaloja-inp[data-field]").forEach(f => f.addEventListener("input", () => { setMetaLoja(f.dataset.field, f.value); renderIndicatorConfig(); })); });
+    card.querySelectorAll("[data-meta]").forEach(f => f.addEventListener("change", () => { ind[f.dataset.meta]=Number(f.value)||0; save(); refreshMetaAdherence(ind.id); }));
+    card.querySelectorAll(".metaloja-inp[data-field]").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-ind]").forEach(b => b.addEventListener("click", () => { if(confirm("Excluir este indicador?")){ state.indicators = state.indicators.filter(i=>i.id!==b.dataset.delInd); save(); renderIndicatorConfig(); } }));
   list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0 }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".sub-row").forEach(row => { const ind = findIndBySub(row.dataset.sub); const s = ind && ind.subs.find(x=>x.id===row.dataset.sub); if(!s) return;
     row.querySelectorAll(".sub-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => { const k=f.dataset.sk; s[k]= f.type==="checkbox"? f.checked : (["metaDay","metaSat","metaSun","metaMonth"].includes(k)? Number(f.value)||0 : f.value); save(); renderIndicatorConfig(); }));
-    row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => { setMetaLoja(f.dataset.field, f.value); renderIndicatorConfig(); })); });
+    row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-sub]").forEach(b => b.addEventListener("click", () => { const ind = findIndBySub(b.dataset.delSub); ind.subs = ind.subs.filter(s=>s.id!==b.dataset.delSub); save(); renderIndicatorConfig(); }));
   list.querySelectorAll("[data-add-rate]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addRate); const f = allFields(); ind.rates = ind.rates||[]; ind.rates.push({ id:uid(), name:"Nova taxa %", numId:(f[0]&&f[0].id)||"", denId:(f[1]&&f[1].id)||(f[0]&&f[0].id)||"", invert:false, target:0, manual:false }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".rate-row").forEach(row => { const ind = findIndByRate(row.dataset.rate); const r = ind && ind.rates.find(x=>x.id===row.dataset.rate); if(!r) return;
     row.querySelectorAll(".rate-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => { const k=f.dataset.rk; r[k]= f.type==="checkbox"? f.checked : (k==="target"? Number(f.value)||0 : f.value); save(); renderIndicatorConfig(); }));
-    row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => { setMetaLoja(f.dataset.field, f.value); renderIndicatorConfig(); })); });
+    row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-rate]").forEach(b => b.addEventListener("click", () => { const ind = findIndByRate(b.dataset.delRate); ind.rates = ind.rates.filter(r=>r.id!==b.dataset.delRate); save(); renderIndicatorConfig(); }));
 }
 
