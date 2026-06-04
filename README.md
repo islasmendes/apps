@@ -25,7 +25,7 @@ Comparações automáticas:
 
 ## Funcionalidades
 
-- **Matriz / Painel:** acumulado por vendedor (mês ou semana), mapa de calor (`<50% / 50-89% / ≥90% / ≥120%`), blocos coloridos por indicador. Cada bloco expande para mostrar **sub-indicadores** (Real · %) e **taxas** (atual · alvo). Coluna de **Projeção** no principal. Indicadores **"só taxa"** (ex.: NPS) aparecem como valor · alvo. Botões **Reordenar** (arrastar linhas/colunas) e **CSV**.
+- **Matriz / Painel:** acumulado por vendedor. **Mês:** o **lançamento do gestor** (sistema) vale na coluna Real quando preenchido (ícone ⚙); senão usa a soma do check-out. **Semana:** só indicadores com check-in ou check-out no diário, soma dos dias da semana (sem override do gestor). Mapa de calor, sub-indicadores, taxas, projeção. Clique no **nome** para lançar o sistema. Botões **Reordenar** e **CSV**.
 - **Acuracidade do Relato:** painel abaixo da matriz — **auditoria do mês** (check-in · relato × sistema). Clique no **nome** para abrir o modal de auditoria; na matriz, clique no nome para **lançar o sistema** (modal com indicadores expansíveis). Inclui **0** no sistema no cálculo.
 - **Resumo Geral:** consolidado da equipe com **Semana / Mês / Projeção**, distinguindo **Meta Vend.** (soma das metas dos vendedores) de **Meta Loja** (meta real/sistêmica, definida no botão 🚩). A Meta Vend. fica **vermelha** quando abaixo da Meta Loja. O % e a projeção comparam com a Meta Loja quando definida.
 - **Check-in / Check-out diário:** grade semanal (blocos de 7 dias) com coluna **Meta/dia**, **plano + real empilhados** na mesma célula, meta de sábado automática, destaque do dia de hoje e total semanal.
