@@ -1629,7 +1629,16 @@ function renderDiario() {
   days.forEach(d => { const wd = weekday(currentMonth,d); head += `<th class="${dayCls(d)}">${d}<br><span style="font-size:9px;opacity:.7">${dn[wd]}</span></th>`; });
   head += '<th>Semana</th></tr></thead>';
   let body = "<tbody>";
-  orderedIndicators().forEach(ind => { if (ind.pctOnly) return; body += diarioRow(ind, ind.color, false); (ind.subs||[]).forEach(s => body += diarioRow(s, ind.color, true)); });
+  let anyDiario = false;
+  orderedIndicators().forEach(ind => {
+    if (ind.pctOnly) return;
+    const diarioSubs = (ind.subs || []).filter(cfgHasDiario);
+    const showInd = cfgHasDiario(ind);
+    if (!showInd && !diarioSubs.length) return;
+    if (showInd) { body += diarioRow(ind, ind.color, false); anyDiario = true; }
+    diarioSubs.forEach(s => { body += diarioRow(s, ind.color, true); anyDiario = true; });
+  });
+  if (!anyDiario) body += `<tr><td class="empty" colspan="${days.length + 3}">Nenhum indicador com Check-in ou Check-out.<br>Ative em <b>KPIs</b> nos indicadores que entram no diário.</td></tr>`;
   body += "</tbody>";
   const table = document.getElementById("diarioTable"); table.innerHTML = head + body;
   table.querySelectorAll(".cellinput").forEach(inp => { inp.addEventListener("input", () => { setCell(diarioSeller, inp.dataset.field, +inp.dataset.day, inp.dataset.key, inp.value === "" ? "" : Number(inp.value)); recolorDiarioCell(inp); updateDiarioSummary(inp.dataset.field); }); });
