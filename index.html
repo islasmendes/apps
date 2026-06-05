@@ -2324,7 +2324,7 @@ function init() {
   document.getElementById("autoWorkdays").onclick = () => { const md = monthData(); delete md.diasUteis; delete md.sabados; save(); renderConfig(); updateWorkdaysBadge(); toast("Recalculado automático"); };
   document.getElementById("addSeller").onclick = () => { const i = document.getElementById("newSeller"); const v = i.value.trim(); if(!v) return; const sid = uid(); state.sellers.push({ id: sid, name: v }); i.value=""; save(); renderConfig(); openEscala(sid); toast("Vendedor adicionado"); };
   document.getElementById("newSeller").addEventListener("keydown", e => { if(e.key==="Enter") document.getElementById("addSeller").click(); });
-  document.getElementById("addIndicator").onclick = () => { state.indicators.push({ id:uid(), name:"Novo indicador", abbr:"NOVO", color:randColor(), checkin:true, checkout:true, role:"", pctOnly:false, lowerBetter:false, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, subs:[], rates:[] }); save(); renderIndicatorConfig(); toast("Indicador adicionado"); };
+  document.getElementById("addIndicator").onclick = () => { state.indicators.push({ id:uid(), name:"Novo indicador", abbr:"NOVO", color:nextIndicatorColor(), checkin:true, checkout:true, role:"", pctOnly:false, lowerBetter:false, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, subs:[], rates:[] }); save(); renderIndicatorConfig(); toast("Indicador adicionado"); };
   document.getElementById("exportJson").onclick = exportJson;
   document.getElementById("importJsonBtn").onclick = () => document.getElementById("importJson").click();
   document.getElementById("importJson").addEventListener("change", e => { if(e.target.files[0]) importJson(e.target.files[0]); });
@@ -2338,7 +2338,39 @@ function init() {
   const _tlt=document.getElementById("trocarLojaTop"); if(_tlt) _tlt.onclick=trocarLoja;
 }
 function currentWeekIndex() { const weeks = weeksOf(currentMonth); if (todayISO() !== currentMonth) return weeks.length-1; const day = new Date().getDate(); for (let i=0;i<weeks.length;i++) if (weeks[i].includes(day)) return i; return weeks.length-1; }
-function randColor(){ const c=["#4f8cff","#22d3aa","#ffb74d","#a78bfa","#46d39a","#f472b6","#fb7185","#38bdf8","#facc15"]; return c[Math.floor(Math.random()*c.length)]; }
+const INDICATOR_COLOR_PALETTE = [
+  "#4f8cff", "#22d3aa", "#ffb74d", "#a78bfa", "#46d39a", "#f472b6", "#fb7185", "#38bdf8", "#facc15",
+  "#e879f9", "#34d399", "#f87171", "#60a5fa", "#c084fc", "#2dd4bf", "#fbbf24", "#a3e635", "#f43f5e", "#818cf8", "#22c55e",
+];
+function normalizeIndicatorColor(c) {
+  if (!c) return "";
+  let s = String(c).trim().toLowerCase();
+  if (/^#[0-9a-f]{3}$/.test(s)) s = "#" + s[1] + s[1] + s[2] + s[2] + s[3] + s[3];
+  return s;
+}
+function usedIndicatorColors() {
+  return new Set(state.indicators.map(i => normalizeIndicatorColor(i.color)).filter(Boolean));
+}
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const k = n => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const hex = n => Math.round(255 * n).toString(16).padStart(2, "0");
+  return `#${hex(f(0))}${hex(f(8))}${hex(f(4))}`;
+}
+/** Cor inicial de novo indicador: aleatória e diferente das já usadas (gestor pode repetir manualmente). */
+function nextIndicatorColor() {
+  const used = usedIndicatorColors();
+  const pool = INDICATOR_COLOR_PALETTE.filter(c => !used.has(normalizeIndicatorColor(c)));
+  if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
+  for (let i = 0; i < 48; i++) {
+    const c = hslToHex(Math.floor(Math.random() * 360), 58 + Math.floor(Math.random() * 22), 50 + Math.floor(Math.random() * 12));
+    if (!used.has(normalizeIndicatorColor(c))) return c;
+  }
+  return INDICATOR_COLOR_PALETTE[0];
+}
+function randColor() { return nextIndicatorColor(); }
 document.addEventListener("DOMContentLoaded", init);
 </script>
 </body>
