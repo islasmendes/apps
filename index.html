@@ -306,7 +306,7 @@
         <span><i style="background:var(--ok)"></i> ≥90%</span>
         <span><i style="background:var(--info)"></i> ≥120%</span>
       </div>
-      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> (e tudo que deriva dele): valor do <b>gestor</b> <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> se lançado; senão soma do <b>check-out</b>. <b>%</b> = Real ÷ meta mensal; sem meta mensal, meta/dia × dias na escala. <b>Proj.</b> = <b>Real + (Real ÷ dias completos na escala) × dias restantes</b> (de hoje ao fim do mês na escala; <b>hoje não entra no ritmo</b>, só no que falta). Equipe: úteis+sáb. <b>Semana:</b> só KPIs do diário.</div>
+      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> e <b>Proj.</b> usam o <b>mesmo número</b> da coluna Real (gestor <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> ou check-out). <b>%</b> = Real ÷ meta mensal; sem meta mensal, meta/dia × dias na escala. <b>Proj.</b> = Real + (Real ÷ <b>dias completos</b> na escala do CV) × <b>dias restantes</b> (hoje ao fim). <b>Dias completos</b> = só dias trabalhados até <b>ontem</b> (folga no 📅 não conta). Equipe: úteis+sáb. <b>Semana:</b> só KPIs do diário.</div>
     </div>
     <div class="panel">
       <div class="flex-between">
@@ -566,7 +566,8 @@ function sellerWorkedCount(sellerId,m=currentMonth){ let c=0; const n=daysInMont
 function sellerElapsedWorked(sellerId,m=currentMonth){ const n=daysInMonth(m); const last=(todayISO()===m)?new Date().getDate():n; let c=0; for(let d=1;d<=Math.min(last,n);d++) if(sellerWorks(sellerId,d,m)) c++; return Math.max(c,1); }
 function sellerWorksAnySunday(sellerId,m=currentMonth){ const n=daysInMonth(m); for(let d=1;d<=n;d++) if(isSunday(m,d)&&sellerWorks(sellerId,d,m)) return true; return false; }
 function weekHasWorkedSunday(sellerId,days,m=currentMonth){ return (days||[]).some(d=>isSunday(m,d)&&sellerWorks(sellerId,d,m)); }
-/** Dias na escala: done = antes de hoje; ahead = hoje até o fim (mês corrente). */
+/** Dias na escala do consultor (folga = dia desligado no calendário 📅).
+ *  done = dias trabalhados antes de hoje (D-1); ahead = hoje até o fim do mês. */
 function sellerWorkedSplit(sellerId, m = currentMonth) {
   const n = daysInMonth(m); const isCurrent = todayISO() === m; const today = isCurrent ? new Date().getDate() : n + 1;
   let done = 0, ahead = 0;
@@ -596,9 +597,14 @@ function sellerProjFromReal(sellerId, fieldId, realVal, m = currentMonth) {
   if (!elapsed || !total) return null;
   return (realVal / elapsed) * total;
 }
+/** Mesmo Real da matriz (gestor ⚙ ou check-out) para projeção em todo o app. */
+function sellerRealForMonth(sellerId, fieldId, m = currentMonth) {
+  return matrizFieldValue(sellerId, fieldId, monthDays(m), "mes", m);
+}
 function sellerProjVal(sellerId, fieldId, m = currentMonth) {
-  const real = accum(sellerId, fieldId, "real", monthDays(m), m);
-  const p = sellerProjFromReal(sellerId, fieldId, real != null ? real : 0, m);
+  const real = sellerRealForMonth(sellerId, fieldId, m);
+  if (real == null) return 0;
+  const p = sellerProjFromReal(sellerId, fieldId, real, m);
   return p != null ? p : 0;
 }
 function teamProjVal(ids, fieldId, m = currentMonth) { let s = 0; ids.forEach(id => { s += sellerProjVal(id, fieldId, m); }); return s; }
@@ -896,7 +902,7 @@ function renderMatriz() {
         ? ' title="Projeção loja: Real + ritmo nos dias úteis+sáb já completos × dias restantes (hoje ao fim; hoje fora do ritmo). % vs meta da loja."'
         : (fromSystem
           ? ' title="Projeção: Real do gestor + (Real÷dias completos na escala)×dias restantes (hoje até o fim). Hoje não entra no cálculo do ritmo."'
-          : ' title="Projeção: Real + (Real÷dias completos na escala)×dias restantes. Ex.: 2 trocas em 4 dias → 0,5/dia; faltam 22 na escala → 2+11=13."');
+          : ' title="Projeção: mesmo Real desta coluna + (Real÷dias trabalhados até ontem na escala)×dias restantes (hoje ao fim; folgas não entram no ritmo)."');
       html += `<td style="color:${pp != null ? heatText(pp) : 'var(--text-dim)'}; cursor:help; font-weight:${pp != null ? 700 : 400};"${projTitle}>${proj == null ? "—" : fmt(proj)}</td>`;
     }
     if (expandedBlocks[ind.id] !== false) {
