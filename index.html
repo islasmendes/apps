@@ -16,6 +16,8 @@
     --danger: #ff5d6c; --warn: #ffb74d; --ok: #46d39a; --info: #4f8cff;
     --cell: #0a0a0d; --shadow: 0 10px 30px rgba(0,0,0,.5); --radius: 14px;
     --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --dio-in-bg: #152238; --dio-in-bd: #3d6ec4; --dio-in-lbl: #7eb4ff;
+    --dio-out-bg: #122820; --dio-out-bd: #1f9a72; --dio-out-lbl: #5ee4b8;
   }
   html[data-theme="light"] {
     --bg: #e9edf4; --bg-soft: #dfe5ef; --panel: #ffffff; --panel-2: #eef2f8;
@@ -24,6 +26,8 @@
     --accent: #2a63d6; --accent-2: #0a9576; --neon: #07955d;
     --danger: #d12d3a; --warn: #b86a08; --ok: #12895a; --info: #2a63d6;
     --cell: #f5f8fc; --shadow: 0 10px 30px rgba(40,60,110,.14);
+    --dio-in-bg: #e8f0ff; --dio-in-bd: #6b9ae8; --dio-in-lbl: #1d4fa8;
+    --dio-out-bg: #e4f7ef; --dio-out-bd: #3cb88a; --dio-out-lbl: #0a6b4c;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: radial-gradient(1100px 560px at 82% -12%, var(--bg-soft), var(--bg)) fixed; color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
@@ -90,13 +94,22 @@
   .cellinput:hover { border-color: var(--border); }
   .cellinput:focus { border-color: var(--accent); background: var(--cell); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
   .cellinput::placeholder { color: var(--text-faint); opacity: .55; font-size: 9px; letter-spacing: .5px; text-transform: uppercase; }
-  .plan-cell { color: var(--text-dim); }
-  .daycell { display: flex; flex-direction: column; gap: 4px; width: 100%; }
-  .daycell .cellinput { width: 100%; background: var(--cell); border: 1px solid var(--border); border-radius: 8px; padding: 7px 6px; font-weight: 700; box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent); transition: .15s; }
-  .daycell .cellinput.plan-cell { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 65%, var(--border)); background: color-mix(in srgb, var(--accent) 13%, var(--cell)); }
-  .daycell .cellinput:not(.plan-cell) { border-color: color-mix(in srgb, var(--accent-2) 60%, var(--border)); background: color-mix(in srgb, var(--accent-2) 11%, var(--cell)); }
-  .daycell .cellinput:hover { filter: brightness(1.14); border-color: var(--accent); }
-  .daycell .cellinput:focus { border-color: var(--accent); background: var(--cell); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent); }
+  .daycell { display: flex; flex-direction: column; gap: 5px; width: 100%; min-width: 72px; }
+  .dio-field { display: flex; flex-direction: column; gap: 2px; text-align: left; margin: 0; cursor: text; }
+  .dio-lbl { font-size: 9px; font-weight: 800; letter-spacing: .35px; text-transform: uppercase; line-height: 1.1; padding-left: 1px; }
+  .dio-checkin .dio-lbl { color: var(--dio-in-lbl); }
+  .dio-checkout .dio-lbl { color: var(--dio-out-lbl); }
+  .daycell .cellinput { width: 100%; border-radius: 7px; padding: 6px 6px; font-weight: 800; font-size: 13px; text-align: center; transition: .15s; border: 1.5px solid; color: var(--text); }
+  .daycell .cellinput.plan-cell { background: var(--dio-in-bg); border-color: var(--dio-in-bd); }
+  .daycell .cellinput.checkout-cell { background: var(--dio-out-bg); border-color: var(--dio-out-bd); }
+  .daycell .cellinput::placeholder { color: var(--text-faint); opacity: .45; font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+  .daycell .cellinput.plan-cell:hover { border-color: var(--accent); filter: brightness(1.06); }
+  .daycell .cellinput.checkout-cell:hover { border-color: var(--accent-2); filter: brightness(1.06); }
+  .daycell .cellinput.plan-cell:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); background: var(--dio-in-bg); }
+  .daycell .cellinput.checkout-cell:focus { border-color: var(--accent-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-2) 28%, transparent); background: var(--dio-out-bg); }
+  td.today .daycell .cellinput { filter: none; }
+  .dio-tag-in { background: var(--dio-in-bg); color: var(--dio-in-lbl); border: 1px solid var(--dio-in-bd); }
+  .dio-tag-out { background: var(--dio-out-bg); color: var(--dio-out-lbl); border: 1px solid var(--dio-out-bd); }
   th.today, td.today { background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)) !important; }
   th.col-sun, td.col-sun { opacity: .5; }
   #diarioTable tbody tr.dgroup td { border-top: 2px solid var(--gc); }
@@ -424,7 +437,7 @@
         </div>
       </div>
       <div class="table-wrap" style="margin-top:12px;"><table id="diarioTable"></table></div>
-      <div class="hint" style="margin-top:10px;"><span class="tag">plano</span> = check-in · <span class="tag sub">real</span> = check-out. Sábado usa a meta de sábado. Salva sozinho. Dica: <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar.</div>
+      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Sábado usa meta de sábado. Salva sozinho. <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar.</div>
     </div>
   </section>
 
@@ -1653,8 +1666,12 @@ function diarioRow(cfg, color, isSub) {
   row += `<td><span class="neon">${fmt(cfg.metaDay)}</span>${Number(cfg.metaSat)?`<br><span class="muted" style="font-size:10px">sáb ${fmt(cfg.metaSat)}</span>`:''}</td>`;
   days.forEach(d => {
     const c = getCell(diarioSeller, cfg.id, d); let cell = '<div class="daycell">';
-    if (ci) cell += `<input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="plano" style="border-style:dashed;">`;
-    if (co) { const metaD = metaForDay(cfg, currentMonth, d); const pct = metaD ? (c.real!=null? c.real/metaD : null) : null; cell += `<input class="cellinput" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${c.real ?? ''}" placeholder="real" style="color:${c.real!=null?heatText(pct):'var(--text)'};">`; }
+    if (ci) cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"></label>`;
+    if (co) {
+      const metaD = metaForDay(cfg, currentMonth, d);
+      const pct = metaD ? (c.real != null ? c.real / metaD : null) : null;
+      cell += `<label class="dio-field dio-checkout"><span class="dio-lbl">Check-out</span><input class="cellinput checkout-cell" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${c.real ?? ''}" placeholder="—" style="color:${c.real != null ? heatText(pct) : 'var(--text)'};"></label>`;
+    }
     cell += '</div>'; row += `<td class="${dayCls(d)}">${cell}</td>`;
   });
   const realSum = accum(diarioSeller, cfg.id, "real", days) ?? 0; const metaSum = weekMeta(cfg, days); const pctW = metaSum ? realSum/metaSum : null;
