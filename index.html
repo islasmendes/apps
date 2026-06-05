@@ -681,11 +681,69 @@ function heatVsMeta(ratio) {
 }
 function heatMatrizText(ratio) { const c = heatVsMeta(ratio); return c || "var(--text-faint)"; }
 function heatMatrizBg(ratio) { const c = heatVsMeta(ratio); return c ? "color-mix(in srgb, " + c + " 26%, transparent)" : "transparent"; }
-function heatMatrizTip(ratio, label) {
-  if (ratio == null) return "";
-  const p = Math.round(ratio * 100);
-  const band = ratio >= 1 ? "na meta ou acima" : ratio >= 0.7 ? "até 30% abaixo da meta" : "mais de 30% abaixo da meta";
-  return ` title="${label}: ${p}% da meta (${band})"`;
+function heatMatrizBandLabel(ratio) {
+  if (ratio == null || isNaN(ratio)) return "—";
+  if (ratio >= 1) return "verde";
+  if (ratio >= 0.7) return "amarelo";
+  return "vermelho";
+}
+function matrizTipAttr(text) {
+  const t = String(text).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  return ` title="${t}"`;
+}
+/** Folgas = dias 1…ontem em que o CV não está na escala (📅). */
+function sellerFolgasPast(sellerId, m = currentMonth) {
+  if (todayISO() !== m) return 0;
+  const today = new Date().getDate();
+  let f = 0;
+  for (let d = 1; d < today; d++) if (!sellerWorks(sellerId, d, m)) f++;
+  return f;
+}
+function matrizTipReal(fromSystem) {
+  return fromSystem
+    ? "Real: gestor (sistema) ⚙\nCor neutra — leia % (hoje) e Proj. (fechamento)"
+    : "Real: soma do check-out\nCor neutra — leia % (hoje) e Proj. (fechamento)";
+}
+function matrizTipPct(real, meta, dailyFallback) {
+  if (!meta || meta <= 0) return "Cadastre meta em KPIs";
+  if (real == null) return "Sem realizado";
+  const pct = real / meta;
+  const lines = [
+    (dailyFallback ? "Meta: meta/dia × dias na escala" : "Meta do período: " + fmt(meta)),
+    "Real: " + fmt(real),
+    "Hoje: " + pctTxt(pct) + " da meta · " + heatMatrizBandLabel(pct),
+    "Verde ≥100% · amarelo 70–99% · vermelho &lt;70%",
+  ];
+  return lines.join("\n");
+}
+function matrizTipProj({ isTeam, sellerId, real, proj, metaProj, ind }) {
+  if (proj == null || real == null) return "Sem dados para projetar";
+  const m = currentMonth;
+  const pp = metaProj > 0 ? proj / metaProj : null;
+  let done, ahead, total;
+  const lines = [];
+  if (isTeam) {
+    ({ done, ahead } = workdaysSplit(m));
+    total = done + ahead;
+    lines.push("Escala loja (úteis+sáb): " + total + " dias · " + done + " completos · " + ahead + " restantes");
+    lines.push(metaProj > 0 ? "Meta loja: " + fmt(metaProj) : "Meta loja: —");
+  } else {
+    ({ done, ahead } = sellerWorkedSplit(sellerId, m));
+    total = done + ahead;
+    const folgas = sellerFolgasPast(sellerId, m);
+    lines.push("Escala CV: " + total + " dias · " + done + " completos · " + folgas + " folgas até ontem · " + ahead + " restantes");
+    lines.push(metaProj > 0 ? "Meta consultor: " + fmt(metaProj) : "Meta consultor: —");
+    const ml = ind ? getMetaLoja(ind.id) : null;
+    if (ml != null && ml > 0 && ml !== metaProj) lines.push("Meta loja: " + fmt(ml));
+  }
+  const ritmo = done > 0 ? real / done : null;
+  lines.push("Real: " + fmt(real) + (ritmo != null ? " · ritmo " + fmt(ritmo, ritmo % 1 ? 1 : 0) + "/dia" : ""));
+  lines.push(pp != null
+    ? "Projeção: " + fmt(proj) + " (" + Math.round(pp * 100) + "% da meta · " + heatMatrizBandLabel(pp) + ")"
+    : "Projeção: " + fmt(proj));
+  if (done > 0) lines.push(fmt(real) + " + (" + fmt(real) + "÷" + done + ")×" + ahead + " = " + fmt(proj));
+  else lines.push("Sem dia completo na escala — ritmo provisório");
+  return lines.join("\n");
 }
 function fmt(n, dec = 0) { if (n == null || isNaN(n)) return "—"; return Number(n).toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec }); }
 function pctTxt(p) { return p == null ? "—" : Math.round(p * 100) + "%"; }
@@ -891,10 +949,7 @@ function renderMatriz() {
     if (real == null) return `<td class="muted" style="font-weight:700;">—</td>`;
     const pct = real / meta;
     const w = Math.min(100, pct * 100);
-    const tipAttr = dailyFallback
-      ? ' title="Real ÷ meta/dia × dias na escala. Verde ≥100% da meta; amarelo 70–99%; vermelho abaixo de 70%."'
-      : heatMatrizTip(pct, "%");
-    return `<td style="color:${heatMatrizText(pct)}; font-weight:700; cursor:help;"${tipAttr}>${pctTxt(pct)}<div class="barwrap"><i style="width:${w}%; background:${heatVsMeta(pct)}"></i></div></td>`;
+    return `<td style="color:${heatMatrizText(pct)}; font-weight:700; cursor:help;"${matrizTipAttr(matrizTipPct(real, meta, dailyFallback))}>${pctTxt(pct)}<div class="barwrap"><i style="width:${w}%; background:${heatVsMeta(pct)}"></i></div></td>`;
   }
   function blockCells(ids, ind, isTeam) {
     const subs = visibleSubs(ind), rates = visibleRates(ind);
@@ -908,29 +963,28 @@ function renderMatriz() {
     const meta = metaForMatriz(ind, ids, days, periodo, isTeam);
     const dailyFb = metaUsesDailyFallback(ind, periodo);
     const realCls = fromSystem ? "heat matriz-from-sys matriz-real" : "matriz-real";
-    const realTitle = fromSystem ? ' title="Valor do sistema (gestor). Cor neutra — veja % (hoje) e Proj. (fechamento)."' : ' title="Soma do check-out. Cor neutra — veja % (hoje) e Proj. (fechamento)."';
-    html += `<td style="border-left:3px solid ${ind.color};"><span class="${realCls}"${realTitle}>${has?fmt(real):'—'}</span></td>` + pctCell(has ? real : null, meta, dailyFb);
+    html += `<td style="border-left:3px solid ${ind.color};"><span class="${realCls}"${matrizTipAttr(matrizTipReal(fromSystem))}>${has?fmt(real):'—'}</span></td>` + pctCell(has ? real : null, meta, dailyFb);
     if (periodo === "mes") {
       const proj = has && real != null
         ? (isTeam ? matrizProjEquipe(real) : matrizProjConsultor(ids, ind.id))
         : null;
       const metaProj = matrizMetaForProj(ind, ids, isTeam);
       const pp = metaProj && proj != null ? proj / metaProj : null;
-      const projExplain = isTeam
-        ? "Cálculo: Real equipe + ritmo em úteis+sáb (D-1). Comparado à meta da loja."
-        : "Cálculo: Real + (Real÷dias completos na escala)×restantes (D-1).";
-      const projBand = pp == null ? "" : pp >= 1 ? "Na meta ou acima." : pp >= 0.7 ? "Até 30% abaixo da meta." : "Mais de 30% abaixo da meta.";
-      const projTitleAttr = proj == null
-        ? ' title="Sem dados para projetar"'
-        : ` title="${pp != null ? "Proj. " + Math.round(pp * 100) + "% da meta. " + projBand + " " : ""}${projExplain}"`;
-      html += `<td style="color:${pp != null ? heatMatrizText(pp) : 'var(--text-dim)'}; cursor:help; font-weight:${pp != null ? 700 : 400};"${projTitleAttr}>${proj == null ? "—" : fmt(proj)}</td>`;
+      const projTip = matrizTipProj({
+        isTeam,
+        sellerId: isTeam ? null : ids[0],
+        real: has ? real : null,
+        proj,
+        metaProj: metaProj || 0,
+        ind,
+      });
+      html += `<td style="color:${pp != null ? heatMatrizText(pp) : 'var(--text-dim)'}; cursor:help; font-weight:${pp != null ? 700 : 400};"${matrizTipAttr(projTip)}>${proj == null ? "—" : fmt(proj)}</td>`;
     }
     if (expandedBlocks[ind.id] !== false) {
       subs.forEach(s => {
         const { real: sr, has: h, fromSystem: fs } = matrizRealForSellers(ids, s.id, days, periodo);
         const subCls = fs ? "heat matriz-from-sys" : "";
-        const subTitle = fs ? ' title="Valor do sistema (gestor)"' : "";
-        html += `<td>${h ? (fs ? `<span class="${subCls}"${subTitle}>${fmt(sr)}</span>` : fmt(sr)) : '—'}</td>`;
+        html += `<td>${h ? (fs ? `<span class="${subCls}"${matrizTipAttr(matrizTipReal(true))}>${fmt(sr)}</span>` : `<span${matrizTipAttr(matrizTipReal(false))}>${fmt(sr)}</span>`) : '—'}</td>`;
       });
       rates.forEach(r => { const rv = rateValueForMatriz(r, ids, days, periodo); const tgt = Number(r.target)||0; const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null; html += `<td style="color:${heatText(rp)}; font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`; });
     }
