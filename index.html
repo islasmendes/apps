@@ -1737,11 +1737,11 @@ function lowerBetterPanelHtml(ind) {
   return `<div class="lower-better-panel">
     <span class="lb-title">↓ Quanto menor melhor — regras de cor na matriz</span>
     <div class="lb-chips">
-      <i class="lb-chip ok">Verde · ≤ ${fmt(floor, 1)}${unit}</i>
-      <i class="lb-chip warn">Amarelo · ${fmt(floor, 1)} – ${fmt(t, 1)}${unit}</i>
-      <i class="lb-chip danger">Vermelho · ≥ ${fmt(t, 1)}${unit}</i>
+      <i class="lb-chip ok">Verde · ≤ ${unit ? fmtPctFine(floor) : fmt(floor, 0)}${unit}</i>
+      <i class="lb-chip warn">Amarelo · ${unit ? fmtPctFine(floor) : fmt(floor, 0)} – ${unit ? fmtPctFine(t) : fmt(t, 0)}${unit}</i>
+      <i class="lb-chip danger">Vermelho · ≥ ${unit ? fmtPctFine(t) : fmt(t, 0)}${unit}</i>
     </div>
-    <span class="hint" style="display:block; font-size:11px;">Alerta = ${m} p.p. abaixo do alvo · valores de exemplo com meta ${fmt(t, 1)}${unit}</span>
+    <span class="hint" style="display:block; font-size:11px;">Alerta = ${m} p.p. abaixo do alvo · exibição até 2 casas (2%, 2,6%, 2,56%) · meta ${unit ? fmtPctFine(t) : fmt(t, 0)}${unit}</span>
   </div>`;
 }
 function renderIndicatorConfig() {
