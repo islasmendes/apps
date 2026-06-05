@@ -142,6 +142,8 @@
   .matriz-filter-chip { cursor: pointer; border: 1px solid var(--border); background: var(--cell); color: var(--text-dim); border-radius: 99px; padding: 5px 12px; font-size: 12px; font-weight: 600; font-family: var(--font); transition: .15s; }
   .matriz-filter-chip:hover { border-color: var(--accent); color: var(--text); }
   .matriz-filter-chip.active { background: color-mix(in srgb, var(--accent) 22%, var(--cell)); border-color: var(--accent); color: var(--text); font-weight: 700; }
+  .diario-seller-bar .matriz-filter-chip.active { background: color-mix(in srgb, var(--accent) 28%, var(--cell)); border-color: var(--accent); color: var(--accent-2); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+  html[data-theme="light"] .diario-seller-bar .matriz-filter-chip.active { color: var(--accent); }
   .matriz-filter-all.active { border-color: var(--accent); color: var(--accent); }
   .ghost-btn.sm { padding: 5px 10px; font-size: 12px; }
   th.matriz-sort { cursor: pointer; user-select: none; white-space: nowrap; }
@@ -431,11 +433,9 @@
     <div class="panel">
       <div class="flex-between">
         <div><h2>Check-in / Check-out Diário</h2><div class="sub">Plano (manhã) e Realizado (fim do dia) · principal e sub-indicadores.</div></div>
-        <div class="row" style="align-items:center;">
-          <div class="field"><label>Vendedor</label><select id="diarioSeller"></select></div>
-          <div class="seg" id="diarioWeeks"></div>
-        </div>
+        <div class="seg" id="diarioWeeks"></div>
       </div>
+      <div id="diarioSellerBar" class="matriz-toolbar diario-seller-bar" style="margin-top:10px;"></div>
       <div class="table-wrap" style="margin-top:12px;"><table id="diarioTable"></table></div>
       <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Sábado usa meta de sábado. Salva sozinho. <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar.</div>
     </div>
@@ -1626,11 +1626,33 @@ function reorder(kind, fromId, toId) { const list = kind === 'sellers' ? ordered
 let diarioSeller = state.ui.diarioSeller || null;
 let diarioWeekIdx = state.ui.diarioWeek || 0;
 function dayCls(d) { let c = []; if (isToday(currentMonth, d)) c.push("today"); if (isSunday(currentMonth, d)) c.push("col-sun"); return c.join(" "); }
+function renderDiarioSellerBar(sellers) {
+  const bar = document.getElementById("diarioSellerBar");
+  if (!bar) return;
+  if (!sellers.length) { bar.innerHTML = ""; return; }
+  if (!diarioSeller || !sellers.find(s => s.id === diarioSeller)) diarioSeller = sellers[0].id;
+  bar.innerHTML = `<span class="hint">Vendedor</span>
+    <div class="matriz-filter-chips">${sellers.map(s =>
+      `<button type="button" class="matriz-filter-chip diario-seller-chip${s.id === diarioSeller ? " active" : ""}" data-sid="${s.id}">${escapeHtml(s.name)}</button>`
+    ).join("")}</div>`;
+  bar.querySelectorAll(".diario-seller-chip").forEach(btn => {
+    btn.onclick = () => {
+      diarioSeller = btn.dataset.sid;
+      state.ui.diarioSeller = diarioSeller;
+      save();
+      renderDiario();
+    };
+  });
+}
 function renderDiario() {
   const sellers = orderedSellers();
-  if (!sellers.length) { document.getElementById("diarioTable").innerHTML = '<tbody><tr><td class="empty">Cadastre vendedores na aba Regras de Negócio.</td></tr></tbody>'; return; }
-  const selSeller = document.getElementById("diarioSeller"); selSeller.innerHTML = sellers.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
-  if (!diarioSeller || !sellers.find(s => s.id === diarioSeller)) diarioSeller = sellers[0].id; selSeller.value = diarioSeller;
+  const bar = document.getElementById("diarioSellerBar");
+  if (!sellers.length) {
+    if (bar) bar.innerHTML = "";
+    document.getElementById("diarioTable").innerHTML = '<tbody><tr><td class="empty">Cadastre vendedores na aba Regras de Negócio.</td></tr></tbody>';
+    return;
+  }
+  renderDiarioSellerBar(sellers);
   const weeks = weeksOf(currentMonth);
   const segW = document.getElementById("diarioWeeks");
   segW.innerHTML = weeks.map((w, i) => `<button data-w="${i}" class="${i===diarioWeekIdx?'active':''}">Sem ${i+1}<br><span style="font-size:9px;opacity:.7">${w[0]}-${w[w.length-1]}</span></button>`).join("");
@@ -2501,7 +2523,6 @@ function init() {
   document.getElementById("matrizCsv").onclick = exportCsv;
   document.getElementById("storeName").addEventListener("input", e => { state.storeName = e.target.value; save(); });
   document.querySelectorAll("#matrizPeriodo button").forEach(b => b.onclick = () => { document.querySelectorAll("#matrizPeriodo button").forEach(x=>x.classList.remove("active")); b.classList.add("active"); matrizPeriodo = b.dataset.p; state.ui.period = matrizPeriodo; if(matrizPeriodo==="semana"){ matrizWeekIdx = currentWeekIndex(); state.ui.weekIdx = matrizWeekIdx; } save(); renderMatriz(); });
-  document.getElementById("diarioSeller").addEventListener("change", e => { diarioSeller = e.target.value; state.ui.diarioSeller = diarioSeller; save(); renderDiario(); });
   document.getElementById("closeLancamento").onclick = closeLancamentoModal;
   document.getElementById("lancamentoModal").addEventListener("click", e => { if (e.target.id === "lancamentoModal") closeLancamentoModal(); });
   document.getElementById("closeAuditoria").onclick = closeAuditoriaModal;
