@@ -837,7 +837,7 @@ function matrizTipPct(real, meta, dailyFallback, opts) {
     "Escala: " + total + " dias · " + done + " completos (até ontem)",
     "Deveria até ontem: " + (expected != null ? fmt(expected, expected % 1 ? 1 : 0) : "—") + " (" + fmt(meta) + "×" + done + "÷" + total + ")",
     "Real: " + fmt(real),
-    "Ritmo: " + (pace != null ? pctTxt(pace) + " do esperado · " + (lowerBetter ? heatMatrizBandLabel(pace) : heatMatrizPaceLabel(pace)) : "—"),
+    "Ritmo: " + (pace != null ? pctTxt(pace) + " do esperado" + (lowerBetter && expected != null ? " · " + matrizLowerBetterLabel(real, expected, false) : (lowerBetter ? "" : " · " + heatMatrizPaceLabel(pace))) : "—"),
     "Acumulado mês: " + pctTxt(pctMes) + " da meta total",
     lowerBetter && expected != null
       ? "Alerta amarelo: real &gt; " + fmt(expected - matrizLowerWarnMargin(expected, false), expected % 1 ? 1 : 0) + " · vermelho se ≥ " + fmt(expected, expected % 1 ? 1 : 0)
