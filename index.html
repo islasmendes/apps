@@ -350,14 +350,8 @@
       <div id="matrizSemanaPick" style="display:none; margin:10px 0;"></div>
       <div class="table-wrap" style="margin-top:12px;"><table id="matrizTable"></table></div>
       <div id="matrizTip" class="matriz-tip" hidden role="tooltip"></div>
-      <div class="legend">
-        <span><i style="background:var(--text-dim)"></i> <b>Real</b> neutro</span>
-        <span><i style="background:var(--ok)"></i> <b>%</b> ritmo ≥95%</span>
-        <span><i style="background:var(--warn)"></i> 50–94%</span>
-        <span><i style="background:var(--danger)"></i> &lt;50%</span>
-        <span style="margin-left:8px; opacity:.85">· <b>Proj.</b> e <b>taxas</b> vs alvo: verde ≥100% · amarelo 70–99% · vermelho &lt;70%</span>
-      </div>
-      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> neutro · <b>%</b> ritmo vs meta proporcional (escala) · <b>Proj.</b> fechamento vs meta · <b>Subs</b> iguais ao pai · <b>Taxas/NPS</b> valor vs alvo (%). Tooltip na cor do bloco.</div>
+      <div class="legend" id="matrizLegend"></div>
+      <div class="hint" id="matrizLegendHint" style="margin-top:8px; line-height:1.6;"></div>
     </div>
     <div class="panel">
       <div class="flex-between">
@@ -890,19 +884,25 @@ function rateLowerBetter(rate, ind) {
 }
 /** Faixa de alerta abaixo do teto (ex.: alvo 2,9% → amarelo acima de 2,4%). */
 const MATRIZ_LOWER_WARN_PP = 0.5;
+function matrizNormPct(n) {
+  if (n == null || isNaN(n)) return null;
+  return Math.round(Number(n) * 10) / 10;
+}
 function matrizLowerWarnMargin(target, isPercent) {
   if (isPercent) return MATRIZ_LOWER_WARN_PP;
   return Math.max(0.5, target * 0.05);
 }
-function matrizLowerBetterBand(actual, target, margin) {
+function matrizLowerBetterBand(actual, target, margin, isPercent) {
   if (actual == null || target == null || !target) return null;
+  actual = Number(actual); target = Number(target);
+  if (isNaN(actual) || isNaN(target)) return null;
   if (actual >= target) return "danger";
   if (actual > target - margin) return "warn";
   return "ok";
 }
 function heatMatrizLowerBetterColor(actual, target, isPercent) {
   const m = matrizLowerWarnMargin(target, isPercent);
-  const band = matrizLowerBetterBand(actual, target, m);
+  const band = matrizLowerBetterBand(actual, target, m, isPercent);
   const css = getComputedStyle(document.documentElement);
   if (band === "danger") return css.getPropertyValue("--danger").trim();
   if (band === "warn") return css.getPropertyValue("--warn").trim();
@@ -910,10 +910,56 @@ function heatMatrizLowerBetterColor(actual, target, isPercent) {
 }
 function matrizLowerBetterLabel(actual, target, isPercent) {
   const m = matrizLowerWarnMargin(target, isPercent);
-  const band = matrizLowerBetterBand(actual, target, m);
-  if (band === "danger") return "vermelho · estourou o alvo";
-  if (band === "warn") return "amarelo · alerta (até " + fmt(m, m % 1 ? 1 : 0) + " abaixo do alvo)";
+  const band = matrizLowerBetterBand(actual, target, m, isPercent);
+  const unit = isPercent ? "%" : "";
+  const dec = isPercent ? 1 : 0;
+  if (band === "danger") return "vermelho · estourou o alvo (≥ " + fmt(target, dec) + unit + ")";
+  if (band === "warn") return "amarelo · alerta (acima de " + fmt(Math.max(0, target - m), dec) + unit + ", abaixo do alvo)";
   return "verde · abaixo do alvo com folga";
+}
+function matrizAnyLowerBetter() {
+  return orderedIndicators().some(ind =>
+    cfgLowerBetter(ind) ||
+    (ind.subs || []).some(s => cfgLowerBetter(s, ind)) ||
+    (ind.rates || []).some(r => rateLowerBetter(r, ind))
+  );
+}
+function matrizRateTarget(rate) {
+  const ml = getMetaLoja(rate.id);
+  const t = Number(rate.target) || 0;
+  return ml != null && ml > 0 ? ml : t;
+}
+function matrizRatePctDec(tgt, lb) {
+  return lb ? 1 : 0;
+}
+function renderMatrizLegend() {
+  const leg = document.getElementById("matrizLegend");
+  const hint = document.getElementById("matrizLegendHint");
+  if (!leg) return;
+  const lb = matrizAnyLowerBetter();
+  if (lb) {
+    const m = MATRIZ_LOWER_WARN_PP;
+    leg.innerHTML = `
+      <span><i style="background:var(--text-dim)"></i> <b>Real</b> neutro</span>
+      <span><i style="background:var(--ok)"></i> <b>↓ menor melhor</b> verde · abaixo do alvo − ${m} p.p.</span>
+      <span><i style="background:var(--warn)"></i> amarelo · alerta (faixa de ${m} p.p. abaixo do alvo)</span>
+      <span><i style="background:var(--danger)"></i> vermelho · ≥ alvo (estourou)</span>
+      <span style="margin-left:8px; opacity:.85">· Blocos com <b>↓</b> usam esta regra em <b>%</b>, <b>Proj.</b> e <b>taxas</b></span>`;
+    hint.innerHTML = "<b>Real</b> neutro · Indicadores com <b>↓ Menor melhor</b> (KPIs): verde/amarelo/vermelho pelo valor vs alvo, não por % do alvo · Demais blocos: <b>%</b> ritmo ≥95/50% · <b>Proj.</b>/taxas ≥100/70%. Tooltip na cor do bloco.";
+  } else {
+    leg.innerHTML = `
+      <span><i style="background:var(--text-dim)"></i> <b>Real</b> neutro</span>
+      <span><i style="background:var(--ok)"></i> <b>%</b> ritmo ≥95%</span>
+      <span><i style="background:var(--warn)"></i> 50–94%</span>
+      <span><i style="background:var(--danger)"></i> &lt;50%</span>
+      <span style="margin-left:8px; opacity:.85">· <b>Proj.</b> e <b>taxas</b> vs alvo: verde ≥100% · amarelo 70–99% · vermelho &lt;70%</span>`;
+    hint.innerHTML = "<b>Real</b> neutro · <b>%</b> ritmo vs meta proporcional (escala) · <b>Proj.</b> fechamento vs meta · <b>Subs</b> iguais ao pai · <b>Taxas/NPS</b> valor vs alvo (%). Tooltip na cor do bloco.";
+  }
+}
+function syncLowerBetterChildren(ind, on) {
+  if (!on) return;
+  (ind.rates || []).forEach(r => { r.lowerBetter = true; });
+  (ind.subs || []).forEach(s => { s.lowerBetter = true; });
 }
 /** Razão para cor: ≥1 verde (meta atingida). Se lowerBetter, inverte (valor menor que alvo = melhor). */
 function matrizPerfRatio(actual, target, lowerBetter) {
@@ -935,8 +981,8 @@ function matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam) {
     "Taxa: " + rate.name,
     lb ? "Modo: quanto menor melhor ↓" : "Modo: quanto maior melhor ↑",
     rate.manual ? "Fonte: gestor (sistema) ⚙" : "Fonte: calculada (numerador ÷ denominador)",
-    "Valor: " + (rv == null ? "—" : fmt(rv, 0) + "%"),
-    "Alvo: " + (tgt ? tgt + "%" : "—"),
+    "Valor: " + (rv == null ? "—" : fmt(rv, lb ? 1 : 0) + "%"),
+    "Alvo: " + (tgt ? fmt(tgt, lb ? 1 : 0) + "%" : "—"),
   ];
   if (rv != null && tgt) {
     if (lb) {
@@ -965,12 +1011,13 @@ function matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam) {
 }
 function matrizRateCells(rate, ids, days, periodo, ind, isTeam) {
   const rv = rateValueForMatriz(rate, ids, days, periodo);
-  const tgt = Number(rate.target) || 0;
+  const tgt = matrizRateTarget(rate);
   const lb = rateLowerBetter(rate, ind);
   const rp = matrizRateRatio(rv, tgt, lb);
   const tip = matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam);
+  const dec = matrizRatePctDec(tgt, lb);
   const color = lb && rv != null && tgt ? heatMatrizLowerBetterColor(rv, tgt, true) : heatMatrizText(rp);
-  return `<td style="border-left:3px solid ${ind.color}; color:${color}; font-weight:700;"${matrizTipData(tip, ind.color)}>${rv == null ? "—" : fmt(rv, 0) + "%"}</td><td class="muted">${tgt ? tgt + "%" : "—"}</td>`;
+  return `<td style="border-left:3px solid ${ind.color}; color:${color}; font-weight:700;"${matrizTipData(tip, ind.color)}>${rv == null ? "—" : fmt(rv, dec) + "%"}</td><td class="muted">${tgt ? fmt(tgt, dec) + "%" : "—"}</td>`;
 }
 function matrizTipProj({ isTeam, sellerId, real, proj, metaProj, ind }) {
   if (proj == null || real == null) return "Sem dados para projetar";
@@ -1231,7 +1278,7 @@ function renderMatriz() {
     if (lowerBetter && expected != null) {
       color = heatMatrizLowerBetterColor(real, expected, false);
       barColor = color;
-      const band = matrizLowerBetterBand(real, expected, matrizLowerWarnMargin(expected, false));
+      const band = matrizLowerBetterBand(real, expected, matrizLowerWarnMargin(expected, false), false);
       w = band === "ok" ? 100 : band === "warn" ? 55 : 28;
     } else {
       color = heatMatrizPaceText(pace);
@@ -1321,6 +1368,7 @@ function renderMatriz() {
   body += "</tr>";
   tbl.innerHTML = "<thead>"+head1+head2+"</thead><tbody>"+body+"</tbody>";
   bindMatrizTips(tbl);
+  renderMatrizLegend();
 
   tbl.querySelectorAll('[data-block]').forEach(el => { el.onclick = (e) => { if (e.target.classList.contains('draghandle')) return; const ind = state.indicators.find(i=>i.id===el.dataset.block); if (ind && ind.pctOnly) return; const id = el.dataset.block; expandedBlocks[id] = expandedBlocks[id] === false ? true : false; save(); renderMatriz(); }; });
   if (!moveOn) tbl.querySelectorAll('tbody tr[data-seller] td.name.seller-link').forEach(td => { td.onclick = (e) => { if (e.target.classList.contains('draghandle')) return; const sid = td.closest('tr').dataset.seller; if (sid) openLancamentoModal(sid); }; });
@@ -1777,18 +1825,38 @@ function findIndBySub(sid){ return state.indicators.find(i => (i.subs||[]).some(
 function bindIndicatorEvents() {
   const list = document.getElementById("indicatorList");
   list.querySelectorAll(".ind-card").forEach(card => { const ind = state.indicators.find(i=>i.id===card.dataset.ind); if(!ind) return;
-    card.querySelectorAll(".ind-field").forEach(f => f.addEventListener("change", () => { const k=f.dataset.k; ind[k] = f.type==="checkbox"? f.checked : f.value; save(); renderIndicatorConfig(); }));
+    card.querySelectorAll(".ind-field").forEach(f => f.addEventListener("change", () => {
+      const k = f.dataset.k;
+      ind[k] = f.type === "checkbox" ? f.checked : f.value;
+      if (k === "lowerBetter") {
+        if (ind[k]) syncLowerBetterChildren(ind, true);
+        renderMatrizLegend();
+        if (activeView === "matriz") renderMatriz();
+      }
+      save();
+      renderIndicatorConfig();
+    }));
     card.querySelectorAll("[data-meta]").forEach(f => f.addEventListener("change", () => { ind[f.dataset.meta]=Number(f.value)||0; save(); refreshMetaAdherence(ind.id); }));
     card.querySelectorAll(".metaloja-inp[data-field]").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-ind]").forEach(b => b.addEventListener("click", () => { if(confirm("Excluir este indicador?")){ state.indicators = state.indicators.filter(i=>i.id!==b.dataset.delInd); save(); renderIndicatorConfig(); } }));
   list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".sub-row").forEach(row => { const ind = findIndBySub(row.dataset.sub); const s = ind && ind.subs.find(x=>x.id===row.dataset.sub); if(!s) return;
-    row.querySelectorAll(".sub-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => { const k=f.dataset.sk; s[k]= f.type==="checkbox"? f.checked : (["metaDay","metaSat","metaSun","metaMonth"].includes(k)? Number(f.value)||0 : f.value); save(); renderIndicatorConfig(); }));
+    row.querySelectorAll(".sub-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => {
+      const k = f.dataset.sk;
+      s[k] = f.type === "checkbox" ? f.checked : (["metaDay", "metaSat", "metaSun", "metaMonth"].includes(k) ? Number(f.value) || 0 : f.value);
+      if (k === "lowerBetter") { renderMatrizLegend(); if (activeView === "matriz") renderMatriz(); }
+      save(); renderIndicatorConfig();
+    }));
     row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-sub]").forEach(b => b.addEventListener("click", () => { const ind = findIndBySub(b.dataset.delSub); ind.subs = ind.subs.filter(s=>s.id!==b.dataset.delSub); save(); renderIndicatorConfig(); }));
   list.querySelectorAll("[data-add-rate]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addRate); const f = allFields(); ind.rates = ind.rates||[]; ind.rates.push({ id:uid(), name:"Nova taxa %", numId:(f[0]&&f[0].id)||"", denId:(f[1]&&f[1].id)||(f[0]&&f[0].id)||"", invert:false, target:0, manual:false, lowerBetter:false }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".rate-row").forEach(row => { const ind = findIndByRate(row.dataset.rate); const r = ind && ind.rates.find(x=>x.id===row.dataset.rate); if(!r) return;
-    row.querySelectorAll(".rate-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => { const k=f.dataset.rk; r[k]= f.type==="checkbox"? f.checked : (k==="target"? Number(f.value)||0 : f.value); save(); renderIndicatorConfig(); }));
+    row.querySelectorAll(".rate-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => {
+      const k = f.dataset.rk;
+      r[k] = f.type === "checkbox" ? f.checked : (k === "target" ? Number(f.value) || 0 : f.value);
+      if (k === "lowerBetter") { renderMatrizLegend(); if (activeView === "matriz") renderMatriz(); }
+      save(); renderIndicatorConfig();
+    }));
     row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-rate]").forEach(b => b.addEventListener("click", () => { const ind = findIndByRate(b.dataset.delRate); ind.rates = ind.rates.filter(r=>r.id!==b.dataset.delRate); save(); renderIndicatorConfig(); }));
 }
