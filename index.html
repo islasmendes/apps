@@ -107,6 +107,7 @@
   .heat { border-radius: 7px; font-weight: 700; padding: 4px 7px; display: inline-block; min-width: 34px; }
   .heat.matriz-from-sys { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-2) 55%, transparent); }
   .heat.matriz-from-sys::after { content: "⚙"; font-size: 9px; margin-left: 3px; opacity: .75; vertical-align: super; }
+  .matriz-real { border-radius: 7px; font-weight: 700; padding: 4px 7px; display: inline-block; min-width: 34px; background: color-mix(in srgb, var(--text) 6%, var(--cell)); color: var(--text); border: 1px solid var(--border-soft); }
   .block-head { font-weight: 800; letter-spacing: .3px; cursor: pointer; user-select: none; }
   .block-toggle { font-size: 10px; opacity: .7; margin-right: 4px; }
   .barwrap { height: 4px; background: var(--border-soft); border-radius: 3px; margin-top: 4px; overflow: hidden; }
@@ -301,12 +302,12 @@
       <div id="matrizSemanaPick" style="display:none; margin:10px 0;"></div>
       <div class="table-wrap" style="margin-top:12px;"><table id="matrizTable"></table></div>
       <div class="legend">
-        <span><i style="background:var(--danger)"></i> &lt;50%</span>
-        <span><i style="background:var(--warn)"></i> 50–89%</span>
-        <span><i style="background:var(--ok)"></i> ≥90%</span>
-        <span><i style="background:var(--info)"></i> ≥120%</span>
+        <span><i style="background:var(--text-dim)"></i> <b>Real</b> neutro (só o número)</span>
+        <span><i style="background:var(--ok)"></i> % / Proj. ≥100% meta</span>
+        <span><i style="background:var(--warn)"></i> 70–99%</span>
+        <span><i style="background:var(--danger)"></i> &lt;70%</span>
       </div>
-      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> e <b>Proj.</b> usam o <b>mesmo número</b> da coluna Real (gestor <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> ou check-out). <b>%</b> = Real ÷ meta mensal; sem meta mensal, meta/dia × dias na escala. <b>Proj.</b> = Real + (Real ÷ <b>dias completos</b> na escala do CV) × <b>dias restantes</b> (hoje ao fim). <b>Dias completos</b> = só dias trabalhados até <b>ontem</b> (folga no 📅 não conta). Equipe: úteis+sáb. <b>Semana:</b> só KPIs do diário.</div>
+      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> = quantidade (sem cor de meta; gestor <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> ou check-out). <b>%</b> = Real ÷ meta do período <span style="color:var(--text-faint)">(situação de hoje)</span>. <b>Proj.</b> = fechamento estimado do mês <span style="color:var(--text-faint)">(mesma regra de cor da %, mas sobre a projeção ÷ meta)</span>. Verde ≥ meta · amarelo até 30% abaixo · vermelho abaixo disso. Ritmo: Real + (Real÷dias completos na escala)×restantes (D-1; folga 📅 não conta no ritmo).</div>
     </div>
     <div class="panel">
       <div class="flex-between">
@@ -670,6 +671,22 @@ function rateValue(rate, sellerIds, m = currentMonth) {
 function heatBase(pct) { const css = getComputedStyle(document.documentElement); if (pct == null) return null; if (pct < 0.5) return css.getPropertyValue("--danger").trim(); if (pct < 0.9) return css.getPropertyValue("--warn").trim(); if (pct < 1.2) return css.getPropertyValue("--ok").trim(); return css.getPropertyValue("--info").trim(); }
 function heatColor(pct) { if (pct == null) return "transparent"; return "color-mix(in srgb, " + heatBase(pct) + " 26%, transparent)"; }
 function heatText(pct) { if (pct == null) return "var(--text-faint)"; return heatBase(pct); }
+/** Matriz % e Proj. vs meta: verde ≥100%, amarelo ≥70% (até 30% abaixo), vermelho &lt;70%. */
+function heatVsMeta(ratio) {
+  const css = getComputedStyle(document.documentElement);
+  if (ratio == null || isNaN(ratio)) return null;
+  if (ratio >= 1) return css.getPropertyValue("--ok").trim();
+  if (ratio >= 0.7) return css.getPropertyValue("--warn").trim();
+  return css.getPropertyValue("--danger").trim();
+}
+function heatMatrizText(ratio) { const c = heatVsMeta(ratio); return c || "var(--text-faint)"; }
+function heatMatrizBg(ratio) { const c = heatVsMeta(ratio); return c ? "color-mix(in srgb, " + c + " 26%, transparent)" : "transparent"; }
+function heatMatrizTip(ratio, label) {
+  if (ratio == null) return "";
+  const p = Math.round(ratio * 100);
+  const band = ratio >= 1 ? "na meta ou acima" : ratio >= 0.7 ? "até 30% abaixo da meta" : "mais de 30% abaixo da meta";
+  return ` title="${label}: ${p}% da meta (${band})"`;
+}
 function fmt(n, dec = 0) { if (n == null || isNaN(n)) return "—"; return Number(n).toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec }); }
 function pctTxt(p) { return p == null ? "—" : Math.round(p * 100) + "%"; }
 
@@ -874,8 +891,10 @@ function renderMatriz() {
     if (real == null) return `<td class="muted" style="font-weight:700;">—</td>`;
     const pct = real / meta;
     const w = Math.min(100, pct * 100);
-    const tip = dailyFallback ? ' title="Percentual sobre meta/dia × dias trabalhados na escala (sem meta mensal)"' : "";
-    return `<td style="color:${heatText(pct)}; font-weight:700; cursor:${dailyFallback?'help':'default'};"${tip}>${pctTxt(pct)}<div class="barwrap"><i style="width:${w}%; background:${heatBase(pct)}"></i></div></td>`;
+    const tipAttr = dailyFallback
+      ? ' title="Real ÷ meta/dia × dias na escala. Verde ≥100% da meta; amarelo 70–99%; vermelho abaixo de 70%."'
+      : heatMatrizTip(pct, "%");
+    return `<td style="color:${heatMatrizText(pct)}; font-weight:700; cursor:help;"${tipAttr}>${pctTxt(pct)}<div class="barwrap"><i style="width:${w}%; background:${heatVsMeta(pct)}"></i></div></td>`;
   }
   function blockCells(ids, ind, isTeam) {
     const subs = visibleSubs(ind), rates = visibleRates(ind);
@@ -888,22 +907,23 @@ function renderMatriz() {
     const { real, has, fromSystem } = matrizRealForSellers(ids, ind.id, days, periodo);
     const meta = metaForMatriz(ind, ids, days, periodo, isTeam);
     const dailyFb = metaUsesDailyFallback(ind, periodo);
-    const pct = (meta && has) ? real / meta : null;
-    const heatCls = fromSystem ? "heat matriz-from-sys" : "heat";
-    const heatTitle = fromSystem ? ' title="Valor do sistema (gestor)"' : "";
-    html += `<td style="border-left:3px solid ${ind.color};"><span class="${heatCls}" style="background:${heatColor(pct)}; color:${heatText(pct)}"${heatTitle}>${has?fmt(real):'—'}</span></td>` + pctCell(has ? real : null, meta, dailyFb);
+    const realCls = fromSystem ? "heat matriz-from-sys matriz-real" : "matriz-real";
+    const realTitle = fromSystem ? ' title="Valor do sistema (gestor). Cor neutra — veja % (hoje) e Proj. (fechamento)."' : ' title="Soma do check-out. Cor neutra — veja % (hoje) e Proj. (fechamento)."';
+    html += `<td style="border-left:3px solid ${ind.color};"><span class="${realCls}"${realTitle}>${has?fmt(real):'—'}</span></td>` + pctCell(has ? real : null, meta, dailyFb);
     if (periodo === "mes") {
       const proj = has && real != null
         ? (isTeam ? matrizProjEquipe(real) : matrizProjConsultor(ids, ind.id))
         : null;
       const metaProj = matrizMetaForProj(ind, ids, isTeam);
       const pp = metaProj && proj != null ? proj / metaProj : null;
-      const projTitle = isTeam
-        ? ' title="Projeção loja: Real + ritmo nos dias úteis+sáb já completos × dias restantes (hoje ao fim; hoje fora do ritmo). % vs meta da loja."'
-        : (fromSystem
-          ? ' title="Projeção: Real do gestor + (Real÷dias completos na escala)×dias restantes (hoje até o fim). Hoje não entra no cálculo do ritmo."'
-          : ' title="Projeção: mesmo Real desta coluna + (Real÷dias trabalhados até ontem na escala)×dias restantes (hoje ao fim; folgas não entram no ritmo)."');
-      html += `<td style="color:${pp != null ? heatText(pp) : 'var(--text-dim)'}; cursor:help; font-weight:${pp != null ? 700 : 400};"${projTitle}>${proj == null ? "—" : fmt(proj)}</td>`;
+      const projExplain = isTeam
+        ? "Cálculo: Real equipe + ritmo em úteis+sáb (D-1). Comparado à meta da loja."
+        : "Cálculo: Real + (Real÷dias completos na escala)×restantes (D-1).";
+      const projBand = pp == null ? "" : pp >= 1 ? "Na meta ou acima." : pp >= 0.7 ? "Até 30% abaixo da meta." : "Mais de 30% abaixo da meta.";
+      const projTitleAttr = proj == null
+        ? ' title="Sem dados para projetar"'
+        : ` title="${pp != null ? "Proj. " + Math.round(pp * 100) + "% da meta. " + projBand + " " : ""}${projExplain}"`;
+      html += `<td style="color:${pp != null ? heatMatrizText(pp) : 'var(--text-dim)'}; cursor:help; font-weight:${pp != null ? 700 : 400};"${projTitleAttr}>${proj == null ? "—" : fmt(proj)}</td>`;
     }
     if (expandedBlocks[ind.id] !== false) {
       subs.forEach(s => {
