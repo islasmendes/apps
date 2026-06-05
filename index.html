@@ -884,10 +884,6 @@ function rateLowerBetter(rate, ind) {
 }
 /** Faixa de alerta abaixo do teto (ex.: alvo 2,9% → amarelo acima de 2,4%). */
 const MATRIZ_LOWER_WARN_PP = 0.5;
-function matrizNormPct(n) {
-  if (n == null || isNaN(n)) return null;
-  return Math.round(Number(n) * 10) / 10;
-}
 function matrizLowerWarnMargin(target, isPercent) {
   if (isPercent) return MATRIZ_LOWER_WARN_PP;
   return Math.max(0.5, target * 0.05);
@@ -912,9 +908,8 @@ function matrizLowerBetterLabel(actual, target, isPercent) {
   const m = matrizLowerWarnMargin(target, isPercent);
   const band = matrizLowerBetterBand(actual, target, m, isPercent);
   const unit = isPercent ? "%" : "";
-  const dec = isPercent ? 1 : 0;
-  if (band === "danger") return "vermelho · estourou o alvo (≥ " + fmt(target, dec) + unit + ")";
-  if (band === "warn") return "amarelo · alerta (acima de " + fmt(Math.max(0, target - m), dec) + unit + ", abaixo do alvo)";
+  if (band === "danger") return "vermelho · estourou o alvo (≥ " + (isPercent ? fmtPctFine(target) : fmt(target, 0)) + unit + ")";
+  if (band === "warn") return "amarelo · alerta (acima de " + (isPercent ? fmtPctFine(Math.max(0, target - m)) : fmt(Math.max(0, target - m), 0)) + unit + ", abaixo do alvo)";
   return "verde · abaixo do alvo com folga";
 }
 function matrizAnyLowerBetter() {
@@ -929,8 +924,19 @@ function matrizRateTarget(rate) {
   const t = Number(rate.target) || 0;
   return ml != null && ml > 0 ? ml : t;
 }
-function matrizRatePctDec(tgt, lb) {
-  return lb ? 1 : 0;
+/** Até 2 casas; arredonda só a 3ª (ex.: 2,6 → 2,6%; 2,555 → 2,56%). */
+function matrizPctRound(n) {
+  if (n == null || isNaN(n)) return null;
+  return Math.round(Number(n) * 100) / 100;
+}
+function fmtPctFine(n) {
+  if (n == null || isNaN(n)) return "—";
+  const v = matrizPctRound(n);
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+function fmtPctFineUnit(n) {
+  const s = fmtPctFine(n);
+  return s === "—" ? s : s + "%";
 }
 function renderMatrizLegend() {
   const leg = document.getElementById("matrizLegend");
@@ -981,13 +987,13 @@ function matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam) {
     "Taxa: " + rate.name,
     lb ? "Modo: quanto menor melhor ↓" : "Modo: quanto maior melhor ↑",
     rate.manual ? "Fonte: gestor (sistema) ⚙" : "Fonte: calculada (numerador ÷ denominador)",
-    "Valor: " + (rv == null ? "—" : fmt(rv, lb ? 1 : 0) + "%"),
-    "Alvo: " + (tgt ? fmt(tgt, lb ? 1 : 0) + "%" : "—"),
+    "Valor: " + (rv == null ? "—" : (lb ? fmtPctFineUnit(rv) : fmt(rv, 0) + "%")),
+    "Alvo: " + (tgt ? (lb ? fmtPctFineUnit(tgt) : tgt + "%") : "—"),
   ];
   if (rv != null && tgt) {
     if (lb) {
       const m = matrizLowerWarnMargin(tgt, true);
-      lines.push("Alerta amarelo: acima de " + fmt(tgt - m, 1) + "% (até " + m + " p.p. abaixo do alvo)");
+      lines.push("Alerta amarelo: acima de " + fmtPctFineUnit(Math.max(0, tgt - m)) + " (até " + m + " p.p. abaixo do alvo)");
       lines.push("Situação: " + matrizLowerBetterLabel(rv, tgt, true));
     } else {
       lines.push("Relação: " + Math.round((rp || 0) * 100) + "% do alvo · " + heatMatrizBandLabel(rp));
@@ -1015,9 +1021,10 @@ function matrizRateCells(rate, ids, days, periodo, ind, isTeam) {
   const lb = rateLowerBetter(rate, ind);
   const rp = matrizRateRatio(rv, tgt, lb);
   const tip = matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam);
-  const dec = matrizRatePctDec(tgt, lb);
   const color = lb && rv != null && tgt ? heatMatrizLowerBetterColor(rv, tgt, true) : heatMatrizText(rp);
-  return `<td style="border-left:3px solid ${ind.color}; color:${color}; font-weight:700;"${matrizTipData(tip, ind.color)}>${rv == null ? "—" : fmt(rv, dec) + "%"}</td><td class="muted">${tgt ? fmt(tgt, dec) + "%" : "—"}</td>`;
+  const valDisp = rv == null ? "—" : (lb ? fmtPctFineUnit(rv) : fmt(rv, 0) + "%");
+  const tgtDisp = tgt ? (lb ? fmtPctFineUnit(tgt) : tgt + "%") : "—";
+  return `<td style="border-left:3px solid ${ind.color}; color:${color}; font-weight:700;"${matrizTipData(tip, ind.color)}>${valDisp}</td><td class="muted">${tgtDisp}</td>`;
 }
 function matrizTipProj({ isTeam, sellerId, real, proj, metaProj, ind }) {
   if (proj == null || real == null) return "Sem dados para projetar";
@@ -1495,8 +1502,16 @@ function renderLancamentoCards(sellerId) {
       (ind.subs||[]).forEach(s => { fields += sysQty(s.id, s.name, true); });
     }
     (ind.rates||[]).forEach(r => {
-      if (r.manual) fields += `<div class="sysfield rate"><label>% ${r.name}</label><input type="number" class="sysratecell" data-rate="${r.id}" value="${getSystemRate(sellerId, r.id) ?? ''}" placeholder="0"></div>`;
-      else { const rv = rateValue(r, [sellerId]); const tgt = Number(r.target)||0; fields += `<div class="sysfield rate calc"><label>% ${r.name} <span class="hint">auto</span></label><div class="syscalc">${rv==null?'—':fmt(rv,0)+'%'}${tgt?` <span class="muted">/ alvo ${tgt}%</span>`:''}</div></div>`; }
+      const rLb = rateLowerBetter(r, ind);
+      if (r.manual) {
+        const step = rLb ? "0.01" : "1";
+        fields += `<div class="sysfield rate"><label>% ${r.name}</label><input type="number" class="sysratecell" data-rate="${r.id}" step="${step}" inputmode="decimal" value="${getSystemRate(sellerId, r.id) ?? ''}" placeholder="${rLb ? '0,00' : '0'}"></div>`;
+      } else {
+        const rv = rateValue(r, [sellerId]); const tgt = matrizRateTarget(r);
+        const rvDisp = rv == null ? "—" : (rLb ? fmtPctFineUnit(rv) : fmt(rv, 0) + "%");
+        const tgtDisp = tgt ? (rLb ? fmtPctFineUnit(tgt) : tgt + "%") : "";
+        fields += `<div class="sysfield rate calc"><label>% ${r.name} <span class="hint">auto</span></label><div class="syscalc">${rvDisp}${tgtDisp ? ` <span class="muted">/ alvo ${tgtDisp}</span>` : ""}</div></div>`;
+      }
     });
     if (!fields) return "";
     const exp = lancamentoExpanded[ind.id] !== false;
