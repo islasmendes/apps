@@ -145,6 +145,8 @@
   .diario-seller-bar .matriz-filter-chip.active { background: color-mix(in srgb, var(--accent) 28%, var(--cell)); border-color: var(--accent); color: var(--accent-2); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
   html[data-theme="light"] .diario-seller-bar .matriz-filter-chip.active { color: var(--accent); }
   .matriz-filter-all.active { border-color: var(--accent); color: var(--accent); }
+  .arvore-toolbar { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .arvore-toolbar .arvore-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; width: 100%; }
   .ghost-btn.sm { padding: 5px 10px; font-size: 12px; }
   th.matriz-sort { cursor: pointer; user-select: none; white-space: nowrap; }
   th.matriz-sort:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 10%, var(--panel-2)); }
@@ -493,9 +495,9 @@
   <section class="view" id="view-rscen">
     <div class="panel">
       <div class="flex-between">
-        <div><h2>RSCEN+ · Árvore de Resultados</h2><div class="sub">Espelho da <b>Matriz / Painel</b> por loja — mesmos indicadores, cores, %, Proj., taxas, filtro e ordenação. <b>Total RSCEN</b> no topo; clique no <b>＋</b> da loja para ver os vendedores. Outras lojas entram em tempo real.</div></div>
+        <div><h2>RSCEN+ · Árvore de Resultados</h2><div class="sub">Espelho da <b>Matriz / Painel</b> por loja — mesmos indicadores, cores, %, Proj. e ordenação. Filtre pelas <b>lojas sincronizadas</b> acima; ao escolher uma loja, filtre os <b>vendedores</b>. Clique no <b>＋</b> da tabela para expandir.</div></div>
       </div>
-      <div id="arvoreToolbar" class="matriz-toolbar" style="margin-top:10px;"></div>
+      <div id="arvoreToolbar" class="matriz-toolbar arvore-toolbar" style="margin-top:10px;"></div>
       <div class="table-wrap" style="margin-top:10px;"><table id="arvoreTable"></table></div>
       <div class="legend" id="arvoreLegend"></div>
       <div class="hint" id="arvoreLegendHint" style="margin-top:8px; line-height:1.6;"></div>
@@ -589,10 +591,12 @@ function migrate(s) {
   if (!s.order) s.order = { sellers: null, indicators: null };
   if (!s.months) s.months = {};
   if (!s.theme) s.theme = "dark";
-  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, matrizFilter: [], matrizSort: { key: null, dir: "desc" } }, s.ui || {});
+  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, matrizFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" } }, s.ui || {});
   if (!s.ui.expanded) s.ui.expanded = {};
   if (!s.ui.lancamentoExpanded) s.ui.lancamentoExpanded = {};
   if (!Array.isArray(s.ui.matrizFilter)) s.ui.matrizFilter = [];
+  if (!Array.isArray(s.ui.arvLojaFilter)) s.ui.arvLojaFilter = [];
+  if (!Array.isArray(s.ui.arvSellerFilter)) s.ui.arvSellerFilter = [];
   if (!s.ui.matrizSort) s.ui.matrizSort = { key: null, dir: "desc" };
   if (s.ui.view === "sistema") s.ui.view = "matriz";
   if (s.ui.tabOrder) s.ui.tabOrder = s.ui.tabOrder.filter(v => v !== "sistema");
@@ -1341,6 +1345,79 @@ function matrizUiRerender() {
   if (activeView === "matriz") renderMatriz();
   else if (activeView === "rscen") renderArvore();
 }
+function arvLojaSellers(loja) {
+  const raw = loja.data?.sellers || [];
+  if (!raw.length) return [];
+  if (loja.self) {
+    const ordered = orderedSellers();
+    const set = new Set(raw.map(s => s.id));
+    return ordered.filter(s => set.has(s.id));
+  }
+  const order = loja.data?.order?.sellers;
+  if (order && order.length) return order.map(id => raw.find(s => s.id === id)).filter(Boolean);
+  return raw;
+}
+function renderArvoreToolbar() {
+  const bar = document.getElementById("arvoreToolbar");
+  if (!bar) return;
+  const lojas = allLojas();
+  const lojaFilter = state.ui.arvLojaFilter || [];
+  const sellerFilter = state.ui.arvSellerFilter || [];
+  const hasLojaFilter = lojaFilter.length > 0;
+  const lojaSet = new Set(lojaFilter);
+  const singleLoja = lojaFilter.length === 1 ? lojas.find(L => L.id === lojaFilter[0]) : null;
+  let html = `<div class="arvore-filter-row"><span class="hint">Filtrar loja</span>
+    <button type="button" class="ghost-btn sm matriz-filter-all arv-loja-all${!hasLojaFilter ? " active" : ""}">Todos</button>
+    <div class="matriz-filter-chips">${lojas.map(L =>
+      `<button type="button" class="matriz-filter-chip arv-loja-chip${hasLojaFilter && lojaSet.has(L.id) ? " active" : ""}" data-lid="${L.id}">${escapeHtml(L.name)}${L.self ? ' <span class="tag" style="font-size:10px;padding:1px 5px;margin-left:2px">você</span>' : ""}</button>`
+    ).join("")}</div></div>`;
+  if (singleLoja) {
+    const sellers = arvLojaSellers(singleLoja);
+    const hasSellerFilter = sellerFilter.length > 0;
+    const sellerSet = new Set(sellerFilter);
+    html += `<div class="arvore-filter-row"><span class="hint">Filtrar vendedor · ${escapeHtml(singleLoja.name)}</span>
+      <button type="button" class="ghost-btn sm matriz-filter-all arv-seller-all${!hasSellerFilter ? " active" : ""}">Todos</button>
+      <div class="matriz-filter-chips">${sellers.map(s =>
+        `<button type="button" class="matriz-filter-chip arv-seller-chip${hasSellerFilter && sellerSet.has(s.id) ? " active" : ""}" data-sid="${s.id}">${escapeHtml(s.name)}</button>`
+      ).join("")}</div></div>`;
+  }
+  bar.innerHTML = html;
+  bar.querySelector(".arv-loja-all").onclick = () => {
+    state.ui.arvLojaFilter = [];
+    state.ui.arvSellerFilter = [];
+    save();
+    matrizUiRerender();
+  };
+  bar.querySelectorAll(".arv-loja-chip").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.lid;
+      const f = new Set(state.ui.arvLojaFilter || []);
+      if (f.has(id)) f.delete(id);
+      else f.add(id);
+      state.ui.arvLojaFilter = [...f];
+      if (state.ui.arvLojaFilter.length !== 1) state.ui.arvSellerFilter = [];
+      save();
+      matrizUiRerender();
+    };
+  });
+  const sellerAll = bar.querySelector(".arv-seller-all");
+  if (sellerAll) sellerAll.onclick = () => {
+    state.ui.arvSellerFilter = [];
+    save();
+    matrizUiRerender();
+  };
+  bar.querySelectorAll(".arv-seller-chip").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.sid;
+      const f = new Set(state.ui.arvSellerFilter || []);
+      if (f.has(id)) f.delete(id);
+      else f.add(id);
+      state.ui.arvSellerFilter = [...f];
+      save();
+      matrizUiRerender();
+    };
+  });
+}
 function renderMatrizToolbar(allSellers, barId) {
   const bar = document.getElementById(barId || "matrizToolbar");
   if (!bar) return;
@@ -1509,11 +1586,14 @@ function arvResolveRate(li, rateTpl) {
 function arvSellerIds(loja) { return (loja.data?.sellers || []).map(s => s.id); }
 function arvTeamSellerIds(loja) { return arvFilteredSellers(loja).map(s => s.id); }
 function arvFilteredSellers(loja) {
-  const f = state.ui.matrizFilter || [];
-  const sellers = loja.data?.sellers || [];
-  if (!f.length) return sellers;
-  const names = new Set(orderedSellers().filter(s => f.includes(s.id)).map(s => (s.name || "").toLowerCase()));
-  return sellers.filter(s => names.has((s.name || "").toLowerCase()));
+  const sellers = arvLojaSellers(loja);
+  const lojaFilter = state.ui.arvLojaFilter || [];
+  const sellerFilter = state.ui.arvSellerFilter || [];
+  if (lojaFilter.length === 1 && lojaFilter[0] === loja.id && sellerFilter.length > 0) {
+    const set = new Set(sellerFilter);
+    return sellers.filter(s => set.has(s.id));
+  }
+  return sellers;
 }
 function arvSortedSellers(loja) {
   const sellers = arvFilteredSellers(loja);
@@ -2366,9 +2446,16 @@ function renderArvore() {
   if (!tbl) return;
   try {
     const localInds = orderedIndicators();
-    const hasFilter = (state.ui.matrizFilter || []).length > 0;
+    const lojaFilter = state.ui.arvLojaFilter || [];
+    const sellerFilter = state.ui.arvSellerFilter || [];
+    const hasLojaFilter = lojaFilter.length > 0;
+    const hasSellerFilter = sellerFilter.length > 0;
     let lojas = allLojas();
-    if (hasFilter) lojas = lojas.filter(L => arvFilteredSellers(L).length > 0);
+    if (hasLojaFilter) {
+      const set = new Set(lojaFilter);
+      lojas = lojas.filter(L => set.has(L.id));
+    }
+    if (lojaFilter.length === 1) arvOpenLojas[lojaFilter[0]] = true;
     const sort = state.ui.matrizSort || {};
     if (sort.key === "name") {
       const mul = (sort.dir || "asc") === "asc" ? 1 : -1;
@@ -2376,10 +2463,11 @@ function renderArvore() {
     }
     const periodo = "mes";
     const days = monthDays();
-    renderMatrizToolbar(orderedSellers(), "arvoreToolbar");
+    renderArvoreToolbar();
     const _heads = matrizBuildHeaders(localInds, { periodo, moveOn: false, nameLabel: "Loja / Vendedor" });
     let head1 = _heads.head1, head2 = _heads.head2;
-    let body = `<tr class="total"><td class="name">⌂ Total RSCEN${hasFilter ? ' <span class="muted" style="font-weight:600">(filtro)</span>' : ""}</td>${localInds.map(li => arvTotalBlockCells(lojas, li, days, periodo)).join("")}</tr>`;
+    const filterLbl = hasSellerFilter ? "(vendedor)" : hasLojaFilter ? "(loja)" : "";
+    let body = `<tr class="total"><td class="name">⌂ Total RSCEN${filterLbl ? ' <span class="muted" style="font-weight:600">' + filterLbl + "</span>" : ""}</td>${localInds.map(li => arvTotalBlockCells(lojas, li, days, periodo)).join("")}</tr>`;
     lojas.forEach(L => {
       const open = !!arvOpenLojas[L.id];
       const ids = arvTeamSellerIds(L);
