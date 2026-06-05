@@ -544,8 +544,13 @@ function migrate(s) {
   if (s.ui.tabOrder) s.ui.tabOrder = s.ui.tabOrder.filter(v => v !== "sistema");
   (s.indicators || []).forEach(i => {
     if (i.pctOnly == null) i.pctOnly = false;
+    if (i.lowerBetter == null) i.lowerBetter = false;
     if (i.metaSun == null) i.metaSun = 0;
-    (i.subs || []).forEach(sub => { if (sub.metaSun == null) sub.metaSun = 0; });
+    (i.subs || []).forEach(sub => {
+      if (sub.metaSun == null) sub.metaSun = 0;
+      if (sub.lowerBetter == null) sub.lowerBetter = false;
+    });
+    (i.rates || []).forEach(r => { if (r.lowerBetter == null) r.lowerBetter = false; });
   });
   return s;
 }
@@ -740,11 +745,21 @@ function matrizExpectedToDate(meta, sellerId, isTeam, periodDays, m = currentMon
   if (!total || done <= 0) return null;
   return meta * (done / total);
 }
-function matrizPaceRatio(real, meta, sellerId, isTeam, periodDays, m = currentMonth) {
+function matrizPaceRatio(real, meta, sellerId, isTeam, periodDays, lowerBetter, m = currentMonth) {
   if (real == null) return null;
   const exp = matrizExpectedToDate(meta, sellerId, isTeam, periodDays, m);
+  if (lowerBetter) {
+    if (real <= 0) return 2;
+    if (exp == null || exp <= 0) return null;
+    return exp / real;
+  }
   if (exp == null || exp <= 0) return real > 0 ? 2 : 0;
   return real / exp;
+}
+function matrizProjPerfRatio(proj, metaProj, lowerBetter) {
+  if (proj == null || !metaProj) return null;
+  if (lowerBetter) return proj <= 0 ? 2 : metaProj / proj;
+  return proj / metaProj;
 }
 function matrizTipEncode(text) {
   return String(text).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/\n/g, "&#10;");
@@ -811,37 +826,59 @@ function matrizTipReal(fromSystem) {
 function matrizTipPct(real, meta, dailyFallback, opts) {
   if (!meta || meta <= 0) return "Cadastre meta em KPIs";
   if (real == null) return "Sem realizado";
-  const { sellerId, isTeam, periodDays, indColor } = opts || {};
+  const { sellerId, isTeam, periodDays, indColor, lowerBetter } = opts || {};
   const { done, total } = matrizScaleSplit(sellerId, isTeam, periodDays);
   const expected = matrizExpectedToDate(meta, sellerId, isTeam, periodDays);
-  const pace = matrizPaceRatio(real, meta, sellerId, isTeam, periodDays);
+  const pace = matrizPaceRatio(real, meta, sellerId, isTeam, periodDays, lowerBetter);
   const pctMes = real / meta;
   const lines = [
+    lowerBetter ? "Modo: quanto menor melhor ↓" : "Modo: quanto maior melhor ↑",
     dailyFallback ? "Meta período: meta/dia × dias na escala" : "Meta do período: " + fmt(meta),
     "Escala: " + total + " dias · " + done + " completos (até ontem)",
     "Deveria até ontem: " + (expected != null ? fmt(expected, expected % 1 ? 1 : 0) : "—") + " (" + fmt(meta) + "×" + done + "÷" + total + ")",
     "Real: " + fmt(real),
-    "Ritmo: " + (pace != null ? pctTxt(pace) + " do esperado · " + heatMatrizPaceLabel(pace) : "—"),
+    "Ritmo: " + (pace != null ? pctTxt(pace) + " do esperado · " + (lowerBetter ? heatMatrizBandLabel(pace) : heatMatrizPaceLabel(pace)) : "—"),
     "Acumulado mês: " + pctTxt(pctMes) + " da meta total",
-    "Cor do %: verde ≥95% do esperado · amarelo 50–94% · vermelho &lt;50%",
+    lowerBetter
+      ? "Cor do %: verde = no/abaixo do esperado · amarelo acima · vermelho muito acima"
+      : "Cor do %: verde ≥95% do esperado · amarelo 50–94% · vermelho &lt;50%",
   ];
   return lines.join("\n");
 }
-function matrizRateRatio(valuePct, targetPct) {
+function cfgLowerBetter(cfg, parentInd) {
+  return !!(cfg && cfg.lowerBetter) || !!(parentInd && parentInd.lowerBetter);
+}
+function rateLowerBetter(rate, ind) {
+  return !!(rate && rate.lowerBetter) || !!(ind && ind.lowerBetter);
+}
+/** Razão para cor: ≥1 verde (meta atingida). Se lowerBetter, inverte (valor menor que alvo = melhor). */
+function matrizPerfRatio(actual, target, lowerBetter) {
+  if (actual == null || target == null || !target) return null;
+  if (lowerBetter) {
+    if (actual <= 0) return 2;
+    return target / actual;
+  }
+  return actual / target;
+}
+function matrizRateRatio(valuePct, targetPct, lowerBetter) {
   if (valuePct == null || !targetPct) return null;
-  return (valuePct / 100) / (targetPct / 100);
+  return matrizPerfRatio(valuePct, targetPct, lowerBetter);
 }
 function matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam) {
-  const rp = matrizRateRatio(rv, tgt);
+  const lb = rateLowerBetter(rate, ind);
+  const rp = matrizRateRatio(rv, tgt, lb);
   const lines = [
     "Taxa: " + rate.name,
+    lb ? "Modo: quanto menor melhor ↓" : "Modo: quanto maior melhor ↑",
     rate.manual ? "Fonte: gestor (sistema) ⚙" : "Fonte: calculada (numerador ÷ denominador)",
     "Valor: " + (rv == null ? "—" : fmt(rv, 0) + "%"),
     "Alvo: " + (tgt ? tgt + "%" : "—"),
   ];
   if (rp != null) {
     lines.push("Relação: " + Math.round(rp * 100) + "% do alvo · " + heatMatrizBandLabel(rp));
-    lines.push("Cor: verde ≥100% do alvo · amarelo 70–99% · vermelho &lt;70%");
+    lines.push(lb
+      ? "Cor: verde = no alvo ou abaixo · amarelo perto acima · vermelho muito acima"
+      : "Cor: verde ≥100% do alvo · amarelo 70–99% · vermelho &lt;70%");
   }
   if (!rate.manual && rv != null) {
     let num = 0, den = 0;
@@ -861,17 +898,20 @@ function matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam) {
 function matrizRateCells(rate, ids, days, periodo, ind, isTeam) {
   const rv = rateValueForMatriz(rate, ids, days, periodo);
   const tgt = Number(rate.target) || 0;
-  const rp = matrizRateRatio(rv, tgt);
+  const lb = rateLowerBetter(rate, ind);
+  const rp = matrizRateRatio(rv, tgt, lb);
   const tip = matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam);
   return `<td style="border-left:3px solid ${ind.color}; color:${heatMatrizText(rp)}; font-weight:700;"${matrizTipData(tip, ind.color)}>${rv == null ? "—" : fmt(rv, 0) + "%"}</td><td class="muted">${tgt ? tgt + "%" : "—"}</td>`;
 }
 function matrizTipProj({ isTeam, sellerId, real, proj, metaProj, ind }) {
   if (proj == null || real == null) return "Sem dados para projetar";
   const m = currentMonth;
-  const pp = metaProj > 0 ? proj / metaProj : null;
+  const lb = cfgLowerBetter(ind);
+  const pp = matrizProjPerfRatio(proj, metaProj, lb);
   let done, ahead, total;
   const lines = [];
   if (ind && ind.name) lines.push((ind.sub ? "Sub: " : "") + ind.name);
+  if (lb) lines.push("Modo: quanto menor melhor ↓");
   if (isTeam) {
     ({ done, ahead } = workdaysSplit(m));
     total = done + ahead;
@@ -1104,14 +1144,16 @@ function renderMatriz() {
   head1 += "</tr>"; head2 += "</tr>";
 
   function pctCell(real, meta, dailyFallback, cellOpts) {
-    const { sellerId, isTeam, indColor, periodDays } = cellOpts || {};
+    const { sellerId, isTeam, indColor, periodDays, lowerBetter } = cellOpts || {};
     if (!meta || meta <= 0) return `<td class="muted" style="font-weight:700;">—</td>`;
     if (real == null) return `<td class="muted" style="font-weight:700;">—</td>`;
-    const pace = matrizPaceRatio(real, meta, sellerId, isTeam, periodDays);
-    const display = pace != null ? pace : real / meta;
+    const pace = matrizPaceRatio(real, meta, sellerId, isTeam, periodDays, lowerBetter);
+    const display = pace != null ? pace : (lowerBetter && real > 0 ? meta / real : real / meta);
     const w = Math.min(100, (display || 0) * 100);
-    const tip = matrizTipPct(real, meta, dailyFallback, { sellerId, isTeam, periodDays, indColor });
-    return `<td style="color:${heatMatrizPaceText(pace)}; font-weight:700;"${matrizTipData(tip, indColor)}>${pctTxt(display)}<div class="barwrap"><i style="width:${w}%; background:${heatMatrizPace(pace)}"></i></div></td>`;
+    const tip = matrizTipPct(real, meta, dailyFallback, { sellerId, isTeam, periodDays, indColor, lowerBetter });
+    const heatFn = lowerBetter ? heatMatrizText : heatMatrizPaceText;
+    const heatBg = lowerBetter ? heatVsMeta : heatMatrizPace;
+    return `<td style="color:${heatFn(pace)}; font-weight:700;"${matrizTipData(tip, indColor)}>${pctTxt(display)}<div class="barwrap"><i style="width:${w}%; background:${heatBg(pace)}"></i></div></td>`;
   }
   function blockCells(ids, ind, isTeam) {
     const subs = visibleSubs(ind), rates = visibleRates(ind);
@@ -1125,21 +1167,21 @@ function renderMatriz() {
     const meta = metaForMatriz(ind, ids, days, periodo, isTeam);
     const dailyFb = metaUsesDailyFallback(ind, periodo);
     const realCls = fromSystem ? "heat matriz-from-sys matriz-real" : "matriz-real";
-    const cellOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days };
+    const cellOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days, lowerBetter: cfgLowerBetter(ind) };
     html += `<td style="border-left:3px solid ${ind.color};"><span class="${realCls}"${matrizTipData(matrizTipReal(fromSystem), ind.color)}>${has?fmt(real):'—'}</span></td>` + pctCell(has ? real : null, meta, dailyFb, cellOpts);
     if (periodo === "mes") {
       const proj = has && real != null
         ? (isTeam ? matrizProjEquipe(real) : matrizProjConsultor(ids, ind.id))
         : null;
       const metaProj = matrizMetaForProj(ind, ids, isTeam);
-      const pp = metaProj && proj != null ? proj / metaProj : null;
+      const pp = metaProj && proj != null ? matrizProjPerfRatio(proj, metaProj, cfgLowerBetter(ind)) : null;
       const projTip = matrizTipProj({
         isTeam,
         sellerId: isTeam ? null : ids[0],
         real: has ? real : null,
         proj,
         metaProj: metaProj || 0,
-        ind: { ...ind, sub: false },
+        ind: { ...ind, sub: false, lowerBetter: ind.lowerBetter },
       });
       html += `<td style="color:${pp != null ? heatMatrizText(pp) : 'var(--text-dim)'}; font-weight:${pp != null ? 700 : 400};"${matrizTipData(projTip, ind.color)}>${proj == null ? "—" : fmt(proj)}</td>`;
     }
@@ -1148,7 +1190,7 @@ function renderMatriz() {
         const { real: sr, has: h, fromSystem: fs } = matrizRealForSellers(ids, s.id, days, periodo);
         const subMeta = metaForMatriz(s, ids, days, periodo, isTeam);
         const subDailyFb = metaUsesDailyFallback(s, periodo);
-        const subOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days };
+        const subOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days, lowerBetter: cfgLowerBetter(s) };
         const subCls = fs ? "heat matriz-from-sys matriz-real" : "matriz-real";
         html += `<td style="border-left:1px solid var(--border-soft);"><span class="${subCls}"${matrizTipData(matrizTipReal(fs), ind.color)}>${h ? fmt(sr) : "—"}</span></td>`;
         html += pctCell(h ? sr : null, subMeta, subDailyFb, subOpts);
@@ -1157,14 +1199,14 @@ function renderMatriz() {
             ? (isTeam ? matrizProjEquipe(sr) : matrizProjConsultor(ids, s.id))
             : null;
           const subMetaProj = matrizMetaForProj(s, ids, isTeam);
-          const subPp = subMetaProj && subProj != null ? subProj / subMetaProj : null;
+          const subPp = subMetaProj && subProj != null ? matrizProjPerfRatio(subProj, subMetaProj, cfgLowerBetter(s)) : null;
           const subProjTip = matrizTipProj({
             isTeam,
             sellerId: isTeam ? null : ids[0],
             real: h ? sr : null,
             proj: subProj,
             metaProj: subMetaProj || 0,
-            ind: { ...s, sub: true },
+            ind: { ...s, sub: true, lowerBetter: s.lowerBetter },
           });
           html += `<td style="color:${subPp != null ? heatMatrizText(subPp) : "var(--text-dim)"}; font-weight:700;"${matrizTipData(subProjTip, ind.color)}>${subProj == null ? "—" : fmt(subProj)}</td>`;
         }
@@ -1526,6 +1568,7 @@ function renderIndicatorConfig() {
       <input type="text" value="${escapeHtml(ind.name)}" data-k="name" class="ind-field" style="font-weight:700; min-width:150px;">
       <input type="color" value="${ind.color}" data-k="color" class="ind-field" style="width:42px; height:34px; padding:2px;">
       <label class="switch"><input type="checkbox" class="ind-field" data-k="pctOnly" ${ind.pctOnly?'checked':''}><span class="track"></span>Só taxa (ex.: NPS)</label>
+      <label class="switch" title="Verde quando valor está no alvo ou abaixo (ex.: Score%)"><input type="checkbox" class="ind-field" data-k="lowerBetter" ${ind.lowerBetter?'checked':''}><span class="track"></span>↓ Menor melhor</label>
       ${ind.pctOnly?'':`<label class="switch"><input type="checkbox" class="ind-field" data-k="checkin" ${ind.checkin?'checked':''}><span class="track"></span>Check-in</label>
       <label class="switch"><input type="checkbox" class="ind-field" data-k="checkout" ${ind.checkout?'checked':''}><span class="track"></span>Check-out</label>`}
       <span class="spacer" style="flex:1"></span>
@@ -1534,13 +1577,13 @@ function renderIndicatorConfig() {
     if (!ind.pctOnly) {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
       (ind.subs||[]).forEach(s => {
-        html += `<div class="sub-row" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`;
+        html += `<div class="sub-row" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`;
       });
       html += `</div>`;
     }
     html += `<div class="rate-list"><div class="flex-between"><b style="font-size:12.5px;">Taxas (A ÷ B)</b><button class="btn sec sm" data-add-rate="${ind.id}">+ taxa</button></div>`;
     const opts = fields.map(f => `<option value="${f.id}">${f.kind==='sub'?'↳ ':''}${escapeHtml(f.name)}</option>`).join("");
-    (ind.rates||[]).forEach(r => { html += `<div class="rate-row" data-rate="${r.id}"><span class="tag">%</span><input type="text" value="${escapeHtml(r.name)}" data-rk="name" class="rate-field" style="min-width:120px;"><label class="switch"><input type="checkbox" class="rate-field" data-rk="manual" ${r.manual?'checked':''}><span class="track"></span>Manual</label>${r.manual?'':`<select data-rk="numId" class="rate-field">${opts}</select><b>÷</b><select data-rk="denId" class="rate-field">${opts}</select><label class="switch"><input type="checkbox" class="rate-field" data-rk="invert" ${r.invert?'checked':''}><span class="track"></span>Inverter</label>`}<span class="hint">alvo %</span><input type="number" value="${r.target}" data-rk="target" class="rate-field" style="width:56px;" title="Meta do consultor (%)"><span class="hint">loja %</span><input type="number" class="rate-field metaloja-inp" data-field="${r.id}" value="${getMetaLoja(r.id) ?? ''}" placeholder="—" style="width:56px;" title="Meta da loja (%)"><button class="iconbtn" data-del-rate="${r.id}">✕</button></div>`; });
+    (ind.rates||[]).forEach(r => { html += `<div class="rate-row" data-rate="${r.id}"><span class="tag">%</span><input type="text" value="${escapeHtml(r.name)}" data-rk="name" class="rate-field" style="min-width:120px;"><label class="switch"><input type="checkbox" class="rate-field" data-rk="lowerBetter" ${r.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><label class="switch"><input type="checkbox" class="rate-field" data-rk="manual" ${r.manual?'checked':''}><span class="track"></span>Manual</label>${r.manual?'':`<select data-rk="numId" class="rate-field">${opts}</select><b>÷</b><select data-rk="denId" class="rate-field">${opts}</select><label class="switch"><input type="checkbox" class="rate-field" data-rk="invert" ${r.invert?'checked':''}><span class="track"></span>Inverter</label>`}<span class="hint">alvo %</span><input type="number" value="${r.target}" data-rk="target" class="rate-field" style="width:56px;" title="Meta do consultor (%)"><span class="hint">loja %</span><input type="number" class="rate-field metaloja-inp" data-field="${r.id}" value="${getMetaLoja(r.id) ?? ''}" placeholder="—" style="width:56px;" title="Meta da loja (%)"><button class="iconbtn" data-del-rate="${r.id}">✕</button></div>`; });
     html += `</div></div>`;
     return html;
   }).join("") || '<div class="empty">Nenhum indicador.</div>';
@@ -1615,12 +1658,12 @@ function bindIndicatorEvents() {
     card.querySelectorAll("[data-meta]").forEach(f => f.addEventListener("change", () => { ind[f.dataset.meta]=Number(f.value)||0; save(); refreshMetaAdherence(ind.id); }));
     card.querySelectorAll(".metaloja-inp[data-field]").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-ind]").forEach(b => b.addEventListener("click", () => { if(confirm("Excluir este indicador?")){ state.indicators = state.indicators.filter(i=>i.id!==b.dataset.delInd); save(); renderIndicatorConfig(); } }));
-  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0 }); save(); renderIndicatorConfig(); }));
+  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".sub-row").forEach(row => { const ind = findIndBySub(row.dataset.sub); const s = ind && ind.subs.find(x=>x.id===row.dataset.sub); if(!s) return;
     row.querySelectorAll(".sub-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => { const k=f.dataset.sk; s[k]= f.type==="checkbox"? f.checked : (["metaDay","metaSat","metaSun","metaMonth"].includes(k)? Number(f.value)||0 : f.value); save(); renderIndicatorConfig(); }));
     row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-sub]").forEach(b => b.addEventListener("click", () => { const ind = findIndBySub(b.dataset.delSub); ind.subs = ind.subs.filter(s=>s.id!==b.dataset.delSub); save(); renderIndicatorConfig(); }));
-  list.querySelectorAll("[data-add-rate]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addRate); const f = allFields(); ind.rates = ind.rates||[]; ind.rates.push({ id:uid(), name:"Nova taxa %", numId:(f[0]&&f[0].id)||"", denId:(f[1]&&f[1].id)||(f[0]&&f[0].id)||"", invert:false, target:0, manual:false }); save(); renderIndicatorConfig(); }));
+  list.querySelectorAll("[data-add-rate]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addRate); const f = allFields(); ind.rates = ind.rates||[]; ind.rates.push({ id:uid(), name:"Nova taxa %", numId:(f[0]&&f[0].id)||"", denId:(f[1]&&f[1].id)||(f[0]&&f[0].id)||"", invert:false, target:0, manual:false, lowerBetter:false }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".rate-row").forEach(row => { const ind = findIndByRate(row.dataset.rate); const r = ind && ind.rates.find(x=>x.id===row.dataset.rate); if(!r) return;
     row.querySelectorAll(".rate-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => { const k=f.dataset.rk; r[k]= f.type==="checkbox"? f.checked : (k==="target"? Number(f.value)||0 : f.value); save(); renderIndicatorConfig(); }));
     row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
@@ -2075,7 +2118,7 @@ function init() {
   document.getElementById("autoWorkdays").onclick = () => { const md = monthData(); delete md.diasUteis; delete md.sabados; save(); renderConfig(); updateWorkdaysBadge(); toast("Recalculado automático"); };
   document.getElementById("addSeller").onclick = () => { const i = document.getElementById("newSeller"); const v = i.value.trim(); if(!v) return; const sid = uid(); state.sellers.push({ id: sid, name: v }); i.value=""; save(); renderConfig(); openEscala(sid); toast("Vendedor adicionado"); };
   document.getElementById("newSeller").addEventListener("keydown", e => { if(e.key==="Enter") document.getElementById("addSeller").click(); });
-  document.getElementById("addIndicator").onclick = () => { state.indicators.push({ id:uid(), name:"Novo indicador", abbr:"NOVO", color:randColor(), checkin:true, checkout:true, role:"", pctOnly:false, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, subs:[], rates:[] }); save(); renderIndicatorConfig(); toast("Indicador adicionado"); };
+  document.getElementById("addIndicator").onclick = () => { state.indicators.push({ id:uid(), name:"Novo indicador", abbr:"NOVO", color:randColor(), checkin:true, checkout:true, role:"", pctOnly:false, lowerBetter:false, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, subs:[], rates:[] }); save(); renderIndicatorConfig(); toast("Indicador adicionado"); };
   document.getElementById("exportJson").onclick = exportJson;
   document.getElementById("importJsonBtn").onclick = () => document.getElementById("importJson").click();
   document.getElementById("importJson").addEventListener("change", e => { if(e.target.files[0]) importJson(e.target.files[0]); });
