@@ -321,9 +321,9 @@
         <span><i style="background:var(--ok)"></i> <b>%</b> ritmo ≥95%</span>
         <span><i style="background:var(--warn)"></i> 50–94%</span>
         <span><i style="background:var(--danger)"></i> &lt;50%</span>
-        <span style="margin-left:8px; opacity:.85">· <b>Proj.</b> vs meta do mês: verde ≥100% · amarelo 70–99% · vermelho &lt;70%</span>
+        <span style="margin-left:8px; opacity:.85">· <b>Proj.</b> e <b>taxas</b> vs alvo: verde ≥100% · amarelo 70–99% · vermelho &lt;70%</span>
       </div>
-      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> neutro (gestor <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> ou check-out). <b>%</b> = Real ÷ <b>meta proporcional até ontem</b> (meta × dias completos ÷ dias na escala) — cor por ritmo, não pelo mês inteiro. <b>Proj.</b> = fechamento do mês vs meta total. Passe o mouse para detalhes (borda na cor do indicador).</div>
+      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> neutro · <b>%</b> ritmo vs meta proporcional (escala) · <b>Proj.</b> fechamento vs meta · <b>Subs</b> iguais ao pai · <b>Taxas/NPS</b> valor vs alvo (%). Tooltip na cor do bloco.</div>
     </div>
     <div class="panel">
       <div class="flex-between">
@@ -827,12 +827,51 @@ function matrizTipPct(real, meta, dailyFallback, opts) {
   ];
   return lines.join("\n");
 }
+function matrizRateRatio(valuePct, targetPct) {
+  if (valuePct == null || !targetPct) return null;
+  return (valuePct / 100) / (targetPct / 100);
+}
+function matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam) {
+  const rp = matrizRateRatio(rv, tgt);
+  const lines = [
+    "Taxa: " + rate.name,
+    rate.manual ? "Fonte: gestor (sistema) ⚙" : "Fonte: calculada (numerador ÷ denominador)",
+    "Valor: " + (rv == null ? "—" : fmt(rv, 0) + "%"),
+    "Alvo: " + (tgt ? tgt + "%" : "—"),
+  ];
+  if (rp != null) {
+    lines.push("Relação: " + Math.round(rp * 100) + "% do alvo · " + heatMatrizBandLabel(rp));
+    lines.push("Cor: verde ≥100% do alvo · amarelo 70–99% · vermelho &lt;70%");
+  }
+  if (!rate.manual && rv != null) {
+    let num = 0, den = 0;
+    ids.forEach(id => {
+      const a = matrizFieldValue(id, rate.numId, days, periodo);
+      const b = matrizFieldValue(id, rate.denId, days, periodo);
+      if (a != null) num += a;
+      if (b != null) den += b;
+    });
+    const numN = cfgById(rate.numId)?.name || "A";
+    const denN = cfgById(rate.denId)?.name || "B";
+    lines.push("Fórmula: " + numN + " ÷ " + denN + (rate.invert ? " (invertida)" : ""));
+    lines.push("Numerador: " + fmt(num) + " · Denominador: " + fmt(den));
+  }
+  return lines.join("\n");
+}
+function matrizRateCells(rate, ids, days, periodo, ind, isTeam) {
+  const rv = rateValueForMatriz(rate, ids, days, periodo);
+  const tgt = Number(rate.target) || 0;
+  const rp = matrizRateRatio(rv, tgt);
+  const tip = matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam);
+  return `<td style="border-left:3px solid ${ind.color}; color:${heatMatrizText(rp)}; font-weight:700;"${matrizTipData(tip, ind.color)}>${rv == null ? "—" : fmt(rv, 0) + "%"}</td><td class="muted">${tgt ? tgt + "%" : "—"}</td>`;
+}
 function matrizTipProj({ isTeam, sellerId, real, proj, metaProj, ind }) {
   if (proj == null || real == null) return "Sem dados para projetar";
   const m = currentMonth;
   const pp = metaProj > 0 ? proj / metaProj : null;
   let done, ahead, total;
   const lines = [];
+  if (ind && ind.name) lines.push((ind.sub ? "Sub: " : "") + ind.name);
   if (isTeam) {
     ({ done, ahead } = workdaysSplit(m));
     total = done + ahead;
@@ -1040,8 +1079,11 @@ function renderMatriz() {
   function colCount(ind) {
     const subs = visibleSubs(ind), rates = visibleRates(ind);
     if (ind.pctOnly) return Math.max(1, rates.length) * 2;
-    const exp = expandedBlocks[ind.id] !== false; let c = 2 + (matrizPeriodo === "mes" ? 1 : 0);
-    if (exp) c += subs.length * 1 + rates.length * 2; return c;
+    const exp = expandedBlocks[ind.id] !== false;
+    const subCols = 2 + (matrizPeriodo === "mes" ? 1 : 0);
+    let c = subCols;
+    if (exp) c += subs.length * subCols + rates.length * 2;
+    return c;
   }
   let head1 = '<tr><th class="name" rowspan="2">Vendedor</th>', head2 = "<tr>";
   inds.forEach(ind => {
@@ -1051,7 +1093,13 @@ function renderMatriz() {
     if (ind.pctOnly) { rates.forEach(r => head2 += `<th style="border-left:3px solid ${ind.color};">${r.name}</th><th>alvo</th>`); return; }
     head2 += `<th style="border-left:3px solid ${ind.color};">Real</th><th>%</th>`;
     if (matrizPeriodo === "mes") head2 += `<th>Proj.</th>`;
-    if (exp) { subs.forEach(s => head2 += `<th style="color:var(--accent-2);">${s.name}</th>`); rates.forEach(r => head2 += `<th style="color:var(--accent);">${r.name}</th><th>alvo</th>`); }
+    if (exp) {
+      subs.forEach(s => {
+        head2 += `<th style="color:var(--accent-2); border-left:1px solid var(--border-soft);">${s.name}</th><th style="color:var(--accent-2);">%</th>`;
+        if (matrizPeriodo === "mes") head2 += `<th style="color:var(--accent-2);">Proj.</th>`;
+      });
+      rates.forEach(r => head2 += `<th style="color:var(--accent);">${r.name}</th><th>alvo</th>`);
+    }
   });
   head1 += "</tr>"; head2 += "</tr>";
 
@@ -1070,7 +1118,7 @@ function renderMatriz() {
     const periodo = matrizPeriodo;
     let html = "";
     if (ind.pctOnly) {
-      rates.forEach(r => { const rv = rateValueForMatriz(r, ids, days, periodo); const tgt = Number(r.target)||0; const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null; html += `<td style="border-left:3px solid ${ind.color}; color:${heatText(rp)}; font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`; });
+      rates.forEach(r => { html += matrizRateCells(r, ids, days, periodo, ind, isTeam); });
       return html;
     }
     const { real, has, fromSystem } = matrizRealForSellers(ids, ind.id, days, periodo);
@@ -1091,17 +1139,37 @@ function renderMatriz() {
         real: has ? real : null,
         proj,
         metaProj: metaProj || 0,
-        ind,
+        ind: { ...ind, sub: false },
       });
       html += `<td style="color:${pp != null ? heatMatrizText(pp) : 'var(--text-dim)'}; font-weight:${pp != null ? 700 : 400};"${matrizTipData(projTip, ind.color)}>${proj == null ? "—" : fmt(proj)}</td>`;
     }
     if (expandedBlocks[ind.id] !== false) {
       subs.forEach(s => {
         const { real: sr, has: h, fromSystem: fs } = matrizRealForSellers(ids, s.id, days, periodo);
-        const subCls = fs ? "heat matriz-from-sys" : "";
-        html += `<td>${h ? (fs ? `<span class="${subCls}"${matrizTipData(matrizTipReal(true), ind.color)}>${fmt(sr)}</span>` : `<span${matrizTipData(matrizTipReal(false), ind.color)}>${fmt(sr)}</span>`) : '—'}</td>`;
+        const subMeta = metaForMatriz(s, ids, days, periodo, isTeam);
+        const subDailyFb = metaUsesDailyFallback(s, periodo);
+        const subOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days };
+        const subCls = fs ? "heat matriz-from-sys matriz-real" : "matriz-real";
+        html += `<td style="border-left:1px solid var(--border-soft);"><span class="${subCls}"${matrizTipData(matrizTipReal(fs), ind.color)}>${h ? fmt(sr) : "—"}</span></td>`;
+        html += pctCell(h ? sr : null, subMeta, subDailyFb, subOpts);
+        if (periodo === "mes") {
+          const subProj = h && sr != null
+            ? (isTeam ? matrizProjEquipe(sr) : matrizProjConsultor(ids, s.id))
+            : null;
+          const subMetaProj = matrizMetaForProj(s, ids, isTeam);
+          const subPp = subMetaProj && subProj != null ? subProj / subMetaProj : null;
+          const subProjTip = matrizTipProj({
+            isTeam,
+            sellerId: isTeam ? null : ids[0],
+            real: h ? sr : null,
+            proj: subProj,
+            metaProj: subMetaProj || 0,
+            ind: { ...s, sub: true },
+          });
+          html += `<td style="color:${subPp != null ? heatMatrizText(subPp) : "var(--text-dim)"}; font-weight:700;"${matrizTipData(subProjTip, ind.color)}>${subProj == null ? "—" : fmt(subProj)}</td>`;
+        }
       });
-      rates.forEach(r => { const rv = rateValueForMatriz(r, ids, days, periodo); const tgt = Number(r.target)||0; const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null; html += `<td style="color:${heatText(rp)}; font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`; });
+      rates.forEach(r => { html += matrizRateCells(r, ids, days, periodo, ind, isTeam); });
     }
     return html;
   }
