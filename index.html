@@ -306,7 +306,7 @@
         <span><i style="background:var(--ok)"></i> ≥90%</span>
         <span><i style="background:var(--info)"></i> ≥120%</span>
       </div>
-      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> (e tudo que deriva dele): valor do <b>gestor</b> <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> se lançado; senão soma do <b>check-out</b>. <b>%</b> = Real ÷ meta mensal; sem meta mensal, meta/dia × dias na escala. <b>Proj.</b> = média diária × dias que faltam + realizado, com o <b>mesmo Real</b>: CV na escala; equipe em úteis+sáb (sem dom). % Proj. equipe vs meta da loja. <b>Semana:</b> só KPIs do diário.</div>
+      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> (e tudo que deriva dele): valor do <b>gestor</b> <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> se lançado; senão soma do <b>check-out</b>. <b>%</b> = Real ÷ meta mensal; sem meta mensal, meta/dia × dias na escala. <b>Proj.</b> = <b>Real + (Real ÷ dias completos na escala) × dias restantes</b> (de hoje ao fim do mês na escala; <b>hoje não entra no ritmo</b>, só no que falta). Equipe: úteis+sáb. <b>Semana:</b> só KPIs do diário.</div>
     </div>
     <div class="panel">
       <div class="flex-between">
@@ -566,8 +566,42 @@ function sellerWorkedCount(sellerId,m=currentMonth){ let c=0; const n=daysInMont
 function sellerElapsedWorked(sellerId,m=currentMonth){ const n=daysInMonth(m); const last=(todayISO()===m)?new Date().getDate():n; let c=0; for(let d=1;d<=Math.min(last,n);d++) if(sellerWorks(sellerId,d,m)) c++; return Math.max(c,1); }
 function sellerWorksAnySunday(sellerId,m=currentMonth){ const n=daysInMonth(m); for(let d=1;d<=n;d++) if(isSunday(m,d)&&sellerWorks(sellerId,d,m)) return true; return false; }
 function weekHasWorkedSunday(sellerId,days,m=currentMonth){ return (days||[]).some(d=>isSunday(m,d)&&sellerWorks(sellerId,d,m)); }
-function sellerProjVal(sellerId,fieldId,m=currentMonth){ const real=accum(sellerId,fieldId,"real",monthDays(m),m)||0; return (real/sellerElapsedWorked(sellerId,m))*sellerWorkedCount(sellerId,m); }
-function teamProjVal(ids,fieldId,m=currentMonth){ let s=0; ids.forEach(id=>{ s+=sellerProjVal(id,fieldId,m); }); return s; }
+/** Dias na escala: done = antes de hoje; ahead = hoje até o fim (mês corrente). */
+function sellerWorkedSplit(sellerId, m = currentMonth) {
+  const n = daysInMonth(m); const isCurrent = todayISO() === m; const today = isCurrent ? new Date().getDate() : n + 1;
+  let done = 0, ahead = 0;
+  for (let d = 1; d <= n; d++) {
+    if (!sellerWorks(sellerId, d, m)) continue;
+    if (isCurrent && d >= today) ahead++; else done++;
+  }
+  return { done, ahead };
+}
+/** Dias úteis+sáb da loja: done = antes de hoje; ahead = hoje até o fim. */
+function workdaysSplit(m = currentMonth) {
+  const n = daysInMonth(m); const isCurrent = todayISO() === m; const today = isCurrent ? new Date().getDate() : n + 1;
+  let done = 0, ahead = 0;
+  for (let d = 1; d <= n; d++) {
+    if (isSunday(m, d)) continue;
+    if (isCurrent && d >= today) ahead++; else done++;
+  }
+  return { done, ahead };
+}
+/** Projeção: Real + (Real÷dias completos)×dias restantes na escala. Hoje não entra no ritmo (dia em curso). */
+function sellerProjFromReal(sellerId, fieldId, realVal, m = currentMonth) {
+  if (realVal == null || isNaN(realVal)) return null;
+  if (todayISO() !== m) return realVal;
+  const { done, ahead } = sellerWorkedSplit(sellerId, m);
+  if (done > 0) return realVal + (realVal / done) * ahead;
+  const elapsed = sellerElapsedWorked(sellerId, m), total = sellerWorkedCount(sellerId, m);
+  if (!elapsed || !total) return null;
+  return (realVal / elapsed) * total;
+}
+function sellerProjVal(sellerId, fieldId, m = currentMonth) {
+  const real = accum(sellerId, fieldId, "real", monthDays(m), m);
+  const p = sellerProjFromReal(sellerId, fieldId, real != null ? real : 0, m);
+  return p != null ? p : 0;
+}
+function teamProjVal(ids, fieldId, m = currentMonth) { let s = 0; ids.forEach(id => { s += sellerProjVal(id, fieldId, m); }); return s; }
 function elapsedWorkdays(m) {
   const n = daysInMonth(m); const sameMonth = todayISO() === m; const last = sameMonth ? new Date().getDate() : n;
   let c = 0; for (let d = 1; d <= Math.min(last, n); d++) if (!isSunday(m, d)) c++; return Math.max(c, 1);
@@ -755,13 +789,6 @@ function metaForMatriz(cfg, ids, days, periodo, isTeam) {
 function metaUsesDailyFallback(cfg, periodo) {
   return periodo === "mes" && !(metaMonthFor(cfg) > 0);
 }
-/** Projeção consultor (matriz): média na escala × dias do mês na escala (= real + média × dias restantes). */
-function sellerProjFromReal(sellerId, fieldId, realVal, m = currentMonth) {
-  if (realVal == null) return null;
-  const elapsed = sellerElapsedWorked(sellerId, m);
-  if (!elapsed) return null;
-  return (realVal / elapsed) * sellerWorkedCount(sellerId, m);
-}
 function matrizProjConsultor(ids, fieldId) {
   let sum = 0, has = false;
   ids.forEach(id => {
@@ -773,11 +800,14 @@ function matrizProjConsultor(ids, fieldId) {
   });
   return has ? sum : null;
 }
-/** Projeção equipe (matriz): ritmo em dias úteis + sábado (sem domingo). */
+/** Projeção equipe (matriz): mesmo raciocínio em úteis+sáb (sem dom). */
 function matrizProjEquipe(realVal, m = currentMonth) {
   if (realVal == null) return null;
+  if (todayISO() !== m) return realVal;
+  const { done, ahead } = workdaysSplit(m);
+  if (done > 0) return realVal + (realVal / done) * ahead;
   const elapsed = elapsedWorkdays(m), total = workdaysOf(m);
-  if (!elapsed) return null;
+  if (!elapsed || !total) return null;
   return (realVal / elapsed) * total;
 }
 /** Meta para cor/% da coluna Proj.: loja = meta da loja; CV = meta mensal ou estimativa meta/dia na escala. */
@@ -863,10 +893,10 @@ function renderMatriz() {
       const metaProj = matrizMetaForProj(ind, ids, isTeam);
       const pp = metaProj && proj != null ? proj / metaProj : null;
       const projTitle = isTeam
-        ? ' title="Projeção loja: mesmo Real da coluna; ritmo em dias úteis+sáb (sem dom). % vs meta da loja."'
+        ? ' title="Projeção loja: Real + ritmo nos dias úteis+sáb já completos × dias restantes (hoje ao fim; hoje fora do ritmo). % vs meta da loja."'
         : (fromSystem
-          ? ' title="Projeção na escala com o Real do gestor (sistema): média diária × dias restantes + realizado."'
-          : ' title="Projeção na escala com Real do check-out: ex. 50 em 10 dias → 5/dia; faltam 15 → +75 → 125 no mês."');
+          ? ' title="Projeção: Real do gestor + (Real÷dias completos na escala)×dias restantes (hoje até o fim). Hoje não entra no cálculo do ritmo."'
+          : ' title="Projeção: Real + (Real÷dias completos na escala)×dias restantes. Ex.: 2 trocas em 4 dias → 0,5/dia; faltam 22 na escala → 2+11=13."');
       html += `<td style="color:${pp != null ? heatText(pp) : 'var(--text-dim)'}; cursor:help; font-weight:${pp != null ? 700 : 400};"${projTitle}>${proj == null ? "—" : fmt(proj)}</td>`;
     }
     if (expandedBlocks[ind.id] !== false) {
@@ -1336,9 +1366,8 @@ function bindIndicatorEvents() {
 /* ============================================================ EXPORT */
 function exportCsv() {
   const sellers = orderedSellers(), inds = orderedIndicators(), days = monthDays();
-  const ewd = elapsedWorkdays(currentMonth), twd = workdaysOf(currentMonth);
   let rows = [["Vendedor","Indicador","Real mes","Meta Vend","Meta Loja","% (vs loja)","Projecao"].join(";")];
-  sellers.forEach(s => inds.forEach(ind => { if(ind.pctOnly) return; const real = accum(s.id, ind.id, "real", days) || 0; const mv = metaMonthFor(ind); const ml = getMetaLoja(ind.id); const tgt = ml!=null?ml:mv; const proj = (real/ewd)*twd; rows.push([s.name, ind.name, real, mv, ml!=null?ml:"", tgt?Math.round(real/tgt*100)+"%":"", Math.round(proj)].join(";")); }));
+  sellers.forEach(s => inds.forEach(ind => { if(ind.pctOnly) return; const real = accum(s.id, ind.id, "real", days) || 0; const mv = metaMonthFor(ind); const ml = getMetaLoja(ind.id); const tgt = ml!=null?ml:mv; const proj = sellerProjVal(s.id, ind.id); rows.push([s.name, ind.name, real, mv, ml!=null?ml:"", tgt?Math.round(real/tgt*100)+"%":"", Math.round(proj)].join(";")); }));
   download("gestao_"+currentMonth+".csv", rows.join("\n"), "text/csv"); toast("CSV exportado");
 }
 function exportJson() { download("backup_gestao_"+todayISO()+".json", JSON.stringify(state, null, 2), "application/json"); toast("Backup exportado"); }

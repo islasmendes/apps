@@ -21,7 +21,7 @@ Comparações automáticas:
 - **vs Meta** — realizado contra o alvo.
 - **Aderência** (check-in × check-out) — `real ÷ planejado`.
 - **Acuracidade %** (check-out × sistema) — se o relato bate com o sistema.
-- **Projeção** — `realizado acumulado ÷ dias úteis decorridos × dias úteis do mês`.
+- **Projeção** — `realizado + (realizado ÷ dias completos na escala) × dias restantes` (hoje não entra no ritmo; de hoje ao fim do mês na escala). Equipe: úteis+sáb.
 
 ## Funcionalidades
 
