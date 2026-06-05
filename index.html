@@ -839,10 +839,13 @@ function matrizTipPct(real, meta, dailyFallback, opts) {
     "Real: " + fmt(real),
     "Ritmo: " + (pace != null ? pctTxt(pace) + " do esperado · " + (lowerBetter ? heatMatrizBandLabel(pace) : heatMatrizPaceLabel(pace)) : "—"),
     "Acumulado mês: " + pctTxt(pctMes) + " da meta total",
-    lowerBetter
-      ? "Cor do %: verde = no/abaixo do esperado · amarelo acima · vermelho muito acima"
-      : "Cor do %: verde ≥95% do esperado · amarelo 50–94% · vermelho &lt;50%",
-  ];
+    lowerBetter && expected != null
+      ? "Alerta amarelo: real &gt; " + fmt(expected - matrizLowerWarnMargin(expected, false), expected % 1 ? 1 : 0) + " · vermelho se ≥ " + fmt(expected, expected % 1 ? 1 : 0)
+      : null,
+    lowerBetter && expected != null
+      ? "Situação: " + matrizLowerBetterLabel(real, expected, false)
+      : (lowerBetter ? "Cor do %: verde abaixo · amarelo perto do teto · vermelho estourou" : "Cor do %: verde ≥95% do esperado · amarelo 50–94% · vermelho &lt;50%"),
+  ].filter(Boolean);
   return lines.join("\n");
 }
 function cfgLowerBetter(cfg, parentInd) {
@@ -850,6 +853,33 @@ function cfgLowerBetter(cfg, parentInd) {
 }
 function rateLowerBetter(rate, ind) {
   return !!(rate && rate.lowerBetter) || !!(ind && ind.lowerBetter);
+}
+/** Faixa de alerta abaixo do teto (ex.: alvo 2,9% → amarelo acima de 2,4%). */
+const MATRIZ_LOWER_WARN_PP = 0.5;
+function matrizLowerWarnMargin(target, isPercent) {
+  if (isPercent) return MATRIZ_LOWER_WARN_PP;
+  return Math.max(0.5, target * 0.05);
+}
+function matrizLowerBetterBand(actual, target, margin) {
+  if (actual == null || target == null || !target) return null;
+  if (actual >= target) return "danger";
+  if (actual > target - margin) return "warn";
+  return "ok";
+}
+function heatMatrizLowerBetterColor(actual, target, isPercent) {
+  const m = matrizLowerWarnMargin(target, isPercent);
+  const band = matrizLowerBetterBand(actual, target, m);
+  const css = getComputedStyle(document.documentElement);
+  if (band === "danger") return css.getPropertyValue("--danger").trim();
+  if (band === "warn") return css.getPropertyValue("--warn").trim();
+  return css.getPropertyValue("--ok").trim();
+}
+function matrizLowerBetterLabel(actual, target, isPercent) {
+  const m = matrizLowerWarnMargin(target, isPercent);
+  const band = matrizLowerBetterBand(actual, target, m);
+  if (band === "danger") return "vermelho · estourou o alvo";
+  if (band === "warn") return "amarelo · alerta (até " + fmt(m, m % 1 ? 1 : 0) + " abaixo do alvo)";
+  return "verde · abaixo do alvo com folga";
 }
 /** Razão para cor: ≥1 verde (meta atingida). Se lowerBetter, inverte (valor menor que alvo = melhor). */
 function matrizPerfRatio(actual, target, lowerBetter) {
@@ -874,11 +904,15 @@ function matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam) {
     "Valor: " + (rv == null ? "—" : fmt(rv, 0) + "%"),
     "Alvo: " + (tgt ? tgt + "%" : "—"),
   ];
-  if (rp != null) {
-    lines.push("Relação: " + Math.round(rp * 100) + "% do alvo · " + heatMatrizBandLabel(rp));
-    lines.push(lb
-      ? "Cor: verde = no alvo ou abaixo · amarelo perto acima · vermelho muito acima"
-      : "Cor: verde ≥100% do alvo · amarelo 70–99% · vermelho &lt;70%");
+  if (rv != null && tgt) {
+    if (lb) {
+      const m = matrizLowerWarnMargin(tgt, true);
+      lines.push("Alerta amarelo: acima de " + fmt(tgt - m, 1) + "% (até " + m + " p.p. abaixo do alvo)");
+      lines.push("Situação: " + matrizLowerBetterLabel(rv, tgt, true));
+    } else {
+      lines.push("Relação: " + Math.round((rp || 0) * 100) + "% do alvo · " + heatMatrizBandLabel(rp));
+      lines.push("Cor: verde ≥100% do alvo · amarelo 70–99% · vermelho &lt;70%");
+    }
   }
   if (!rate.manual && rv != null) {
     let num = 0, den = 0;
@@ -901,7 +935,8 @@ function matrizRateCells(rate, ids, days, periodo, ind, isTeam) {
   const lb = rateLowerBetter(rate, ind);
   const rp = matrizRateRatio(rv, tgt, lb);
   const tip = matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam);
-  return `<td style="border-left:3px solid ${ind.color}; color:${heatMatrizText(rp)}; font-weight:700;"${matrizTipData(tip, ind.color)}>${rv == null ? "—" : fmt(rv, 0) + "%"}</td><td class="muted">${tgt ? tgt + "%" : "—"}</td>`;
+  const color = lb && rv != null && tgt ? heatMatrizLowerBetterColor(rv, tgt, true) : heatMatrizText(rp);
+  return `<td style="border-left:3px solid ${ind.color}; color:${color}; font-weight:700;"${matrizTipData(tip, ind.color)}>${rv == null ? "—" : fmt(rv, 0) + "%"}</td><td class="muted">${tgt ? tgt + "%" : "—"}</td>`;
 }
 function matrizTipProj({ isTeam, sellerId, real, proj, metaProj, ind }) {
   if (proj == null || real == null) return "Sem dados para projetar";
@@ -928,9 +963,15 @@ function matrizTipProj({ isTeam, sellerId, real, proj, metaProj, ind }) {
   }
   const ritmo = done > 0 ? real / done : null;
   lines.push("Real: " + fmt(real) + (ritmo != null ? " · ritmo " + fmt(ritmo, ritmo % 1 ? 1 : 0) + "/dia" : ""));
-  lines.push(pp != null
-    ? "Projeção: " + fmt(proj) + " (" + Math.round(pp * 100) + "% da meta · " + heatMatrizBandLabel(pp) + ")"
-    : "Projeção: " + fmt(proj));
+  if (lb && metaProj > 0) {
+    lines.push("Projeção: " + fmt(proj) + " · " + matrizLowerBetterLabel(proj, metaProj, false));
+    const m = matrizLowerWarnMargin(metaProj, false);
+    lines.push("Alerta amarelo se proj. &gt; " + fmt(metaProj - m, metaProj % 1 ? 1 : 0) + " · vermelho se ≥ meta");
+  } else {
+    lines.push(pp != null
+      ? "Projeção: " + fmt(proj) + " (" + Math.round(pp * 100) + "% da meta · " + heatMatrizBandLabel(pp) + ")"
+      : "Projeção: " + fmt(proj));
+  }
   if (done > 0) lines.push(fmt(real) + " + (" + fmt(real) + "÷" + done + ")×" + ahead + " = " + fmt(proj));
   else lines.push("Sem dia completo na escala — ritmo provisório");
   return lines.join("\n");
@@ -1147,13 +1188,22 @@ function renderMatriz() {
     const { sellerId, isTeam, indColor, periodDays, lowerBetter } = cellOpts || {};
     if (!meta || meta <= 0) return `<td class="muted" style="font-weight:700;">—</td>`;
     if (real == null) return `<td class="muted" style="font-weight:700;">—</td>`;
+    const expected = matrizExpectedToDate(meta, sellerId, isTeam, periodDays);
     const pace = matrizPaceRatio(real, meta, sellerId, isTeam, periodDays, lowerBetter);
     const display = pace != null ? pace : (lowerBetter && real > 0 ? meta / real : real / meta);
-    const w = Math.min(100, (display || 0) * 100);
     const tip = matrizTipPct(real, meta, dailyFallback, { sellerId, isTeam, periodDays, indColor, lowerBetter });
-    const heatFn = lowerBetter ? heatMatrizText : heatMatrizPaceText;
-    const heatBg = lowerBetter ? heatVsMeta : heatMatrizPace;
-    return `<td style="color:${heatFn(pace)}; font-weight:700;"${matrizTipData(tip, indColor)}>${pctTxt(display)}<div class="barwrap"><i style="width:${w}%; background:${heatBg(pace)}"></i></div></td>`;
+    let color, barColor, w;
+    if (lowerBetter && expected != null) {
+      color = heatMatrizLowerBetterColor(real, expected, false);
+      barColor = color;
+      const band = matrizLowerBetterBand(real, expected, matrizLowerWarnMargin(expected, false));
+      w = band === "ok" ? 100 : band === "warn" ? 55 : 28;
+    } else {
+      color = heatMatrizPaceText(pace);
+      barColor = heatMatrizPace(pace);
+      w = Math.min(100, (display || 0) * 100);
+    }
+    return `<td style="color:${color}; font-weight:700;"${matrizTipData(tip, indColor)}>${pctTxt(display)}<div class="barwrap"><i style="width:${w}%; background:${barColor}"></i></div></td>`;
   }
   function blockCells(ids, ind, isTeam) {
     const subs = visibleSubs(ind), rates = visibleRates(ind);
@@ -1174,7 +1224,8 @@ function renderMatriz() {
         ? (isTeam ? matrizProjEquipe(real) : matrizProjConsultor(ids, ind.id))
         : null;
       const metaProj = matrizMetaForProj(ind, ids, isTeam);
-      const pp = metaProj && proj != null ? matrizProjPerfRatio(proj, metaProj, cfgLowerBetter(ind)) : null;
+      const lbProj = cfgLowerBetter(ind);
+      const pp = metaProj && proj != null ? matrizProjPerfRatio(proj, metaProj, lbProj) : null;
       const projTip = matrizTipProj({
         isTeam,
         sellerId: isTeam ? null : ids[0],
@@ -1183,7 +1234,10 @@ function renderMatriz() {
         metaProj: metaProj || 0,
         ind: { ...ind, sub: false, lowerBetter: ind.lowerBetter },
       });
-      html += `<td style="color:${pp != null ? heatMatrizText(pp) : 'var(--text-dim)'}; font-weight:${pp != null ? 700 : 400};"${matrizTipData(projTip, ind.color)}>${proj == null ? "—" : fmt(proj)}</td>`;
+      const projColor = lbProj && metaProj && proj != null
+        ? heatMatrizLowerBetterColor(proj, metaProj, false)
+        : (pp != null ? heatMatrizText(pp) : "var(--text-dim)");
+      html += `<td style="color:${projColor}; font-weight:${proj != null ? 700 : 400};"${matrizTipData(projTip, ind.color)}>${proj == null ? "—" : fmt(proj)}</td>`;
     }
     if (expandedBlocks[ind.id] !== false) {
       subs.forEach(s => {
@@ -1199,7 +1253,8 @@ function renderMatriz() {
             ? (isTeam ? matrizProjEquipe(sr) : matrizProjConsultor(ids, s.id))
             : null;
           const subMetaProj = matrizMetaForProj(s, ids, isTeam);
-          const subPp = subMetaProj && subProj != null ? matrizProjPerfRatio(subProj, subMetaProj, cfgLowerBetter(s)) : null;
+          const lbSub = cfgLowerBetter(s);
+          const subPp = subMetaProj && subProj != null ? matrizProjPerfRatio(subProj, subMetaProj, lbSub) : null;
           const subProjTip = matrizTipProj({
             isTeam,
             sellerId: isTeam ? null : ids[0],
@@ -1208,7 +1263,10 @@ function renderMatriz() {
             metaProj: subMetaProj || 0,
             ind: { ...s, sub: true, lowerBetter: s.lowerBetter },
           });
-          html += `<td style="color:${subPp != null ? heatMatrizText(subPp) : "var(--text-dim)"}; font-weight:700;"${matrizTipData(subProjTip, ind.color)}>${subProj == null ? "—" : fmt(subProj)}</td>`;
+          const subProjColor = lbSub && subMetaProj && subProj != null
+            ? heatMatrizLowerBetterColor(subProj, subMetaProj, false)
+            : (subPp != null ? heatMatrizText(subPp) : "var(--text-dim)");
+          html += `<td style="color:${subProjColor}; font-weight:700;"${matrizTipData(subProjTip, ind.color)}>${subProj == null ? "—" : fmt(subProj)}</td>`;
         }
       });
       rates.forEach(r => { html += matrizRateCells(r, ids, days, periodo, ind, isTeam); });
