@@ -108,6 +108,20 @@
   .heat.matriz-from-sys { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-2) 55%, transparent); }
   .heat.matriz-from-sys::after { content: "⚙"; font-size: 9px; margin-left: 3px; opacity: .75; vertical-align: super; }
   .matriz-real { border-radius: 7px; font-weight: 700; padding: 4px 7px; display: inline-block; min-width: 34px; background: color-mix(in srgb, var(--text) 6%, var(--cell)); color: var(--text); border: 1px solid var(--border-soft); }
+  #matrizTip.matriz-tip {
+    position: fixed; z-index: 10000; pointer-events: none; padding: 11px 15px;
+    font-size: 12px; line-height: 1.55; font-weight: 500; white-space: pre-line;
+    width: max-content; max-width: min(96vw, 520px);
+    background: color-mix(in srgb, var(--panel) 92%, #000);
+    color: var(--text); border-radius: 10px;
+    border: 1px solid var(--matriz-tip-neon, var(--accent));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--matriz-tip-neon, var(--accent)) 45%, transparent),
+      0 0 18px color-mix(in srgb, var(--matriz-tip-neon, var(--accent)) 38%, transparent),
+      0 0 42px color-mix(in srgb, var(--matriz-tip-neon, var(--accent)) 12%, transparent),
+      0 14px 36px rgba(0, 0, 0, 0.5);
+  }
+  #matrizTip.matriz-tip[hidden] { display: none !important; }
+  [data-matriz-tip] { cursor: help; }
   .block-head { font-weight: 800; letter-spacing: .3px; cursor: pointer; user-select: none; }
   .block-toggle { font-size: 10px; opacity: .7; margin-right: 4px; }
   .barwrap { height: 4px; background: var(--border-soft); border-radius: 3px; margin-top: 4px; overflow: hidden; }
@@ -301,13 +315,15 @@
       </div>
       <div id="matrizSemanaPick" style="display:none; margin:10px 0;"></div>
       <div class="table-wrap" style="margin-top:12px;"><table id="matrizTable"></table></div>
+      <div id="matrizTip" class="matriz-tip" hidden role="tooltip"></div>
       <div class="legend">
-        <span><i style="background:var(--text-dim)"></i> <b>Real</b> neutro (só o número)</span>
-        <span><i style="background:var(--ok)"></i> % / Proj. ≥100% meta</span>
-        <span><i style="background:var(--warn)"></i> 70–99%</span>
-        <span><i style="background:var(--danger)"></i> &lt;70%</span>
+        <span><i style="background:var(--text-dim)"></i> <b>Real</b> neutro</span>
+        <span><i style="background:var(--ok)"></i> <b>%</b> ritmo ≥95%</span>
+        <span><i style="background:var(--warn)"></i> 50–94%</span>
+        <span><i style="background:var(--danger)"></i> &lt;50%</span>
+        <span style="margin-left:8px; opacity:.85">· <b>Proj.</b> vs meta do mês: verde ≥100% · amarelo 70–99% · vermelho &lt;70%</span>
       </div>
-      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> = quantidade (sem cor de meta; gestor <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> ou check-out). <b>%</b> = Real ÷ meta do período <span style="color:var(--text-faint)">(situação de hoje)</span>. <b>Proj.</b> = fechamento estimado do mês <span style="color:var(--text-faint)">(mesma regra de cor da %, mas sobre a projeção ÷ meta)</span>. Verde ≥ meta · amarelo até 30% abaixo · vermelho abaixo disso. Ritmo: Real + (Real÷dias completos na escala)×restantes (D-1; folga 📅 não conta no ritmo).</div>
+      <div class="hint" style="margin-top:8px; line-height:1.6;"><b>Real</b> neutro (gestor <span class="heat matriz-from-sys" style="padding:1px 5px">⚙</span> ou check-out). <b>%</b> = Real ÷ <b>meta proporcional até ontem</b> (meta × dias completos ÷ dias na escala) — cor por ritmo, não pelo mês inteiro. <b>Proj.</b> = fechamento do mês vs meta total. Passe o mouse para detalhes (borda na cor do indicador).</div>
     </div>
     <div class="panel">
       <div class="flex-between">
@@ -687,9 +703,97 @@ function heatMatrizBandLabel(ratio) {
   if (ratio >= 0.7) return "amarelo";
   return "vermelho";
 }
-function matrizTipAttr(text) {
-  const t = String(text).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-  return ` title="${t}"`;
+/** % na matriz: real ÷ meta esperada até ontem (proporcional à escala). */
+function heatMatrizPace(ratio) {
+  const css = getComputedStyle(document.documentElement);
+  if (ratio == null || isNaN(ratio)) return null;
+  if (ratio >= 0.95) return css.getPropertyValue("--ok").trim();
+  if (ratio >= 0.5) return css.getPropertyValue("--warn").trim();
+  return css.getPropertyValue("--danger").trim();
+}
+function heatMatrizPaceText(ratio) { const c = heatMatrizPace(ratio); return c || "var(--text-faint)"; }
+function heatMatrizPaceLabel(ratio) {
+  if (ratio == null || isNaN(ratio)) return "—";
+  if (ratio >= 0.95) return "verde";
+  if (ratio >= 0.5) return "amarelo";
+  return "vermelho";
+}
+function matrizScaleSplit(sellerId, isTeam, periodDays, m = currentMonth) {
+  const isCurrent = todayISO() === m;
+  const today = isCurrent ? new Date().getDate() : daysInMonth(m) + 1;
+  const days = periodDays || monthDays(m);
+  let done = 0, ahead = 0;
+  const walk = (worksFn) => {
+    days.forEach(d => {
+      if (!worksFn(d)) return;
+      if (isCurrent && d >= today) ahead++;
+      else done++;
+    });
+  };
+  if (isTeam) walk(d => !isSunday(m, d));
+  else walk(d => sellerWorks(sellerId, d, m));
+  return { done, ahead, total: done + ahead };
+}
+function matrizExpectedToDate(meta, sellerId, isTeam, periodDays, m = currentMonth) {
+  if (!meta || meta <= 0) return null;
+  const { done, total } = matrizScaleSplit(sellerId, isTeam, periodDays, m);
+  if (!total || done <= 0) return null;
+  return meta * (done / total);
+}
+function matrizPaceRatio(real, meta, sellerId, isTeam, periodDays, m = currentMonth) {
+  if (real == null) return null;
+  const exp = matrizExpectedToDate(meta, sellerId, isTeam, periodDays, m);
+  if (exp == null || exp <= 0) return real > 0 ? 2 : 0;
+  return real / exp;
+}
+function matrizTipEncode(text) {
+  return String(text).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/\n/g, "&#10;");
+}
+function matrizTipData(text, color) {
+  return ` data-matriz-tip="${matrizTipEncode(text)}" data-matriz-tip-color="${escapeHtml(color || "#888")}"`;
+}
+let matrizTipEl = null;
+function ensureMatrizTip() {
+  if (!matrizTipEl) matrizTipEl = document.getElementById("matrizTip");
+  return matrizTipEl;
+}
+function moveMatrizTip(e) {
+  const tip = ensureMatrizTip();
+  if (!tip || tip.hidden) return;
+  const pad = 14;
+  let x = e.clientX + pad, y = e.clientY + pad;
+  const r = tip.getBoundingClientRect();
+  if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - pad;
+  if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - pad;
+  tip.style.left = Math.max(8, x) + "px";
+  tip.style.top = Math.max(8, y) + "px";
+}
+function showMatrizTip(e) {
+  const el = e.currentTarget;
+  const tip = ensureMatrizTip();
+  if (!tip) return;
+  const raw = el.getAttribute("data-matriz-tip");
+  if (!raw) return;
+  const color = el.getAttribute("data-matriz-tip-color") || "#888";
+  tip.textContent = raw.replace(/&#10;/g, "\n");
+  tip.style.setProperty("--matriz-tip-neon", color);
+  tip.hidden = false;
+  moveMatrizTip(e);
+}
+function hideMatrizTip() {
+  const tip = ensureMatrizTip();
+  if (tip) tip.hidden = true;
+}
+function bindMatrizTips(root) {
+  const tip = ensureMatrizTip();
+  if (!tip) return;
+  root.querySelectorAll("[data-matriz-tip]").forEach(el => {
+    if (el.dataset.matrizTipBound) return;
+    el.dataset.matrizTipBound = "1";
+    el.addEventListener("mouseenter", showMatrizTip);
+    el.addEventListener("mouseleave", hideMatrizTip);
+    el.addEventListener("mousemove", moveMatrizTip);
+  });
 }
 /** Folgas = dias 1…ontem em que o CV não está na escala (📅). */
 function sellerFolgasPast(sellerId, m = currentMonth) {
@@ -704,15 +808,22 @@ function matrizTipReal(fromSystem) {
     ? "Real: gestor (sistema) ⚙\nCor neutra — leia % (hoje) e Proj. (fechamento)"
     : "Real: soma do check-out\nCor neutra — leia % (hoje) e Proj. (fechamento)";
 }
-function matrizTipPct(real, meta, dailyFallback) {
+function matrizTipPct(real, meta, dailyFallback, opts) {
   if (!meta || meta <= 0) return "Cadastre meta em KPIs";
   if (real == null) return "Sem realizado";
-  const pct = real / meta;
+  const { sellerId, isTeam, periodDays, indColor } = opts || {};
+  const { done, total } = matrizScaleSplit(sellerId, isTeam, periodDays);
+  const expected = matrizExpectedToDate(meta, sellerId, isTeam, periodDays);
+  const pace = matrizPaceRatio(real, meta, sellerId, isTeam, periodDays);
+  const pctMes = real / meta;
   const lines = [
-    (dailyFallback ? "Meta: meta/dia × dias na escala" : "Meta do período: " + fmt(meta)),
+    dailyFallback ? "Meta período: meta/dia × dias na escala" : "Meta do período: " + fmt(meta),
+    "Escala: " + total + " dias · " + done + " completos (até ontem)",
+    "Deveria até ontem: " + (expected != null ? fmt(expected, expected % 1 ? 1 : 0) : "—") + " (" + fmt(meta) + "×" + done + "÷" + total + ")",
     "Real: " + fmt(real),
-    "Hoje: " + pctTxt(pct) + " da meta · " + heatMatrizBandLabel(pct),
-    "Verde ≥100% · amarelo 70–99% · vermelho &lt;70%",
+    "Ritmo: " + (pace != null ? pctTxt(pace) + " do esperado · " + heatMatrizPaceLabel(pace) : "—"),
+    "Acumulado mês: " + pctTxt(pctMes) + " da meta total",
+    "Cor do %: verde ≥95% do esperado · amarelo 50–94% · vermelho &lt;50%",
   ];
   return lines.join("\n");
 }
@@ -944,12 +1055,15 @@ function renderMatriz() {
   });
   head1 += "</tr>"; head2 += "</tr>";
 
-  function pctCell(real, meta, dailyFallback) {
-    if (!meta || meta <= 0) return `<td class="muted" style="font-weight:700; cursor:help;" title="Cadastre meta mensal ou meta/dia em KPIs">—</td>`;
+  function pctCell(real, meta, dailyFallback, cellOpts) {
+    const { sellerId, isTeam, indColor, periodDays } = cellOpts || {};
+    if (!meta || meta <= 0) return `<td class="muted" style="font-weight:700;">—</td>`;
     if (real == null) return `<td class="muted" style="font-weight:700;">—</td>`;
-    const pct = real / meta;
-    const w = Math.min(100, pct * 100);
-    return `<td style="color:${heatMatrizText(pct)}; font-weight:700; cursor:help;"${matrizTipAttr(matrizTipPct(real, meta, dailyFallback))}>${pctTxt(pct)}<div class="barwrap"><i style="width:${w}%; background:${heatVsMeta(pct)}"></i></div></td>`;
+    const pace = matrizPaceRatio(real, meta, sellerId, isTeam, periodDays);
+    const display = pace != null ? pace : real / meta;
+    const w = Math.min(100, (display || 0) * 100);
+    const tip = matrizTipPct(real, meta, dailyFallback, { sellerId, isTeam, periodDays, indColor });
+    return `<td style="color:${heatMatrizPaceText(pace)}; font-weight:700;"${matrizTipData(tip, indColor)}>${pctTxt(display)}<div class="barwrap"><i style="width:${w}%; background:${heatMatrizPace(pace)}"></i></div></td>`;
   }
   function blockCells(ids, ind, isTeam) {
     const subs = visibleSubs(ind), rates = visibleRates(ind);
@@ -963,7 +1077,8 @@ function renderMatriz() {
     const meta = metaForMatriz(ind, ids, days, periodo, isTeam);
     const dailyFb = metaUsesDailyFallback(ind, periodo);
     const realCls = fromSystem ? "heat matriz-from-sys matriz-real" : "matriz-real";
-    html += `<td style="border-left:3px solid ${ind.color};"><span class="${realCls}"${matrizTipAttr(matrizTipReal(fromSystem))}>${has?fmt(real):'—'}</span></td>` + pctCell(has ? real : null, meta, dailyFb);
+    const cellOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days };
+    html += `<td style="border-left:3px solid ${ind.color};"><span class="${realCls}"${matrizTipData(matrizTipReal(fromSystem), ind.color)}>${has?fmt(real):'—'}</span></td>` + pctCell(has ? real : null, meta, dailyFb, cellOpts);
     if (periodo === "mes") {
       const proj = has && real != null
         ? (isTeam ? matrizProjEquipe(real) : matrizProjConsultor(ids, ind.id))
@@ -978,13 +1093,13 @@ function renderMatriz() {
         metaProj: metaProj || 0,
         ind,
       });
-      html += `<td style="color:${pp != null ? heatMatrizText(pp) : 'var(--text-dim)'}; cursor:help; font-weight:${pp != null ? 700 : 400};"${matrizTipAttr(projTip)}>${proj == null ? "—" : fmt(proj)}</td>`;
+      html += `<td style="color:${pp != null ? heatMatrizText(pp) : 'var(--text-dim)'}; font-weight:${pp != null ? 700 : 400};"${matrizTipData(projTip, ind.color)}>${proj == null ? "—" : fmt(proj)}</td>`;
     }
     if (expandedBlocks[ind.id] !== false) {
       subs.forEach(s => {
         const { real: sr, has: h, fromSystem: fs } = matrizRealForSellers(ids, s.id, days, periodo);
         const subCls = fs ? "heat matriz-from-sys" : "";
-        html += `<td>${h ? (fs ? `<span class="${subCls}"${matrizTipAttr(matrizTipReal(true))}>${fmt(sr)}</span>` : `<span${matrizTipAttr(matrizTipReal(false))}>${fmt(sr)}</span>`) : '—'}</td>`;
+        html += `<td>${h ? (fs ? `<span class="${subCls}"${matrizTipData(matrizTipReal(true), ind.color)}>${fmt(sr)}</span>` : `<span${matrizTipData(matrizTipReal(false), ind.color)}>${fmt(sr)}</span>`) : '—'}</td>`;
       });
       rates.forEach(r => { const rv = rateValueForMatriz(r, ids, days, periodo); const tgt = Number(r.target)||0; const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null; html += `<td style="color:${heatText(rp)}; font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td class="muted">${tgt?tgt+'%':'—'}</td>`; });
     }
@@ -1002,6 +1117,7 @@ function renderMatriz() {
   inds.forEach(ind => body += blockCells(allIds, ind, true));
   body += "</tr>";
   tbl.innerHTML = "<thead>"+head1+head2+"</thead><tbody>"+body+"</tbody>";
+  bindMatrizTips(tbl);
 
   tbl.querySelectorAll('[data-block]').forEach(el => { el.onclick = (e) => { if (e.target.classList.contains('draghandle')) return; const ind = state.indicators.find(i=>i.id===el.dataset.block); if (ind && ind.pctOnly) return; const id = el.dataset.block; expandedBlocks[id] = expandedBlocks[id] === false ? true : false; save(); renderMatriz(); }; });
   if (!moveOn) tbl.querySelectorAll('tbody tr[data-seller] td.name.seller-link').forEach(td => { td.onclick = (e) => { if (e.target.classList.contains('draghandle')) return; const sid = td.closest('tr').dataset.seller; if (sid) openLancamentoModal(sid); }; });
