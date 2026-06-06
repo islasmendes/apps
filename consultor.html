@@ -144,6 +144,7 @@
   }
   .lock-tag.gestor { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
   .lock-tag.consultor { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .lock-tag.soon { background: color-mix(in srgb, var(--warn) 22%, transparent); color: color-mix(in srgb, var(--warn) 85%, var(--text)); }
   .toast {
     position: fixed; bottom: calc(16px + var(--safe-b)); left: 50%; transform: translateX(-50%) translateY(80px);
     background: var(--panel-2); border: 1px solid var(--border); color: var(--text); padding: 11px 18px;
@@ -324,15 +325,19 @@ function cellLockedForConsultor(cell, key, day, month) {
 function cellIsMine(cell, key) {
   return hasCellValue(cell, key) && cell[key + "By"] === "consultor";
 }
+function checkoutSoonLabel() {
+  return '<span class="lock-tag soon">⏳ Libera em breve — veja o cronômetro</span>';
+}
 function lockLabel(cell, key, day, month) {
-  if (key === "real" && !checkoutWindowOpen() && !hasCellValue(cell, key)) {
-    return '<span class="lock-tag">🔒 16:30</span>';
+  if (key === "real" && !checkoutWindowOpen()) {
+    if (cell[key + "By"] === "gestor") return '<span class="lock-tag gestor">👔 Gestor</span>';
+    return checkoutSoonLabel();
   }
   if (!hasCellValue(cell, key)) return "";
   const by = cell[key + "By"];
   if (by === "gestor") return '<span class="lock-tag gestor">👔 Gestor</span>';
   if (by === "consultor") {
-    if (cellLockedForConsultor(cell, key, day, month)) return '<span class="lock-tag">🔒 Dia encerrado</span>';
+    if (!isViewingToday(day, month)) return '<span class="lock-tag">🔒 Dia encerrado</span>';
     return '<span class="lock-tag consultor">✎ Você · editável</span>';
   }
   return '<span class="lock-tag consultor">✎ Editável</span>';
@@ -461,14 +466,17 @@ async function saveField(inp) {
   const ref = fbDb.ref(path);
   try {
     if (key === "real" && !checkoutWindowOpen()) {
-      toast("Check-out libera às 16:30", true);
+      toast("Check-out libera em breve — veja o cronômetro", true);
       renderFields();
       return;
     }
     const snap = await ref.once("value");
     const cell = snap.val() || {};
     if (cellLockedForConsultor(cell, key, day, month) && hasCellValue(cell, key)) {
-      toast(cell[key + "By"] === "gestor" ? "Preenchido pelo gestor — não pode alterar" : "Dia encerrado", true);
+      let msg = "Dia encerrado";
+      if (cell[key + "By"] === "gestor") msg = "Preenchido pelo gestor — não pode alterar";
+      else if (key === "real" && !checkoutWindowOpen()) msg = "Check-out libera em breve — veja o cronômetro";
+      toast(msg, true);
       inp.value = cell[key] ?? "";
       renderFields();
       return;
