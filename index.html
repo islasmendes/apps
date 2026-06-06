@@ -558,7 +558,7 @@
   <div class="auth-card">
     <div class="auth-step active" id="authStepSenha">
       <h3>🔐 Acesso seguro</h3>
-      <div class="sub">Digite a <b>senha mestra</b> (compartilhada pelo administrador) ou a <b>senha individual da loja</b> (gerada na primeira configuração).</div>
+      <div class="sub">Loja <b>já configurada</b>: use a <b>senha individual</b> da loja. <b>Primeira vez</b> da loja: use a <b>senha mestra</b> (admin). Divisional (RSCEN): só senha mestra.</div>
       <div class="auth-pass-wrap">
         <input type="password" id="authPassInput" placeholder="Senha de acesso" autocomplete="current-password">
         <button type="button" class="auth-toggle-pass" id="authTogglePass" title="Mostrar senha">👁</button>
@@ -2779,19 +2779,30 @@ async function submitAuthLoja() {
   const lojaAuth = okDiv ? null : await fetchLojaAuth(code);
   const masterOk = authMasterCache ? await verifyPass(pass, authMasterCache) : false;
   const lojaOk = lojaAuth ? await verifyPass(pass, lojaAuth) : false;
-  if (okDiv && !masterOk) {
-    await authDelayFail();
-    err.textContent = "Modo Divisional exige a senha mestra.";
-    return;
-  }
-  if (!masterOk && !lojaOk) {
-    await authDelayFail();
-    err.textContent = "Senha incorreta para esta loja.";
-    return;
-  }
   err.textContent = "";
-  if (okDiv || lojaOk || (masterOk && lojaAuth)) {
+  if (okDiv) {
+    if (!masterOk) {
+      await authDelayFail();
+      err.textContent = "Modo Divisional exige a senha mestra.";
+      return;
+    }
     finishAuthEnter(code);
+    return;
+  }
+  if (lojaAuth) {
+    if (!lojaOk) {
+      await authDelayFail();
+      err.textContent = masterOk
+        ? "Esta loja já tem senha individual. Use a senha da loja — a mestra só serve na 1ª configuração."
+        : "Senha individual incorreta para " + code + ".";
+      return;
+    }
+    finishAuthEnter(code);
+    return;
+  }
+  if (!masterOk) {
+    await authDelayFail();
+    err.textContent = "Loja ainda não configurada. Use a senha mestra para criar o acesso.";
     return;
   }
   if (masterOk && !lojaAuth && okLoja) {
@@ -2858,11 +2869,37 @@ async function adminChangeMasterPassword(cur, neu) {
   if (neu.length < 10) throw new Error("Mínimo 10 caracteres");
   await saveMasterPassword(neu);
 }
-async function adminRegenerateLojaPassword(code) {
-  if (!isDeviceAdmin()) throw new Error("Sem permissão");
+function showAuthRevealModal(code, newPass, onDone) {
+  pendingRevealPassword = newPass;
+  document.getElementById("authRevealLojaName").textContent = code;
+  document.getElementById("authRevealPass").textContent = newPass;
+  showAuthStep("reveal");
+  document.getElementById("authGate").classList.add("show");
+  const doneBtn = document.getElementById("authRevealDone");
+  doneBtn.onclick = () => {
+    doneBtn.onclick = submitAuthReveal;
+    document.getElementById("authGate").classList.remove("show");
+    pendingRevealPassword = "";
+    if (onDone) onDone();
+  };
+}
+async function regenerateLojaPassword(code, opts) {
+  const lojaAuth = await fetchLojaAuth(code);
+  if (!lojaAuth) throw new Error("Esta loja ainda não tem senha individual.");
+  if (opts && opts.requireCurrent) {
+    if (!(await verifyPass(opts.currentPass, lojaAuth))) throw new Error("Senha atual incorreta.");
+  } else if (!isDeviceAdmin()) {
+    throw new Error("Sem permissão de administrador.");
+  }
   const newPass = generateSecurePassword(24);
   await saveLojaPassword(code, newPass);
   return newPass;
+}
+async function adminRegenerateLojaPassword(code) {
+  return regenerateLojaPassword(code, {});
+}
+async function gestorResetLojaPassword(code, currentPass) {
+  return regenerateLojaPassword(code, { requireCurrent: true, currentPass });
 }
 
 /* ============================================================ FASE 2.2 — LOJA POR CÓDIGO (sem login) */
@@ -3020,7 +3057,17 @@ function renderSync(){
     }
     html += `<div class="hint" style="margin-top:8px;">Cadastre o ID do aparelho em <code>/auth/adminDevices</code> no Firebase para liberar funções de admin.</div>`;
   } else {
-    html += `<div class="hint" style="margin-top:8px;">Para trocar senhas ou regenerar acesso de loja, peça ao administrador para cadastrar o ID acima em <code>/auth/adminDevices</code>.</div>`;
+    html += `<div class="hint" style="margin-top:8px;">Admin: cadastre o ID acima em <code>/auth/adminDevices</code> no Firebase.</div>`;
+  }
+  if (!div && lojaCode && authUnlocked) {
+    html += `<div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--border-soft);">
+      <b style="font-size:12px;">Senha de acesso · ${escapeHtml(lojaCode)}</b>
+      <div class="hint" style="margin-top:4px;">Redefina a senha individual desta loja (a anterior deixa de funcionar em todos os aparelhos).</div>
+      <div class="row" style="margin-top:8px; align-items:flex-end; flex-wrap:wrap;">
+        <div class="field"><label>Senha atual da loja</label><input type="password" id="authGestorCur" autocomplete="current-password"></div>
+        <button class="btn sec sm" id="authGestorReset">↻ Redefinir senha da loja</button>
+      </div>
+    </div>`;
   }
   html += `</div>`;
   el.innerHTML = html;
@@ -3042,18 +3089,18 @@ function renderSync(){
     if(!confirm("Gerar NOVA senha individual para "+lojaCode+"? A anterior deixa de funcionar.")) return;
     try{
       const np = await adminRegenerateLojaPassword(lojaCode);
-      pendingRevealPassword = np;
-      document.getElementById("authRevealLojaName").textContent = lojaCode;
-      document.getElementById("authRevealPass").textContent = np;
-      showAuthStep("reveal");
-      document.getElementById("authGate").classList.add("show");
-      const doneBtn = document.getElementById("authRevealDone");
-      doneBtn.onclick = () => {
-        doneBtn.onclick = submitAuthReveal;
-        document.getElementById("authGate").classList.remove("show");
-        pendingRevealPassword = "";
-        toast("Nova senha ativa — compartilhe com a equipe");
-      };
+      showAuthRevealModal(lojaCode, np, () => toast("Nova senha ativa — compartilhe com a equipe"));
+    }catch(e){ toast(e.message||"Erro", true); }
+  };
+  const gr=document.getElementById("authGestorReset");
+  if(gr) gr.onclick=async()=>{
+    const cur = (document.getElementById("authGestorCur").value || "").trim();
+    if(!cur) { toast("Digite a senha atual da loja", true); return; }
+    if(!confirm("Gerar nova senha para "+lojaCode+"? A anterior deixa de funcionar em todos os aparelhos.")) return;
+    try{
+      const np = await gestorResetLojaPassword(lojaCode, cur);
+      document.getElementById("authGestorCur").value = "";
+      showAuthRevealModal(lojaCode, np, () => toast("Nova senha ativa — copie e compartilhe com a equipe"));
     }catch(e){ toast(e.message||"Erro", true); }
   };
 }
