@@ -51,9 +51,9 @@
   .live-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
   .live-pill.on .dot { animation: pulse 1.8s ease infinite; }
   @keyframes pulse { 0%,100%{opacity:1; transform:scale(1)} 50%{opacity:.45; transform:scale(.85)} }
-  .topbar-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex: none; }
+  .topbar-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex: none; min-width: 108px; }
   .urgency-pill {
-    display: none; align-items: center; gap: 5px; font-size: 11px; font-weight: 800;
+    display: none; flex-direction: column; align-items: center; gap: 1px; font-weight: 800;
     font-variant-numeric: tabular-nums; letter-spacing: .3px; padding: 5px 10px; border-radius: 99px;
     background: linear-gradient(135deg, color-mix(in srgb, var(--danger) 28%, #1a0808), color-mix(in srgb, var(--danger) 12%, var(--panel)));
     border: 1px solid color-mix(in srgb, var(--danger) 65%, var(--border)); color: #ff8a94;
@@ -61,7 +61,17 @@
     animation: urgency-glow 1.2s ease-in-out infinite;
   }
   .urgency-pill.show { display: inline-flex; }
-  .urgency-pill.ended { animation: none; opacity: .85; color: var(--text-dim); border-color: var(--border); background: var(--panel-2); box-shadow: none; }
+  .urgency-pill.warmup {
+    animation: none;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--warn) 22%, var(--panel)), var(--panel-2));
+    border-color: color-mix(in srgb, var(--warn) 55%, var(--border));
+    color: var(--warn);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--warn) 18%, transparent);
+  }
+  .urgency-pill.warmup #urgencyLbl { color: color-mix(in srgb, var(--warn) 80%, var(--text)); }
+  .urgency-pill.ended { animation: none; opacity: .9; color: #ff8a94; border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); background: var(--panel-2); box-shadow: none; }
+  .urgency-pill #urgencyLbl { font-size: 8px; letter-spacing: .5px; opacity: .9; }
+  .urgency-pill #urgencyTxt { font-size: 12px; }
   @keyframes urgency-glow { 0%,100%{ box-shadow: 0 0 12px color-mix(in srgb, var(--danger) 25%, transparent); } 50%{ box-shadow: 0 0 22px color-mix(in srgb, var(--danger) 50%, transparent); } }
   .day-hint { font-size: 11px; color: var(--text-faint); margin: -8px 0 14px; line-height: 1.45; }
   .screen { display: none; flex: 1; flex-direction: column; }
@@ -159,7 +169,7 @@
         <div class="t2" id="hdrSub">Gestão Comercial</div>
       </div>
       <div class="topbar-right">
-        <div class="urgency-pill" id="urgencyPill"><span>⏱</span><span id="urgencyTxt">—</span></div>
+        <div class="urgency-pill" id="urgencyPill"><span id="urgencyLbl">CHECK-OUT</span><span id="urgencyTxt">—:—:—</span></div>
         <div class="live-pill" id="livePill"><span class="dot"></span><span id="liveTxt">offline</span></div>
       </div>
     </div>
@@ -339,32 +349,42 @@ function tickUrgencyAndDay() {
   const mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
   const pill = document.getElementById("urgencyPill");
   const txt = document.getElementById("urgencyTxt");
-  if (!pill || !txt) return;
-  pill.classList.remove("show", "ended");
-  if (mins >= URGENCY_START && mins < URGENCY_END) {
-    const end = new Date(now);
-    end.setHours(19, 15, 0, 0);
-    const left = end - now;
-    pill.classList.add("show");
-    txt.textContent = formatCountdown(left);
-  } else if (mins >= URGENCY_END && mins < 24 * 60) {
-    const midnight = new Date(now);
-    midnight.setHours(24, 0, 0, 0);
-    pill.classList.add("show", "ended");
-    txt.textContent = "Encerrado · " + formatCountdown(midnight - now);
+  const lbl = document.getElementById("urgencyLbl");
+  if (!pill || !txt || !lbl) return;
+  const onMain = document.getElementById("screenMain").classList.contains("active");
+  pill.classList.remove("show", "ended", "warmup");
+  if (onMain) {
+    if (mins < URGENCY_START) {
+      const start = new Date(now);
+      start.setHours(17, 0, 0, 0);
+      pill.classList.add("show", "warmup");
+      lbl.textContent = "ABRE ÀS 17H";
+      txt.textContent = formatCountdown(Math.max(0, start - now));
+    } else if (mins >= URGENCY_START && mins < URGENCY_END) {
+      const end = new Date(now);
+      end.setHours(19, 15, 0, 0);
+      pill.classList.add("show");
+      lbl.textContent = "⏱ CHECK-OUT";
+      txt.textContent = formatCountdown(Math.max(0, end - now));
+    } else {
+      const midnight = new Date(now);
+      midnight.setHours(24, 0, 0, 0);
+      pill.classList.add("show", "ended");
+      lbl.textContent = "ENCERRADO";
+      txt.textContent = formatCountdown(Math.max(0, midnight - now));
+    }
   }
   const d = todayDay();
-  if (lastRenderDay != null && d !== lastRenderDay && document.getElementById("screenMain").classList.contains("active")) {
+  if (lastRenderDay != null && d !== lastRenderDay && onMain) {
     renderFields();
     toast("Novo dia — ontem bloqueado");
   }
   lastRenderDay = d;
 }
 function startTickLoop() {
-  if (tickTimer) return;
   lastRenderDay = todayDay();
   tickUrgencyAndDay();
-  tickTimer = setInterval(tickUrgencyAndDay, 1000);
+  if (!tickTimer) tickTimer = setInterval(tickUrgencyAndDay, 1000);
 }
 function stopTickLoop() {
   if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
@@ -530,6 +550,7 @@ function fbInit() {
         connected = !!(s && s.val());
         setLive(connected, connected ? "ao vivo" : "conectando…");
       });
+      startTickLoop();
       tryRestore().then(ok => { if (!ok) showScreen("screenLogin"); });
     }).catch(() => {
       setLive(false, "offline");
