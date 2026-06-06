@@ -529,7 +529,7 @@
     <div class="panel">
       <div class="flex-between">
         <div><h2>Fechamento Diário</h2><div class="sub">Resumo do dia + parecer. Escolha o dia. Só o <b>%</b> é automático (Real ÷ Meta). Outras lojas entram quando o tempo real for ligado.</div></div>
-        <button class="ghost-btn" id="fechPull" title="Pré-preenche o Real com o que foi lançado no check-out do dia">↺ Puxar do dia</button>
+        <button class="ghost-btn" id="fechPull" title="Soma o check-out do dia de todos os vendedores, por indicador principal (Vendas, Agendamento, Comparecimento, Fichas→Novas, Troca)">↺ Puxar do dia</button>
       </div>
       <div class="daystrip" id="fechDays"></div>
       <div class="table-wrap"><table id="fechTable"></table></div>
@@ -2587,18 +2587,38 @@ function recalcFechPct(){ const f=getFech(fechDay); const set=(id,r,m)=>{ const 
 function recalcFechTotal(){ const f=getFech(fechDay); const tr=document.getElementById("fechTotal"); if(!tr) return; const cell=(m,r,p)=>{ const pc=fpct(r,m); return `<td class="muted">${m||0}</td><td><span class="heat" style="background:${heatColor(pc)};color:${heatText(pc)}">${r||0}</span></td><td class="muted">${p||0}</td><td style="color:${heatText(pc)};font-weight:700">${pc==null?'—':Math.round(pc*100)+'%'}</td>`; };
   tr.innerHTML=`<td class="name">⌂ Total RSCEN</td>`+cell(f.vM,f.vR,f.vP)+cell(f.aM,f.aR,f.aP)+cell(f.cM,f.cR,f.cP)+`<td>${f.fN||0}</td><td>${f.f9||0}</td><td>${f.fA||0}</td><td>${f.troca||0}</td><td class="${f.pux===true?'si':'nao'}">${fechPuxLabel(f.pux)}</td><td style="color:var(--danger);font-weight:700">${f.queda||0}</td><td class="parecer"><div class="parecer-input" style="color:var(--text-faint)">Consolidado (1 loja — multi-loja com o tempo real).</div></td>`;
 }
-function fechPull(){
-  const day=fechDay; const sellers=orderedSellers().map(s=>s.id);
-  function sumDay(matchFn){ let s=0,has=false; state.indicators.forEach(ind=>{ if(ind.pctOnly) return; if(matchFn(ind)){ sellers.forEach(id=>{ const c=getCell(id,ind.id,day); if(c.real!=null){s+=Number(c.real);has=true;} }); } }); return has?s:null; }
-  const nm=ind=>ind.name.toLowerCase();
-  const venda=sumDay(ind=>ind.role==='venda'||nm(ind).includes('venda'));
-  const agto=sumDay(ind=>nm(ind).includes('agend'));
-  const comp=sumDay(ind=>nm(ind).includes('compar'));
-  const fichas=sumDay(ind=>ind.role==='fichas'||nm(ind).includes('fich')||nm(ind).includes('financ'));
-  const troca=sumDay(ind=>nm(ind).includes('troca'));
-  let n=0;
-  if(venda!=null){setFech(day,'vR',venda);n++;} if(agto!=null){setFech(day,'aR',agto);n++;} if(comp!=null){setFech(day,'cR',comp);n++;} if(fichas!=null){setFech(day,'fN',fichas);n++;} if(troca!=null){setFech(day,'troca',troca);n++;}
-  renderFechamento(); toast(n?("Puxado do dia ("+n+" campos)"):"Nada lançado nesse dia ainda", !n);
+function fechNormName(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/\p{M}/gu, ""); }
+function fechFindPrincipal(matchFn) {
+  return orderedIndicators().find(ind => !ind.pctOnly && matchFn(ind)) || null;
+}
+function fechSumCheckoutDay(ind, day) {
+  if (!ind) return null;
+  const sellers = orderedSellers();
+  if (!sellers.length) return null;
+  let sum = 0, has = false;
+  sellers.forEach(s => {
+    const c = getCell(s.id, ind.id, day);
+    if (c.real != null && c.real !== "") { sum += Number(c.real); has = true; }
+  });
+  return has ? sum : null;
+}
+function fechPull() {
+  const day = fechDay;
+  const nm = ind => fechNormName(ind.name);
+  const pulls = [
+    { key: "vR", ind: fechFindPrincipal(ind => ind.role === "venda" || nm(ind).includes("venda")) },
+    { key: "aR", ind: fechFindPrincipal(ind => nm(ind).includes("agend")) },
+    { key: "cR", ind: fechFindPrincipal(ind => nm(ind).includes("compar")) },
+    { key: "fN", ind: fechFindPrincipal(ind => ind.role === "fichas" || nm(ind).includes("fich") || nm(ind).includes("financ")) },
+    { key: "troca", ind: fechFindPrincipal(ind => nm(ind).includes("troca")) },
+  ];
+  let n = 0;
+  pulls.forEach(({ key, ind }) => {
+    const total = fechSumCheckoutDay(ind, day);
+    if (total != null) { setFech(day, key, total); n++; }
+  });
+  renderFechamento();
+  toast(n ? ("Puxado do check-out do dia (" + n + " campo" + (n > 1 ? "s" : "") + ")") : "Nada lançado no check-out desse dia ainda", !n);
 }
 
 /* ============================================================ FASE 2 — TEMPO REAL (Firebase) */
