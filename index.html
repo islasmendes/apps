@@ -533,7 +533,7 @@
       </div>
       <div class="daystrip" id="fechDays"></div>
       <div class="table-wrap"><table id="fechTable"></table></div>
-      <div class="hint" style="margin-top:8px;">No <b>Parecer</b>, arraste a barra para o lado para ler tudo (o resto fica fixo). Meta/Real/Prev são digitados; o % se calcula sozinho. <kbd>Tab</kbd> avança para o próximo indicador à direita. Sábado e domingo ficam bloqueados — clique no 🔓 no dia para liberar.</div>
+      <div class="hint" style="margin-top:8px;">No <b>Parecer</b>, arraste a barra para o lado para ler tudo (o resto fica fixo). Meta/Real/Prev são digitados; o % se calcula sozinho. <kbd>Tab</kbd> avança para o próximo indicador à direita. Sábado e domingo ficam bloqueados — clique no 🔓 no dia para liberar. Em <b>Puxada</b>, em branco = não fez; selecione <b>Sim</b> só quando realizada.</div>
     </div>
   </section>
 
@@ -2513,6 +2513,11 @@ function getFech(day){ return monthData().fechamento[day] || {}; }
 function setFech(day,key,val){ const md=monthData(); md.fechamento[day]=md.fechamento[day]||{}; if(val===''||val==null||(typeof val==='number'&&isNaN(val))) delete md.fechamento[day][key]; else md.fechamento[day][key]=val; save(); renderFechDays(); }
 function fechHasData(day){ const f=monthData().fechamento[day]; return f && Object.keys(f).length>0; }
 function fpct(r,m){ return m? r/m : null; }
+function fechPuxLabel(pux) { return pux === true ? "Sim" : "—"; }
+function fechPuxSelect(dis, dataDay) {
+  const dayAttr = dataDay != null ? ` data-day="${dataDay}"` : "";
+  return (f) => `<td><select class="fechsel"${dayAttr} data-key="pux"${dis || ""}><option value="">—</option><option value="1"${f.pux === true ? " selected" : ""}>Sim</option></select></td>`;
+}
 function fechIsWeekend(day) { const w = weekday(currentMonth, day); return w === 0 || w === 6; }
 function ensureFechUnlock() {
   if (!state.ui.fechUnlock || state.ui.fechUnlock.month !== currentMonth) {
@@ -2566,7 +2571,7 @@ function renderFechamento(){
     fechNumCell(day,'cM',f.cM)+fechNumCell(day,'cR',f.cR)+fechNumCell(day,'cP',f.cP)+pctTd('pctC',f.cR,f.cM)+
     fechNumCell(day,'fN',f.fN)+fechNumCell(day,'f9',f.f9)+fechNumCell(day,'fA',f.fA)+
     fechNumCell(day,'troca',f.troca)+
-    `<td><select class="fechsel" data-day="${day}" data-key="pux"><option value="">—</option><option value="1" ${f.pux===true?'selected':''}>Sim</option><option value="0" ${f.pux===false?'selected':''}>Não</option></select></td>`+
+    fechPuxSelect("", day)(f) +
     fechNumCell(day,'queda',f.queda)+
     `<td class="parecer"><div class="parecer-input" contenteditable="true" data-day="${day}">${escapeHtml(f.parecer||'')}</div></td></tr>`;
   document.getElementById("fechTable").innerHTML = head+"<tbody>"+row+`<tr class="total" id="fechTotal"></tr>`+"</tbody>";
@@ -2580,7 +2585,7 @@ function renderFechamento(){
 }
 function recalcFechPct(){ const f=getFech(fechDay); const set=(id,r,m)=>{ const el=document.getElementById(id); if(el){ const p=fpct(r,m); el.style.color=heatText(p); el.textContent=p==null?'—':Math.round(p*100)+'%'; } }; set('pctV',f.vR,f.vM); set('pctA',f.aR,f.aM); set('pctC',f.cR,f.cM); recalcFechTotal(); }
 function recalcFechTotal(){ const f=getFech(fechDay); const tr=document.getElementById("fechTotal"); if(!tr) return; const cell=(m,r,p)=>{ const pc=fpct(r,m); return `<td class="muted">${m||0}</td><td><span class="heat" style="background:${heatColor(pc)};color:${heatText(pc)}">${r||0}</span></td><td class="muted">${p||0}</td><td style="color:${heatText(pc)};font-weight:700">${pc==null?'—':Math.round(pc*100)+'%'}</td>`; };
-  tr.innerHTML=`<td class="name">⌂ Total RSCEN</td>`+cell(f.vM,f.vR,f.vP)+cell(f.aM,f.aR,f.aP)+cell(f.cM,f.cR,f.cP)+`<td>${f.fN||0}</td><td>${f.f9||0}</td><td>${f.fA||0}</td><td>${f.troca||0}</td><td class="${f.pux?'si':'nao'}">${f.pux===true?'Sim':(f.pux===false?'Não':'—')}</td><td style="color:var(--danger);font-weight:700">${f.queda||0}</td><td class="parecer"><div class="parecer-input" style="color:var(--text-faint)">Consolidado (1 loja — multi-loja com o tempo real).</div></td>`;
+  tr.innerHTML=`<td class="name">⌂ Total RSCEN</td>`+cell(f.vM,f.vR,f.vP)+cell(f.aM,f.aR,f.aP)+cell(f.cM,f.cR,f.cP)+`<td>${f.fN||0}</td><td>${f.f9||0}</td><td>${f.fA||0}</td><td>${f.troca||0}</td><td class="${f.pux===true?'si':'nao'}">${fechPuxLabel(f.pux)}</td><td style="color:var(--danger);font-weight:700">${f.queda||0}</td><td class="parecer"><div class="parecer-input" style="color:var(--text-faint)">Consolidado (1 loja — multi-loja com o tempo real).</div></td>`;
 }
 function fechPull(){
   const day=fechDay; const sellers=orderedSellers().map(s=>s.id);
@@ -2663,7 +2668,7 @@ function renderFechamento(){
     const f=lojaFechOf(L,day); const self=L.self;
     const rowCls = self && fechLocked ? ' class="fech-row-locked"' : '';
     const lojaCell = self? `<td class="name">${fechLocked ? '🔒 ' : ''}<input class="loja-input" id="fechLoja" value="${escapeHtml(L.name)}" title="Nome da loja"${ro}></td>` : `<td class="name">${escapeHtml(L.name)}</td>`;
-    const pux = self? `<td><select class="fechsel" data-key="pux"${fechLocked?' disabled':''}><option value="">—</option><option value="1" ${f.pux===true?'selected':''}>Sim</option><option value="0" ${f.pux===false?'selected':''}>Não</option></select></td>` : `<td class="${f.pux?'si':'nao'}">${f.pux===true?'Sim':(f.pux===false?'Não':'—')}</td>`;
+    const pux = self ? fechPuxSelect(fechLocked ? " disabled" : "")(f) : `<td class="${f.pux===true?'si':'nao'}">${fechPuxLabel(f.pux)}</td>`;
     const par = self? `<td class="parecer"><div class="parecer-input" contenteditable="${fechLocked?'false':'true'}">${escapeHtml(f.parecer||'')}</div></td>` : `<td class="parecer"><div class="parecer-input">${escapeHtml(f.parecer||'—')}</div></td>`;
     rows += `<tr${self?' id="fechSelfRow"':''}${rowCls}>`+lojaCell+
       numC(self,'vM',f.vM)+numC(self,'vR',f.vR)+numC(self,'vP',f.vP)+pctC('v',f.vR,f.vM)+
