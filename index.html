@@ -333,9 +333,27 @@
   .meta-adherence { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-soft); font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
   .meta-adh-line.meta-adh-bad { color: var(--danger); }
   @media (max-width: 640px) { main { padding: 12px; } .titles .t1 { font-size: 13px; } }
+  /* Auth gate */
+  body.auth-locked > header.app,
+  body.auth-locked > nav.tabs,
+  body.auth-locked > main { filter: blur(14px) saturate(.65); pointer-events: none; user-select: none; opacity: .45; }
+  body.auth-locked > .modal-bg:not(#authGate) { filter: blur(8px); pointer-events: none; }
+  .auth-gate { position: fixed; inset: 0; z-index: 500; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.78); backdrop-filter: blur(6px); }
+  .auth-gate.show { display: flex; }
+  .auth-card { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 22px; max-width: 440px; width: 100%; box-shadow: 0 24px 80px rgba(0,0,0,.55); }
+  .auth-card h3 { margin: 0 0 6px; font-size: 17px; }
+  .auth-card .sub { color: var(--text-dim); font-size: 12.5px; line-height: 1.55; margin-bottom: 12px; }
+  .auth-step { display: none; }
+  .auth-step.active { display: block; }
+  .auth-pass-wrap { position: relative; }
+  .auth-pass-wrap input { width: 100%; font-size: 15px; padding-right: 42px; }
+  .auth-toggle-pass { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 16px; padding: 4px 8px; }
+  .auth-reveal-box { background: var(--cell); border: 2px dashed var(--accent-2); border-radius: 12px; padding: 14px; margin: 12px 0; }
+  .auth-reveal-box code { display: block; font-size: 15px; font-weight: 800; word-break: break-all; color: var(--accent-2); letter-spacing: .5px; line-height: 1.5; }
+  .auth-warn { background: color-mix(in srgb, var(--warn) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--border)); border-radius: 10px; padding: 10px 12px; font-size: 12px; color: var(--text); margin: 10px 0; line-height: 1.5; }
 </style>
 </head>
-<body>
+<body class="auth-locked">
 <header class="app">
   <div class="brand">
     <div class="logo">M</div>
@@ -535,6 +553,49 @@
   <div class="table-wrap" style="margin-top:10px;"><table id="auditoriaTable"></table></div>
   <div class="row" style="margin-top:12px; justify-content:flex-end;"><button class="ghost-btn" id="auditoriaParaLancamento">✎ Lançar no sistema</button></div>
 </div></div>
+
+<div class="auth-gate show" id="authGate">
+  <div class="auth-card">
+    <div class="auth-step active" id="authStepSenha">
+      <h3>🔐 Acesso seguro</h3>
+      <div class="sub">Digite a <b>senha mestra</b> (compartilhada pelo administrador) ou a <b>senha individual da loja</b> (gerada na primeira configuração).</div>
+      <div class="auth-pass-wrap">
+        <input type="password" id="authPassInput" placeholder="Senha de acesso" autocomplete="current-password">
+        <button type="button" class="auth-toggle-pass" id="authTogglePass" title="Mostrar senha">👁</button>
+      </div>
+      <div class="hint" id="authPassErr" style="color:var(--danger); min-height:16px; margin-top:8px;"></div>
+      <div class="row" style="margin-top:14px; justify-content:flex-end;"><button class="btn" id="authPassSubmit">Continuar</button></div>
+    </div>
+    <div class="auth-step" id="authStepSetupMaster">
+      <h3>⚙️ Configurar senha mestra</h3>
+      <div class="sub">Primeiro acesso como <b>administrador</b>. Crie a senha padrão que será compartilhada com gestores para configurar novas lojas.</div>
+      <div class="field" style="margin-top:8px;"><label>Nova senha mestra</label><input type="password" id="authMasterNew" autocomplete="new-password"></div>
+      <div class="field" style="margin-top:8px;"><label>Confirmar senha</label><input type="password" id="authMasterConfirm" autocomplete="new-password"></div>
+      <div class="hint" id="authMasterErr" style="color:var(--danger); min-height:16px; margin-top:8px;"></div>
+      <div class="row" style="margin-top:14px; justify-content:flex-end;"><button class="btn" id="authMasterSubmit">Salvar e continuar</button></div>
+    </div>
+    <div class="auth-step" id="authStepLoja">
+      <h3>🏪 Qual é a sua loja?</h3>
+      <div class="sub">Código da loja (<b>VC</b>…). Ex.: VCANT, VCBHZ. Para o <b>Divisional</b> (todas as lojas), use <b>RSCEN</b>.</div>
+      <input id="authLojaInput" placeholder="VCANT" style="text-transform:uppercase; width:100%; font-size:18px; font-weight:800; margin-top:8px;">
+      <div class="hint" id="authLojaErr" style="color:var(--danger); min-height:16px; margin-top:8px;"></div>
+      <div class="row" style="margin-top:14px; justify-content:space-between; align-items:center;">
+        <button type="button" class="ghost-btn sm" id="authLojaBack">← Voltar</button>
+        <button class="btn" id="authLojaSubmit">Entrar na loja</button>
+      </div>
+    </div>
+    <div class="auth-step" id="authStepReveal">
+      <h3>🔑 Senha individual da loja</h3>
+      <div class="sub">Esta é a senha única de <b id="authRevealLojaName">—</b>. Copie e guarde — será exigida em <b>qualquer aparelho</b> que acesse esta loja.</div>
+      <div class="auth-warn">⚠️ Só o <b>administrador</b> pode gerar uma nova senha para esta loja. Esta tela não aparece de novo.</div>
+      <div class="auth-reveal-box"><code id="authRevealPass">—</code></div>
+      <div class="row" style="gap:8px; flex-wrap:wrap;">
+        <button type="button" class="btn sec" id="authCopyPass">📋 Copiar senha</button>
+        <button type="button" class="btn" id="authRevealDone" style="margin-left:auto">Salvei — entrar</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="modal-bg" id="lojaModal"><div class="modal" style="max-width:420px">
   <h3>🏪 Qual é a sua loja?</h3>
@@ -2546,6 +2607,264 @@ function renderSync(){
   el.querySelectorAll("[data-del-loja]").forEach(b=>b.onclick=()=>{ if(confirm("Excluir esta loja da nuvem? O gestor dela perderá a sincronização até reenviar.")){ try{ fbDb.ref("lojas/"+b.dataset.delLoja).remove(); toast("Loja excluída"); }catch(e){ toast("Sem permissão", true); } } });
 }
 
+/* ============================================================ AUTENTICAÇÃO — senha mestra + senha por loja */
+const AUTH_SESSION_KEY = "gc_auth_session";
+const AUTH_PBKDF2_ITER = 310000;
+let authMasterCache = null;
+let authAdminDevices = {};
+let authUnlocked = false;
+let pendingAuthPassword = "";
+let pendingRevealLoja = "";
+let pendingRevealPassword = "";
+let authFailCount = 0;
+let authReady = false;
+
+function getDeviceId() {
+  let id = localStorage.getItem("gc_device_id");
+  if (!id) { id = "dev_" + uid() + uid() + uid(); localStorage.setItem("gc_device_id", id); }
+  return id;
+}
+function isDeviceAdmin() { return !!(authAdminDevices[getDeviceId()] || isAdmin); }
+function bytesToHex(buf) { return Array.from(buf).map(b => b.toString(16).padStart(2, "0")).join(""); }
+function hexToBytes(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+function timingSafeEqual(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  let r = 0;
+  for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return r === 0;
+}
+async function pbkdf2Record(password, saltHex) {
+  const enc = new TextEncoder();
+  const salt = saltHex ? hexToBytes(saltHex) : crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: AUTH_PBKDF2_ITER, hash: "SHA-256" }, keyMaterial, 256);
+  return { hash: bytesToHex(new Uint8Array(bits)), salt: bytesToHex(salt), iterations: AUTH_PBKDF2_ITER };
+}
+async function verifyPass(password, record) {
+  if (!record || !record.hash || !record.salt) return false;
+  const { hash } = await pbkdf2Record(password, record.salt);
+  return timingSafeEqual(hash, record.hash);
+}
+function generateSecurePassword(len) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*";
+  const arr = new Uint8Array(len || 24);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => chars[b % chars.length]).join("");
+}
+async function authDelayFail() {
+  authFailCount++;
+  await new Promise(r => setTimeout(r, Math.min(4000, 350 * authFailCount)));
+}
+function showAuthStep(step) {
+  document.querySelectorAll(".auth-step").forEach(el => el.classList.remove("active"));
+  const map = { senha: "authStepSenha", setup: "authStepSetupMaster", loja: "authStepLoja", reveal: "authStepReveal" };
+  const el = document.getElementById(map[step] || map.senha);
+  if (el) el.classList.add("active");
+  document.getElementById("authGate").classList.add("show");
+}
+function unlockAuth() {
+  authUnlocked = true;
+  document.body.classList.remove("auth-locked");
+  document.getElementById("authGate").classList.remove("show");
+  pendingAuthPassword = "";
+}
+function saveAuthSession(loja) {
+  localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ loja, exp: Date.now() + 30 * 24 * 60 * 60 * 1000, device: getDeviceId() }));
+}
+function tryRestoreAuthSession() {
+  try {
+    const s = JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || "null");
+    if (!s || !s.loja || s.exp < Date.now() || s.device !== getDeviceId()) return false;
+    lojaCode = s.loja;
+    localStorage.setItem("gc_loja_code", lojaCode);
+    myLojaId = lojaCode;
+    unlockAuth();
+    return true;
+  } catch (e) { return false; }
+}
+function clearAuthSession() {
+  localStorage.removeItem(AUTH_SESSION_KEY);
+  pendingAuthPassword = "";
+  pendingRevealLoja = "";
+  pendingRevealPassword = "";
+}
+async function loadAuthConfig() {
+  if (!fbReady || !fbDb) return;
+  try {
+    const [mSnap, dSnap] = await Promise.all([
+      fbDb.ref("auth/master").once("value"),
+      fbDb.ref("auth/adminDevices").once("value")
+    ]);
+    authMasterCache = mSnap.val();
+    authAdminDevices = dSnap.val() || {};
+  } catch (e) { console.warn("auth config", e); }
+  authReady = true;
+}
+async function fetchLojaAuth(code) {
+  if (!fbReady || !fbDb) return null;
+  try {
+    const snap = await fbDb.ref("auth/lojas/" + code).once("value");
+    return snap.val();
+  } catch (e) { return null; }
+}
+async function saveMasterPassword(password) {
+  const rec = await pbkdf2Record(password, null);
+  rec.updatedAt = Date.now();
+  rec.by = getDeviceId();
+  await fbDb.ref("auth/master").set(rec);
+  authMasterCache = rec;
+}
+async function saveLojaPassword(code, password) {
+  const rec = await pbkdf2Record(password, null);
+  rec.createdAt = Date.now();
+  rec.by = getDeviceId();
+  await fbDb.ref("auth/lojas/" + code).set(rec);
+  return rec;
+}
+async function startAuthFlow() {
+  document.body.classList.add("auth-locked");
+  await loadAuthConfig();
+  if (!authMasterCache && isDeviceAdmin()) {
+    showAuthStep("setup");
+    return;
+  }
+  if (!authMasterCache && !isDeviceAdmin()) {
+    document.getElementById("authPassErr").textContent = "Acesso ainda não configurado. Peça ao administrador a senha mestra.";
+    showAuthStep("senha");
+    return;
+  }
+  showAuthStep("senha");
+  setTimeout(() => { try { document.getElementById("authPassInput").focus(); } catch (e) {} }, 80);
+}
+async function submitAuthPassword() {
+  const inp = document.getElementById("authPassInput");
+  const err = document.getElementById("authPassErr");
+  const pass = (inp.value || "").trim();
+  if (pass.length < 6) { err.textContent = "Digite a senha (mínimo 6 caracteres)."; return; }
+  err.textContent = "";
+  pendingAuthPassword = pass;
+  showAuthStep("loja");
+  const li = document.getElementById("authLojaInput");
+  if (li) { li.value = ""; setTimeout(() => li.focus(), 80); }
+}
+async function submitAuthSetupMaster() {
+  const err = document.getElementById("authMasterErr");
+  const a = (document.getElementById("authMasterNew").value || "").trim();
+  const b = (document.getElementById("authMasterConfirm").value || "").trim();
+  if (a.length < 10) { err.textContent = "Use pelo menos 10 caracteres na senha mestra."; return; }
+  if (a !== b) { err.textContent = "As senhas não coincidem."; return; }
+  if (!fbReady || !fbDb) { err.textContent = "Sem conexão com a nuvem para salvar a senha mestra."; return; }
+  try {
+    await saveMasterPassword(a);
+    pendingAuthPassword = a;
+    err.textContent = "";
+    toast("Senha mestra configurada");
+    showAuthStep("loja");
+  } catch (e) { err.textContent = "Não foi possível salvar. Verifique permissões no Firebase."; }
+}
+async function submitAuthLoja() {
+  const inp = document.getElementById("authLojaInput");
+  const err = document.getElementById("authLojaErr");
+  let code = (inp.value || "").trim().toUpperCase().replace(/\s+/g, "");
+  const okLoja = /^VC[A-Z0-9]+$/.test(code) && code.length >= 3;
+  const okDiv = /^RSCEN[A-Z0-9]*$/.test(code);
+  if (!okLoja && !okDiv) { err.textContent = "Use VC… (ex.: VCANT) ou RSCEN para Divisional."; return; }
+  const pass = pendingAuthPassword;
+  if (!pass) { showAuthStep("senha"); return; }
+  err.textContent = "Verificando…";
+  const lojaAuth = okDiv ? null : await fetchLojaAuth(code);
+  const masterOk = authMasterCache ? await verifyPass(pass, authMasterCache) : false;
+  const lojaOk = lojaAuth ? await verifyPass(pass, lojaAuth) : false;
+  if (okDiv && !masterOk) {
+    await authDelayFail();
+    err.textContent = "Modo Divisional exige a senha mestra.";
+    return;
+  }
+  if (!masterOk && !lojaOk) {
+    await authDelayFail();
+    err.textContent = "Senha incorreta para esta loja.";
+    return;
+  }
+  err.textContent = "";
+  if (okDiv || lojaOk || (masterOk && lojaAuth)) {
+    finishAuthEnter(code);
+    return;
+  }
+  if (masterOk && !lojaAuth && okLoja) {
+    if (!fbReady || !fbDb) { err.textContent = "Sem nuvem para registrar a senha da loja."; return; }
+    const newPass = generateSecurePassword(24);
+    try {
+      await saveLojaPassword(code, newPass);
+      pendingRevealLoja = code;
+      pendingRevealPassword = newPass;
+      document.getElementById("authRevealLojaName").textContent = code;
+      document.getElementById("authRevealPass").textContent = newPass;
+      showAuthStep("reveal");
+    } catch (e) { err.textContent = "Erro ao gerar senha da loja. Verifique permissões."; }
+    return;
+  }
+  err.textContent = "Não foi possível autenticar.";
+}
+function finishAuthEnter(code) {
+  lojaCode = code;
+  localStorage.setItem("gc_loja_code", code);
+  myLojaId = code;
+  saveAuthSession(code);
+  unlockAuth();
+  if (fbReady) pullLoja();
+  else {
+    state.storeName = divisionalMode() ? "RSCEN — Divisional" : code;
+    save(); syncStore(); renderActive();
+  }
+}
+function submitAuthReveal() {
+  if (!pendingRevealLoja) return;
+  finishAuthEnter(pendingRevealLoja);
+  pendingRevealLoja = "";
+  pendingRevealPassword = "";
+  toast("Loja configurada — guarde a senha individual");
+}
+function bindAuthEvents() {
+  const gate = document.getElementById("authGate");
+  if (!gate) return;
+  document.getElementById("authPassSubmit").onclick = submitAuthPassword;
+  document.getElementById("authMasterSubmit").onclick = submitAuthSetupMaster;
+  document.getElementById("authLojaSubmit").onclick = submitAuthLoja;
+  document.getElementById("authLojaBack").onclick = () => showAuthStep("senha");
+  document.getElementById("authRevealDone").onclick = submitAuthReveal;
+  document.getElementById("authCopyPass").onclick = () => {
+    const t = pendingRevealPassword || document.getElementById("authRevealPass").textContent;
+    try { navigator.clipboard && navigator.clipboard.writeText(t); toast("Senha copiada"); } catch (e) { toast("Copie manualmente", true); }
+  };
+  document.getElementById("authTogglePass").onclick = () => {
+    const inp = document.getElementById("authPassInput");
+    const btn = document.getElementById("authTogglePass");
+    if (inp.type === "password") { inp.type = "text"; btn.textContent = "🙈"; }
+    else { inp.type = "password"; btn.textContent = "👁"; }
+  };
+  document.getElementById("authPassInput").addEventListener("keydown", e => { if (e.key === "Enter") submitAuthPassword(); });
+  document.getElementById("authLojaInput").addEventListener("keydown", e => { if (e.key === "Enter") submitAuthLoja(); });
+  ["authMasterNew", "authMasterConfirm"].forEach(id => {
+    document.getElementById(id).addEventListener("keydown", e => { if (e.key === "Enter") submitAuthSetupMaster(); });
+  });
+}
+async function adminChangeMasterPassword(cur, neu) {
+  if (!isDeviceAdmin()) throw new Error("Sem permissão");
+  if (!authMasterCache || !(await verifyPass(cur, authMasterCache))) throw new Error("Senha atual incorreta");
+  if (neu.length < 10) throw new Error("Mínimo 10 caracteres");
+  await saveMasterPassword(neu);
+}
+async function adminRegenerateLojaPassword(code) {
+  if (!isDeviceAdmin()) throw new Error("Sem permissão");
+  const newPass = generateSecurePassword(24);
+  await saveLojaPassword(code, newPass);
+  return newPass;
+}
+
 /* ============================================================ FASE 2.2 — LOJA POR CÓDIGO (sem login) */
 let lojaCode = localStorage.getItem("gc_loja_code") || null;
 let authUid = null;
@@ -2560,13 +2879,18 @@ function fbInit(){
       if (!user) return;
       authUid = user.uid; fbReady = true; if (lojaCode) myLojaId = lojaCode; setFbBadge(false);
       try { fbDb.ref("admins/"+authUid).on("value", s => { isAdmin = (s.val()===true); if(activeView==="config") renderSync(); }); } catch(e){}
+      try { fbDb.ref("auth/adminDevices").on("value", s => { authAdminDevices = s.val() || {}; if(activeView==="config") renderSync(); }); } catch(e){}
+      try { fbDb.ref("auth/master").on("value", s => { authMasterCache = s.val(); }); } catch(e){}
       fbDb.ref("lojas").on("value", snap => { remoteLojas = snap.val() || {}; setFbBadge(true); if(activeView==="fechamento"||activeView==="rscen") renderActive(); if(activeView==="config") renderSync(); },
         err => { console.warn("leitura lojas negada:", err && err.message); setFbBadge(false); });
       fbDb.ref(".info/connected").on("value", s => setFbBadge(!!(s && s.val())));
-      if (lojaCode) pullLoja(); else if(typeof askLoja==="function") askLoja();
+      loadAuthConfig().then(() => {
+        if (authUnlocked && lojaCode) pullLoja();
+        else if (!authUnlocked) startAuthFlow();
+      });
     });
     auth.signInAnonymously().catch(e => { console.warn("Login anônimo falhou — habilite Anonymous:", e && e.message); setFbBadge(false); });
-  }catch(e){ console.warn("Firebase init falhou:", e); setFbBadge(false); }
+  }catch(e){ console.warn("Firebase init falhou:", e); setFbBadge(false); if (!authUnlocked) startAuthFlow(); }
 }
 function fbPush(){
   if (!fbReady || !fbDb || !lojaCode) return;
@@ -2582,20 +2906,31 @@ function pullLoja(){
   }).catch(e => { console.warn("pull falhou", e); });
 }
 function askLoja(){
+  if (!authUnlocked) { startAuthFlow(); return; }
   const m = document.getElementById("lojaModal"); if(!m) return;
   const inp = document.getElementById("lojaCodeInput");
   if (inp) inp.value = (state.storeName||"").toUpperCase().indexOf("VC")===0 ? state.storeName.toUpperCase() : "VC";
   m.classList.add("show"); if(inp) setTimeout(()=>{ try{ inp.focus(); }catch(e){} },60);
 }
 function submitLoja(){
+  if (!authUnlocked) { document.getElementById("authLojaInput").value = document.getElementById("lojaCodeInput").value; submitAuthLoja(); return; }
   const inp = document.getElementById("lojaCodeInput"); const err = document.getElementById("lojaErr");
   let code = (inp.value||"").trim().toUpperCase().replace(/\s+/g,"");
   if (!/^VC[A-Z0-9]+$/.test(code) || code.length < 3) { if(err) err.textContent = "O código deve começar com VC e ter pelo menos 3 letras (ex.: VCANT, VCBHZ)."; return; }
   lojaCode = code; localStorage.setItem("gc_loja_code", code); myLojaId = code;
   document.getElementById("lojaModal").classList.remove("show");
+  saveAuthSession(code);
   if (fbReady) pullLoja(); else { state.storeName = code; save(); syncStore(); renderActive(); }
 }
-function trocarLoja(){ if(confirm("Trocar de loja? O app vai recarregar e perguntar o novo código.")){ localStorage.removeItem("gc_loja_code"); location.reload(); } }
+function trocarLoja(){
+  if (!confirm("Trocar de loja? Será necessário autenticar novamente.")) return;
+  localStorage.removeItem("gc_loja_code");
+  clearAuthSession();
+  lojaCode = null;
+  authUnlocked = false;
+  document.body.classList.add("auth-locked");
+  startAuthFlow();
+}
 
 function renderSync(){
   const el = document.getElementById("syncPanel"); if(!el) return;
@@ -2639,6 +2974,12 @@ function pullLoja(){
   }).catch(e => console.warn("pull falhou", e));
 }
 function submitLoja(){
+  if (!authUnlocked) {
+    const src = document.getElementById("lojaCodeInput");
+    if (src) document.getElementById("authLojaInput").value = src.value;
+    submitAuthLoja();
+    return;
+  }
   const inp = document.getElementById("lojaCodeInput"); const err = document.getElementById("lojaErr");
   let code = (inp.value||"").trim().toUpperCase().replace(/\s+/g,"");
   const okLoja = /^VC[A-Z0-9]+$/.test(code) && code.length>=3;
@@ -2646,6 +2987,7 @@ function submitLoja(){
   if (!okLoja && !okDiv) { if(err) err.textContent = "Use o código da sua loja (começa com VC, ex.: VCANT) ou RSCEN para o Divisional."; return; }
   lojaCode = code; localStorage.setItem("gc_loja_code", code); myLojaId = code;
   document.getElementById("lojaModal").classList.remove("show");
+  saveAuthSession(code);
   if (fbReady) pullLoja(); else { state.storeName = okDiv? "RSCEN — Divisional" : code; save(); syncStore(); renderActive(); }
 }
 function renderSync(){
@@ -2665,11 +3007,55 @@ function renderSync(){
   } else if (!div) {
     html += `<div class="hint" style="margin-top:12px;">Só o <b>admin</b> exclui lojas. ID deste aparelho (para virar admin): <code style="font-size:10px">${escapeHtml(authUid||'—')}</code></div>`;
   }
+  html += `<div style="margin-top:18px; padding-top:14px; border-top:1px solid var(--border-soft);"><b style="font-size:13px;">🔐 Segurança &amp; acesso</b>`;
+  html += `<div class="hint" style="margin-top:6px;">ID deste aparelho: <code style="font-size:10px">${escapeHtml(getDeviceId())}</code> <button class="btn sec sm" id="copyDeviceId">copiar</button></div>`;
+  if (isDeviceAdmin()) {
+    html += `<div class="row" style="margin-top:10px; align-items:flex-end; flex-wrap:wrap;">
+      <div class="field"><label>Senha mestra atual</label><input type="password" id="authChgCur" autocomplete="current-password"></div>
+      <div class="field"><label>Nova senha mestra</label><input type="password" id="authChgNew" autocomplete="new-password"></div>
+      <button class="btn sec sm" id="authChgBtn">Trocar senha mestra</button>
+    </div>`;
+    if (!div && lojaCode) {
+      html += `<div class="row" style="margin-top:10px;"><button class="btn danger sm" id="authRegenLoja">↻ Gerar nova senha individual de ${escapeHtml(lojaCode)}</button></div>`;
+    }
+    html += `<div class="hint" style="margin-top:8px;">Cadastre o ID do aparelho em <code>/auth/adminDevices</code> no Firebase para liberar funções de admin.</div>`;
+  } else {
+    html += `<div class="hint" style="margin-top:8px;">Para trocar senhas ou regenerar acesso de loja, peça ao administrador para cadastrar o ID acima em <code>/auth/adminDevices</code>.</div>`;
+  }
+  html += `</div>`;
   el.innerHTML = html;
   const tl=document.getElementById("trocarLoja"); if(tl) tl.onclick=trocarLoja;
   const rc=document.getElementById("reloadCloud"); if(rc) rc.onclick=()=>{ pullLoja(); };
-  const cm=document.getElementById("clearMine"); if(cm) cm.onclick=()=>{ if(confirm("Apagar os dados desta loja e recomeçar? (admin remove também da nuvem)")){ try{ if(fbReady&&fbDb&&lojaCode) fbDb.ref("lojas/"+lojaCode).remove(); }catch(e){} localStorage.removeItem(LS_KEY); location.reload(); } };
+  const cm=document.getElementById("clearMine"); if(cm) cm.onclick=()=>{ if(confirm("Apagar os dados desta loja e recomeçar? (admin remove também da nuvem)")){ try{ if(fbReady&&fbDb&&lojaCode) fbDb.ref("lojas/"+lojaCode).remove(); }catch(e){} localStorage.removeItem(LS_KEY); clearAuthSession(); location.reload(); } };
   el.querySelectorAll("[data-del-loja]").forEach(b=>b.onclick=()=>{ if(confirm("Excluir esta loja da nuvem?")){ try{ fbDb.ref("lojas/"+b.dataset.delLoja).remove(); toast("Loja excluída"); }catch(e){ toast("Sem permissão", true); } } });
+  const cpd=document.getElementById("copyDeviceId"); if(cpd) cpd.onclick=()=>{ try{ navigator.clipboard&&navigator.clipboard.writeText(getDeviceId()); }catch(e){} toast("ID copiado"); };
+  const chg=document.getElementById("authChgBtn");
+  if(chg) chg.onclick=async()=>{
+    try{
+      await adminChangeMasterPassword(document.getElementById("authChgCur").value, document.getElementById("authChgNew").value);
+      toast("Senha mestra atualizada");
+      document.getElementById("authChgCur").value=""; document.getElementById("authChgNew").value="";
+    }catch(e){ toast(e.message||"Erro", true); }
+  };
+  const reg=document.getElementById("authRegenLoja");
+  if(reg) reg.onclick=async()=>{
+    if(!confirm("Gerar NOVA senha individual para "+lojaCode+"? A anterior deixa de funcionar.")) return;
+    try{
+      const np = await adminRegenerateLojaPassword(lojaCode);
+      pendingRevealPassword = np;
+      document.getElementById("authRevealLojaName").textContent = lojaCode;
+      document.getElementById("authRevealPass").textContent = np;
+      showAuthStep("reveal");
+      document.getElementById("authGate").classList.add("show");
+      const doneBtn = document.getElementById("authRevealDone");
+      doneBtn.onclick = () => {
+        doneBtn.onclick = submitAuthReveal;
+        document.getElementById("authGate").classList.remove("show");
+        pendingRevealPassword = "";
+        toast("Nova senha ativa — compartilhe com a equipe");
+      };
+    }catch(e){ toast(e.message||"Erro", true); }
+  };
 }
 
 function init() {
@@ -2705,11 +3091,13 @@ function init() {
   document.getElementById("importJson").addEventListener("change", e => { if(e.target.files[0]) importJson(e.target.files[0]); });
   document.getElementById("resetAll").onclick = () => { if(confirm("Apagar TODOS os dados deste navegador?")){ localStorage.removeItem(LS_KEY); state = defaultState(); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); toast("Tudo apagado"); } };
   document.getElementById("fechPull").onclick = fechPull;
+  bindAuthEvents();
+  if (tryRestoreAuthSession()) { /* sessão válida neste aparelho */ }
   showView(activeView);
   if (typeof fbInit === "function") fbInit();
+  else if (!authUnlocked) startAuthFlow();
   const _ls=document.getElementById("lojaSubmit"); if(_ls) _ls.onclick=submitLoja;
   const _lc=document.getElementById("lojaCodeInput"); if(_lc) _lc.addEventListener("keydown",e=>{ if(e.key==="Enter") submitLoja(); });
-  if(!lojaCode && typeof askLoja==="function") askLoja();
   const _tlt=document.getElementById("trocarLojaTop"); if(_tlt) _tlt.onclick=trocarLoja;
 }
 function currentWeekIndex() { const weeks = weeksOf(currentMonth); if (todayISO() !== currentMonth) return weeks.length-1; const day = new Date().getDate(); for (let i=0;i<weeks.length;i++) if (weeks[i].includes(day)) return i; return weeks.length-1; }
