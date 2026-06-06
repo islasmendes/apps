@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#050506">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Meu Dia — Consultor · Gestão Comercial</title>
+<title>Meu Dia — Gestão Alta Performance</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -40,8 +40,8 @@
     box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 40%, transparent);
   }
   .top-titles { flex: 1; min-width: 0; }
-  .top-titles .t1 { font-weight: 800; font-size: 15px; letter-spacing: .2px; }
-  .top-titles .t2 { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
+  .top-titles .t1 { font-weight: 800; font-size: 13.5px; letter-spacing: .15px; line-height: 1.25; }
+  .top-titles .t1-sep { color: var(--text-faint); font-weight: 600; margin: 0 2px; }
   .live-pill {
     display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 800;
     text-transform: uppercase; letter-spacing: .4px; padding: 4px 9px; border-radius: 99px;
@@ -152,11 +152,6 @@
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .empty { text-align: center; color: var(--text-dim); padding: 32px 12px; font-size: 14px; line-height: 1.6; }
-  .badge-modo {
-    font-size: 9px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
-    color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
-    padding: 3px 8px; border-radius: 99px; background: color-mix(in srgb, var(--accent) 12%, transparent);
-  }
 </style>
 </head>
 <body>
@@ -165,8 +160,7 @@
     <div class="topbar-row">
       <div class="logo">GC</div>
       <div class="top-titles">
-        <div class="t1">Meu Dia <span class="badge-modo">Consultor</span></div>
-        <div class="t2" id="hdrSub">Gestão Comercial</div>
+        <div class="t1">Gestão Alta Performance <span class="t1-sep">—</span> Meu Dia</div>
       </div>
       <div class="live-pill" id="livePill"><span class="dot"></span><span id="liveTxt">offline</span></div>
     </div>
@@ -223,9 +217,15 @@ const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
 let fbDb = null, fbReady = false, connected = false;
 let lojaData = null, lojaCode = "", seller = null, lojaListener = null;
-let tickTimer = null, lastRenderDay = null;
-const URGENCY_START = 17 * 60;      // 17:00
+let tickTimer = null, lastRenderDay = null, lastCheckoutOpen = null;
+const CHECKOUT_OPEN = 16 * 60 + 30; // 16:30
+const URGENCY_START = CHECKOUT_OPEN;
 const URGENCY_END = 19 * 60 + 15;   // 19:15
+function nowMins() {
+  const n = new Date();
+  return n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60;
+}
+function checkoutWindowOpen() { return nowMins() >= CHECKOUT_OPEN; }
 
 const params = new URLSearchParams(location.search);
 if (params.get("loja")) document.getElementById("inLoja").value = params.get("loja").toUpperCase();
@@ -313,9 +313,10 @@ function hasCellValue(cell, key) {
 function isViewingToday(day, month) {
   return month === todayISO() && day === todayDay();
 }
-/** Consultor: gestor trava sempre; próprio valor editável até 00:00; vazio = editável */
+/** Consultor: gestor trava sempre; check-out só após 16:30; próprio valor editável até 00:00 */
 function cellLockedForConsultor(cell, key, day, month) {
   if (!isViewingToday(day, month)) return true;
+  if (key === "real" && !checkoutWindowOpen()) return true;
   if (!hasCellValue(cell, key)) return false;
   if (cell[key + "By"] === "gestor") return true;
   return false;
@@ -324,6 +325,9 @@ function cellIsMine(cell, key) {
   return hasCellValue(cell, key) && cell[key + "By"] === "consultor";
 }
 function lockLabel(cell, key, day, month) {
+  if (key === "real" && !checkoutWindowOpen() && !hasCellValue(cell, key)) {
+    return '<span class="lock-tag">🔒 16:30</span>';
+  }
   if (!hasCellValue(cell, key)) return "";
   const by = cell[key + "By"];
   if (by === "gestor") return '<span class="lock-tag gestor">👔 Gestor</span>';
@@ -353,9 +357,9 @@ function tickUrgencyAndDay() {
   if (onMain) {
     if (mins < URGENCY_START) {
       const start = new Date(now);
-      start.setHours(17, 0, 0, 0);
+      start.setHours(16, 30, 0, 0);
       pill.classList.add("show", "warmup");
-      lbl.textContent = "ABRE ÀS 17H";
+      lbl.textContent = "ABRE 16:30";
       txt.textContent = formatCountdown(Math.max(0, start - now));
     } else if (mins >= URGENCY_START && mins < URGENCY_END) {
       const end = new Date(now);
@@ -372,6 +376,9 @@ function tickUrgencyAndDay() {
     }
   }
   const d = todayDay();
+  const coOpen = checkoutWindowOpen();
+  if (onMain && lastCheckoutOpen !== null && coOpen !== lastCheckoutOpen) renderFields();
+  lastCheckoutOpen = coOpen;
   if (lastRenderDay != null && d !== lastRenderDay && onMain) {
     renderFields();
     toast("Novo dia — ontem bloqueado");
@@ -405,7 +412,6 @@ function updateProgress() {
   document.getElementById("helloName").textContent = seller.name;
   const sn = (lojaData.storeName || lojaCode || "").trim();
   document.getElementById("helloStore").textContent = sn && sn.toUpperCase() !== lojaCode ? (lojaCode + " · " + sn) : lojaCode;
-  document.getElementById("hdrSub").textContent = lojaCode + " · " + seller.name;
   const dt = new Date();
   document.getElementById("dateChip").textContent = dt.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
 }
@@ -454,6 +460,11 @@ async function saveField(inp) {
   const path = `lojas/${lojaCode}/data/months/${month}/daily/${seller.id}/${fieldId}/${day}`;
   const ref = fbDb.ref(path);
   try {
+    if (key === "real" && !checkoutWindowOpen()) {
+      toast("Check-out libera às 16:30", true);
+      renderFields();
+      return;
+    }
     const snap = await ref.once("value");
     const cell = snap.val() || {};
     if (cellLockedForConsultor(cell, key, day, month) && hasCellValue(cell, key)) {
