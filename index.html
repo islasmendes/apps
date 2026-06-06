@@ -110,6 +110,17 @@
   td.today .daycell .cellinput { filter: none; }
   .dio-tag-in { background: var(--dio-in-bg); color: var(--dio-in-lbl); border: 1px solid var(--dio-in-bd); }
   .dio-tag-out { background: var(--dio-out-bg); color: var(--dio-out-lbl); border: 1px solid var(--dio-out-bd); }
+  .dio-lock-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 10px; padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px; }
+  .dio-lock-bar .hint { margin: 0; }
+  .dio-bulk-unlock.active { border-color: var(--accent-2); color: var(--accent-2); background: color-mix(in srgb, var(--accent-2) 14%, var(--panel-2)); }
+  #diarioTable th.dio-locked-day { opacity: .88; }
+  #diarioTable th .dio-day-head { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  #diarioTable th .dio-today-tag { font-size: 8px; font-weight: 800; color: var(--accent-2); letter-spacing: .3px; text-transform: uppercase; }
+  #diarioTable th .dio-unlock-day { cursor: pointer; border: 1px dashed var(--border); background: transparent; color: var(--text-dim); border-radius: 6px; padding: 1px 6px; font-size: 9px; font-weight: 700; font-family: var(--font); line-height: 1.4; }
+  #diarioTable th .dio-unlock-day:hover { border-color: var(--accent); color: var(--accent); }
+  #diarioTable th .dio-unlocked-tag { font-size: 8px; color: var(--accent-2); font-weight: 700; }
+  #diarioTable td.dio-locked-day .cellinput { opacity: .72; cursor: not-allowed; pointer-events: none; }
+  #diarioTable td.dio-locked-day .daycell { filter: saturate(.85); }
   th.today, td.today { background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)) !important; }
   th.col-sun, td.col-sun { opacity: .5; }
   #diarioTable tbody tr.dgroup td { border-top: 2px solid var(--gc); }
@@ -456,8 +467,9 @@
         <div class="seg" id="diarioWeeks"></div>
       </div>
       <div id="diarioSellerBar" class="matriz-toolbar diario-seller-bar" style="margin-top:10px;"></div>
+      <div id="diarioLockBar" class="dio-lock-bar"></div>
       <div class="table-wrap" style="margin-top:12px;"><table id="diarioTable"></table></div>
-      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Sábado usa meta de sábado. Salva sozinho. <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar.</div>
+      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Só o <b>dia de hoje</b> fica liberado; demais dias exigem <b>Desbloquear</b> na coluna ou nos botões acima (reset à 00:00). <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar.</div>
     </div>
   </section>
 
@@ -652,13 +664,17 @@ function migrate(s) {
   if (!s.order) s.order = { sellers: null, indicators: null };
   if (!s.months) s.months = {};
   if (!s.theme) s.theme = "dark";
-  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, matrizFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" } }, s.ui || {});
+  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, matrizFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" } }, s.ui || {});
   if (!s.ui.expanded) s.ui.expanded = {};
   if (!s.ui.lancamentoExpanded) s.ui.lancamentoExpanded = {};
   if (!Array.isArray(s.ui.matrizFilter)) s.ui.matrizFilter = [];
   if (!Array.isArray(s.ui.arvLojaFilter)) s.ui.arvLojaFilter = [];
   if (!Array.isArray(s.ui.arvSellerFilter)) s.ui.arvSellerFilter = [];
   if (!s.ui.matrizSort) s.ui.matrizSort = { key: null, dir: "desc" };
+  const _duKey = (() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; })();
+  if (!s.ui.diarioUnlock || s.ui.diarioUnlock.resetDate !== _duKey) {
+    s.ui.diarioUnlock = { resetDate: _duKey, days: [], past: false, future: false, week: false };
+  }
   if (s.ui.view === "sistema") s.ui.view = "matriz";
   if (s.ui.tabOrder) s.ui.tabOrder = s.ui.tabOrder.filter(v => v !== "sistema");
   (s.indicators || []).forEach(i => {
@@ -690,6 +706,86 @@ function weekday(m, day) { const { y, mo } = parseMonth(m); return new Date(y, m
 function isSunday(m, d) { return weekday(m, d) === 0; }
 function isSaturday(m, d) { return weekday(m, d) === 6; }
 function isToday(m, d) { return todayISO() === m && d === new Date().getDate(); }
+function todayDateKey() {
+  const t = new Date();
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}
+function ensureDiarioUnlockFresh() {
+  const key = todayDateKey();
+  if (!state.ui.diarioUnlock || state.ui.diarioUnlock.resetDate !== key) {
+    state.ui.diarioUnlock = { resetDate: key, days: [], past: false, future: false, week: false };
+    save();
+  }
+  return state.ui.diarioUnlock;
+}
+function diarioMonthCmp() {
+  const m = currentMonth, t = todayISO();
+  if (m === t) return 0;
+  return m < t ? -1 : 1;
+}
+function diarioIsPastDay(day) {
+  const cmp = diarioMonthCmp();
+  if (cmp < 0) return true;
+  if (cmp > 0) return false;
+  return day < new Date().getDate();
+}
+function diarioIsFutureDay(day) {
+  const cmp = diarioMonthCmp();
+  if (cmp > 0) return true;
+  if (cmp < 0) return false;
+  return day > new Date().getDate();
+}
+function diarioIsTodayDay(day) { return isToday(currentMonth, day); }
+function diarioWeekDays() { return weeksOf(currentMonth)[diarioWeekIdx] || []; }
+function diarioDayUnlocked(day) {
+  const u = ensureDiarioUnlockFresh();
+  if (u.week && diarioWeekDays().includes(day)) return true;
+  if (u.past && diarioIsPastDay(day)) return true;
+  if (u.future && diarioIsFutureDay(day)) return true;
+  return (u.days || []).includes(day);
+}
+function diarioDayEditable(day) {
+  if (diarioIsTodayDay(day)) return true;
+  return diarioDayUnlocked(day);
+}
+function unlockDiarioDay(day) {
+  const u = ensureDiarioUnlockFresh();
+  if (!u.days.includes(day)) u.days.push(day);
+  save();
+  renderDiario();
+}
+function unlockDiarioBulk(mode) {
+  const u = ensureDiarioUnlockFresh();
+  if (mode === "past") u.past = true;
+  if (mode === "future") u.future = true;
+  if (mode === "week") u.week = true;
+  save();
+  renderDiario();
+}
+function diarioDayHeadHtml(d, dn) {
+  const wd = weekday(currentMonth, d);
+  const editable = diarioDayEditable(d);
+  const unlocked = diarioDayUnlocked(d);
+  const today = diarioIsTodayDay(d);
+  let extra = "";
+  if (today) extra = `<span class="dio-today-tag">hoje</span>`;
+  else if (editable && unlocked) extra = `<span class="dio-unlocked-tag">✓ livre</span>`;
+  else if (!editable) extra = `<button type="button" class="dio-unlock-day" data-day="${d}" title="Desbloquear este dia para editar">🔓</button>`;
+  return `<th class="${dayCls(d)}${editable ? "" : " dio-locked-day"}"><div class="dio-day-head">${d}<span style="font-size:9px;opacity:.7">${dn[wd]}</span>${extra}</div></th>`;
+}
+function renderDiarioLockBar() {
+  const bar = document.getElementById("diarioLockBar");
+  if (!bar) return;
+  const u = ensureDiarioUnlockFresh();
+  bar.innerHTML = `<span class="hint">Edição bloqueada fora de hoje ·</span>
+    <button type="button" class="ghost-btn sm dio-bulk-unlock${u.past ? " active" : ""}" data-mode="past">Desbloquear passado</button>
+    <button type="button" class="ghost-btn sm dio-bulk-unlock${u.future ? " active" : ""}" data-mode="future">Desbloquear futuro</button>
+    <button type="button" class="ghost-btn sm dio-bulk-unlock${u.week ? " active" : ""}" data-mode="week">Desbloquear semana</button>
+    <span class="hint">Valores sempre visíveis · à 00:00 tudo trava de novo</span>`;
+  bar.querySelectorAll(".dio-bulk-unlock").forEach(btn => {
+    btn.onclick = () => unlockDiarioBulk(btn.dataset.mode);
+  });
+}
 function autoWorkdays(m) { let c = 0; const n = daysInMonth(m); for (let d = 1; d <= n; d++) if (!isSunday(m, d)) c++; return c; }
 function countWeekdays(m){ let c=0; const n=daysInMonth(m); for(let d=1;d<=n;d++){ const w=weekday(m,d); if(w>=1&&w<=5) c++; } return c; }
 function countSaturdays(m){ let c=0; const n=daysInMonth(m); for(let d=1;d<=n;d++) if(isSaturday(m,d)) c++; return c; }
@@ -1882,6 +1978,7 @@ function renderDiario() {
     return;
   }
   renderDiarioSellerBar(sellers);
+  renderDiarioLockBar();
   const weeks = weeksOf(currentMonth);
   const segW = document.getElementById("diarioWeeks");
   segW.innerHTML = weeks.map((w, i) => `<button data-w="${i}" class="${i===diarioWeekIdx?'active':''}">Sem ${i+1}<br><span style="font-size:9px;opacity:.7">${w[0]}-${w[w.length-1]}</span></button>`).join("");
@@ -1890,7 +1987,7 @@ function renderDiario() {
   const days = weeks[diarioWeekIdx] || []; const dn = ["DOM","SEG","TER","QUA","QUI","SEX","SÁB"];
 
   let head = '<thead><tr><th class="name">Indicador</th><th class="neon">Meta/dia</th>';
-  days.forEach(d => { const wd = weekday(currentMonth,d); head += `<th class="${dayCls(d)}">${d}<br><span style="font-size:9px;opacity:.7">${dn[wd]}</span></th>`; });
+  days.forEach(d => { head += diarioDayHeadHtml(d, dn); });
   head += '<th>Semana</th></tr></thead>';
   let body = "<tbody>";
   let anyDiario = false;
@@ -1905,7 +2002,17 @@ function renderDiario() {
   if (!anyDiario) body += `<tr><td class="empty" colspan="${days.length + 3}">Nenhum indicador com Check-in ou Check-out.<br>Ative em <b>KPIs</b> nos indicadores que entram no diário.</td></tr>`;
   body += "</tbody>";
   const table = document.getElementById("diarioTable"); table.innerHTML = head + body;
-  table.querySelectorAll(".cellinput").forEach(inp => { inp.addEventListener("input", () => { setCell(diarioSeller, inp.dataset.field, +inp.dataset.day, inp.dataset.key, inp.value === "" ? "" : Number(inp.value)); recolorDiarioCell(inp); updateDiarioSummary(inp.dataset.field); }); });
+  table.querySelectorAll(".dio-unlock-day").forEach(btn => {
+    btn.onclick = (e) => { e.stopPropagation(); unlockDiarioDay(+btn.dataset.day); toast("Dia " + btn.dataset.day + " liberado para edição"); };
+  });
+  table.querySelectorAll(".cellinput").forEach(inp => {
+    inp.addEventListener("input", () => {
+      if (inp.readOnly) return;
+      setCell(diarioSeller, inp.dataset.field, +inp.dataset.day, inp.dataset.key, inp.value === "" ? "" : Number(inp.value));
+      recolorDiarioCell(inp);
+      updateDiarioSummary(inp.dataset.field);
+    });
+  });
   attachGridNav(table);
 }
 function diarioRow(cfg, color, isSub) {
@@ -1916,14 +2023,16 @@ function diarioRow(cfg, color, isSub) {
   let row = `<tr class="${isSub?'dsub':'dgroup'}" style="--gc:${color}"><td class="name" style="border-left:3px solid ${color};">${label}</td>`;
   row += `<td><span class="neon">${fmt(cfg.metaDay)}</span>${Number(cfg.metaSat)?`<br><span class="muted" style="font-size:10px">sáb ${fmt(cfg.metaSat)}</span>`:''}</td>`;
   days.forEach(d => {
+    const editable = diarioDayEditable(d);
+    const ro = editable ? "" : ' readonly tabindex="-1"';
     const c = getCell(diarioSeller, cfg.id, d); let cell = '<div class="daycell">';
-    if (ci) cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"></label>`;
+    if (ci) cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"${ro}></label>`;
     if (co) {
       const metaD = metaForDay(cfg, currentMonth, d);
       const pct = metaD ? (c.real != null ? c.real / metaD : null) : null;
-      cell += `<label class="dio-field dio-checkout"><span class="dio-lbl">Check-out</span><input class="cellinput checkout-cell" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${c.real ?? ''}" placeholder="—" style="color:${c.real != null ? heatText(pct) : 'var(--text)'};"></label>`;
+      cell += `<label class="dio-field dio-checkout"><span class="dio-lbl">Check-out</span><input class="cellinput checkout-cell" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${c.real ?? ''}" placeholder="—" style="color:${c.real != null ? heatText(pct) : 'var(--text)'};"${ro}></label>`;
     }
-    cell += '</div>'; row += `<td class="${dayCls(d)}">${cell}</td>`;
+    cell += '</div>'; row += `<td class="${dayCls(d)}${editable ? "" : " dio-locked-day"}">${cell}</td>`;
   });
   const realSum = accum(diarioSeller, cfg.id, "real", days) ?? 0; const metaSum = weekMeta(cfg, days); const pctW = metaSum ? realSum/metaSum : null;
   row += `<td data-sum="${cfg.id}"><b style="color:${heatText(pctW)}">${fmt(realSum)}</b> <span class="muted">/ ${fmt(metaSum)}</span></td></tr>`;
