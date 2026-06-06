@@ -160,8 +160,10 @@
   .matriz-filter-chip { cursor: pointer; border: 1px solid var(--border); background: var(--cell); color: var(--text-dim); border-radius: 99px; padding: 5px 12px; font-size: 12px; font-weight: 600; font-family: var(--font); transition: .15s; }
   .matriz-filter-chip:hover { border-color: var(--accent); color: var(--text); }
   .matriz-filter-chip.active { background: color-mix(in srgb, var(--accent) 22%, var(--cell)); border-color: var(--accent); color: var(--text); font-weight: 700; }
-  .diario-seller-bar .matriz-filter-chip.active { background: color-mix(in srgb, var(--accent) 28%, var(--cell)); border-color: var(--accent); color: var(--accent-2); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
-  html[data-theme="light"] .diario-seller-bar .matriz-filter-chip.active { color: var(--accent); }
+  .diario-seller-bar .matriz-filter-chip.active { background: color-mix(in srgb, var(--accent) 28%, var(--cell)); border-color: var(--accent); color: var(--text); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .diario-seller-bar .matriz-filter-chip.dio-co-done { color: var(--ok); font-weight: 700; }
+  .diario-seller-bar .matriz-filter-chip.dio-co-pending { color: var(--danger); font-weight: 700; }
+  html[data-theme="light"] .diario-seller-bar .matriz-filter-chip.active { color: var(--text); }
   .matriz-filter-all.active { border-color: var(--accent); color: var(--accent); }
   .arvore-toolbar { flex-direction: column; align-items: flex-start; gap: 10px; }
   .arvore-toolbar .arvore-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; width: 100%; }
@@ -483,7 +485,7 @@
       <div id="diarioSellerBar" class="matriz-toolbar diario-seller-bar" style="margin-top:10px;"></div>
       <div id="diarioLockBar" class="dio-lock-bar"></div>
       <div class="table-wrap" style="margin-top:12px;"><table id="diarioTable"></table></div>
-      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Só o <b>dia de hoje</b> fica liberado; demais dias exigem <b>Desbloquear</b> na coluna ou nos botões acima (reset à 00:00). <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar.</div>
+      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Só o <b>dia de hoje</b> fica liberado; demais dias exigem <b>Desbloquear</b> na coluna ou nos botões acima (reset à 00:00). <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar. Nome <b style="color:var(--ok)">verde</b> = check-out de hoje finalizado · <b style="color:var(--danger)">vermelho</b> = pendente. Coluna <b>Semana loja</b> = realizado/meta acumulados de todos os consultores.</div>
     </div>
   </section>
 
@@ -1998,15 +2000,60 @@ function reorder(kind, fromId, toId) { const list = kind === 'sellers' ? ordered
 let diarioSeller = state.ui.diarioSeller || null;
 let diarioWeekIdx = state.ui.diarioWeek || 0;
 function dayCls(d) { let c = []; if (isToday(currentMonth, d)) c.push("today"); if (isSunday(currentMonth, d)) c.push("col-sun"); return c.join(" "); }
+function diarioTodayDay() { return todayISO() === currentMonth ? new Date().getDate() : null; }
+function diarioCheckoutFieldIds(sellerId, day) {
+  const week = (weeksOf(currentMonth).find(w => w.includes(day)) || [day]);
+  const ids = [];
+  orderedIndicators().forEach(ind => {
+    if (ind.pctOnly) return;
+    const add = cfg => {
+      if (!cfg.checkout) return;
+      if (cfg.sundayOnly && !weekHasWorkedSunday(sellerId, week)) return;
+      ids.push(cfg.id);
+    };
+    if (cfgHasDiario(ind)) add(ind);
+    (ind.subs || []).filter(cfgHasDiario).forEach(add);
+  });
+  return ids;
+}
+function diarioSellerCheckoutDone(sellerId, day) {
+  const fields = diarioCheckoutFieldIds(sellerId, day);
+  if (!fields.length) return null;
+  return fields.every(fid => {
+    const c = getCell(sellerId, fid, day);
+    return c.real != null && c.real !== "";
+  });
+}
+function diarioWeekCellHtml(realSum, metaSum) {
+  const pctW = metaSum ? realSum / metaSum : null;
+  return `<b style="color:${heatText(pctW)}">${fmt(realSum)}</b> <span class="muted">/ ${fmt(metaSum)}</span>`;
+}
+function weekMetaSeller(cfg, sellerId, days) {
+  let s = 0;
+  days.forEach(d => { if (sellerWorks(sellerId, d)) s += metaForDay(cfg, currentMonth, d); });
+  return s;
+}
+function diarioLojaWeek(cfg, days) {
+  let real = 0, meta = 0;
+  orderedSellers().forEach(s => {
+    const r = accum(s.id, cfg.id, "real", days);
+    if (r != null) real += r;
+    meta += weekMetaSeller(cfg, s.id, days);
+  });
+  return { real, meta };
+}
 function renderDiarioSellerBar(sellers) {
   const bar = document.getElementById("diarioSellerBar");
   if (!bar) return;
   if (!sellers.length) { bar.innerHTML = ""; return; }
   if (!diarioSeller || !sellers.find(s => s.id === diarioSeller)) diarioSeller = sellers[0].id;
+  const today = diarioTodayDay();
   bar.innerHTML = `<span class="hint">Vendedor</span>
-    <div class="matriz-filter-chips">${sellers.map(s =>
-      `<button type="button" class="matriz-filter-chip diario-seller-chip${s.id === diarioSeller ? " active" : ""}" data-sid="${s.id}">${escapeHtml(s.name)}</button>`
-    ).join("")}</div>`;
+    <div class="matriz-filter-chips">${sellers.map(s => {
+      const co = today != null ? diarioSellerCheckoutDone(s.id, today) : null;
+      const coCls = co === true ? " dio-co-done" : co === false ? " dio-co-pending" : "";
+      return `<button type="button" class="matriz-filter-chip diario-seller-chip${s.id === diarioSeller ? " active" : ""}${coCls}" data-sid="${s.id}">${escapeHtml(s.name)}</button>`;
+    }).join("")}</div>`;
   bar.querySelectorAll(".diario-seller-chip").forEach(btn => {
     btn.onclick = () => {
       diarioSeller = btn.dataset.sid;
@@ -2035,7 +2082,7 @@ function renderDiario() {
 
   let head = '<thead><tr><th class="name">Indicador</th><th class="neon">Meta/dia</th>';
   days.forEach(d => { head += diarioDayHeadHtml(d, dn); });
-  head += '<th>Semana</th></tr></thead>';
+  head += '<th>Semana</th><th>Semana<br><span class="muted" style="font-weight:600;font-size:9px">loja</span></th></tr></thead>';
   let body = "<tbody>";
   let anyDiario = false;
   orderedIndicators().forEach(ind => {
@@ -2046,7 +2093,7 @@ function renderDiario() {
     if (showInd) { body += diarioRow(ind, ind.color, false); anyDiario = true; }
     diarioSubs.forEach(s => { body += diarioRow(s, ind.color, true); anyDiario = true; });
   });
-  if (!anyDiario) body += `<tr><td class="empty" colspan="${days.length + 3}">Nenhum indicador com Check-in ou Check-out.<br>Ative em <b>KPIs</b> nos indicadores que entram no diário.</td></tr>`;
+  if (!anyDiario) body += `<tr><td class="empty" colspan="${days.length + 4}">Nenhum indicador com Check-in ou Check-out.<br>Ative em <b>KPIs</b> nos indicadores que entram no diário.</td></tr>`;
   body += "</tbody>";
   const table = document.getElementById("diarioTable"); table.innerHTML = head + body;
   table.querySelectorAll(".dio-unlock-day").forEach(btn => {
@@ -2058,6 +2105,7 @@ function renderDiario() {
       setCell(diarioSeller, inp.dataset.field, +inp.dataset.day, inp.dataset.key, inp.value === "" ? "" : Number(inp.value));
       recolorDiarioCell(inp);
       updateDiarioSummary(inp.dataset.field);
+      renderDiarioSellerBar(sellers);
     });
   });
   attachGridNav(table);
@@ -2081,12 +2129,26 @@ function diarioRow(cfg, color, isSub) {
     }
     cell += '</div>'; row += `<td class="${dayCls(d)}${editable ? "" : " dio-locked-day"}">${cell}</td>`;
   });
-  const realSum = accum(diarioSeller, cfg.id, "real", days) ?? 0; const metaSum = weekMeta(cfg, days); const pctW = metaSum ? realSum/metaSum : null;
-  row += `<td data-sum="${cfg.id}"><b style="color:${heatText(pctW)}">${fmt(realSum)}</b> <span class="muted">/ ${fmt(metaSum)}</span></td></tr>`;
+  const realSum = accum(diarioSeller, cfg.id, "real", days) ?? 0;
+  const metaSum = weekMeta(cfg, days);
+  const loja = diarioLojaWeek(cfg, days);
+  row += `<td data-sum="${cfg.id}">${diarioWeekCellHtml(realSum, metaSum)}</td>`;
+  row += `<td data-sum-loja="${cfg.id}">${diarioWeekCellHtml(loja.real, loja.meta)}</td></tr>`;
   return row;
 }
 function recolorDiarioCell(inp) { if (inp.dataset.key !== "real") return; const d = +inp.dataset.day; const cfg = cfgById(inp.dataset.field); if (!cfg) return; const metaD = metaForDay(cfg, currentMonth, d); const v = inp.value === "" ? null : Number(inp.value); const pct = metaD ? (v != null ? v/metaD : null) : null; inp.style.color = v != null ? heatText(pct) : "var(--text)"; }
-function updateDiarioSummary(fieldId) { const days = (weeksOf(currentMonth)[diarioWeekIdx] || []); const cfg = cfgById(fieldId); if (!cfg) return; const realSum = accum(diarioSeller, fieldId, "real", days) ?? 0; const metaSum = weekMeta(cfg, days); const pctW = metaSum ? realSum/metaSum : null; const cell = document.querySelector(`#diarioTable [data-sum="${fieldId}"]`); if (cell) cell.innerHTML = `<b style="color:${heatText(pctW)}">${fmt(realSum)}</b> <span class="muted">/ ${fmt(metaSum)}</span>`; }
+function updateDiarioSummary(fieldId) {
+  const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
+  const cfg = cfgById(fieldId);
+  if (!cfg) return;
+  const realSum = accum(diarioSeller, fieldId, "real", days) ?? 0;
+  const metaSum = weekMeta(cfg, days);
+  const loja = diarioLojaWeek(cfg, days);
+  const cell = document.querySelector(`#diarioTable [data-sum="${fieldId}"]`);
+  const lojaCell = document.querySelector(`#diarioTable [data-sum-loja="${fieldId}"]`);
+  if (cell) cell.innerHTML = diarioWeekCellHtml(realSum, metaSum);
+  if (lojaCell) lojaCell.innerHTML = diarioWeekCellHtml(loja.real, loja.meta);
+}
 
 /* ============================================================ LANÇAMENTO / AUDITORIA (modais) */
 let modalSellerId = null;
