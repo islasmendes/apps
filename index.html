@@ -558,7 +558,7 @@
   <div class="auth-card">
     <div class="auth-step active" id="authStepSenha">
       <h3>🔐 Acesso seguro</h3>
-      <div class="sub">Loja <b>já configurada</b>: use a <b>senha individual</b> da loja. <b>Primeira vez</b> da loja: use a <b>senha mestra</b> (admin). Divisional (RSCEN): só senha mestra.</div>
+      <div class="sub">Loja <b>já configurada</b> (VCANT, RSCEN, etc.): use a <b>senha individual</b>. <b>Primeira vez</b>: use a <b>senha mestra</b> (admin) para gerar a senha da loja.</div>
       <div class="auth-pass-wrap">
         <input type="password" id="authPassInput" placeholder="Senha de acesso" autocomplete="current-password">
         <button type="button" class="auth-toggle-pass" id="authTogglePass" title="Mostrar senha">👁</button>
@@ -2772,23 +2772,15 @@ async function submitAuthLoja() {
   let code = (inp.value || "").trim().toUpperCase().replace(/\s+/g, "");
   const okLoja = /^VC[A-Z0-9]+$/.test(code) && code.length >= 3;
   const okDiv = /^RSCEN[A-Z0-9]*$/.test(code);
-  if (!okLoja && !okDiv) { err.textContent = "Use VC… (ex.: VCANT) ou RSCEN para Divisional."; return; }
+  const okCode = okLoja || okDiv;
+  if (!okCode) { err.textContent = "Use VC… (ex.: VCANT) ou RSCEN (Divisional)."; return; }
   const pass = pendingAuthPassword;
   if (!pass) { showAuthStep("senha"); return; }
   err.textContent = "Verificando…";
-  const lojaAuth = okDiv ? null : await fetchLojaAuth(code);
+  const lojaAuth = await fetchLojaAuth(code);
   const masterOk = authMasterCache ? await verifyPass(pass, authMasterCache) : false;
   const lojaOk = lojaAuth ? await verifyPass(pass, lojaAuth) : false;
   err.textContent = "";
-  if (okDiv) {
-    if (!masterOk) {
-      await authDelayFail();
-      err.textContent = "Modo Divisional exige a senha mestra.";
-      return;
-    }
-    finishAuthEnter(code);
-    return;
-  }
   if (lojaAuth) {
     if (!lojaOk) {
       await authDelayFail();
@@ -2805,7 +2797,7 @@ async function submitAuthLoja() {
     err.textContent = "Loja ainda não configurada. Use a senha mestra para criar o acesso.";
     return;
   }
-  if (masterOk && !lojaAuth && okLoja) {
+  if (masterOk && !lojaAuth && okCode) {
     if (!fbReady || !fbDb) { err.textContent = "Sem nuvem para registrar a senha da loja."; return; }
     const newPass = generateSecurePassword(24);
     try {
@@ -3052,14 +3044,14 @@ function renderSync(){
       <div class="field"><label>Nova senha mestra</label><input type="password" id="authChgNew" autocomplete="new-password"></div>
       <button class="btn sec sm" id="authChgBtn">Trocar senha mestra</button>
     </div>`;
-    if (!div && lojaCode) {
+    if (lojaCode) {
       html += `<div class="row" style="margin-top:10px;"><button class="btn danger sm" id="authRegenLoja">↻ Gerar nova senha individual de ${escapeHtml(lojaCode)}</button></div>`;
     }
     html += `<div class="hint" style="margin-top:8px;">Cadastre o ID do aparelho em <code>/auth/adminDevices</code> no Firebase para liberar funções de admin.</div>`;
   } else {
     html += `<div class="hint" style="margin-top:8px;">Admin: cadastre o ID acima em <code>/auth/adminDevices</code> no Firebase.</div>`;
   }
-  if (!div && lojaCode && authUnlocked) {
+  if (lojaCode && authUnlocked) {
     html += `<div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--border-soft);">
       <b style="font-size:12px;">Senha de acesso · ${escapeHtml(lojaCode)}</b>
       <div class="hint" style="margin-top:4px;">Redefina a senha individual desta loja (a anterior deixa de funcionar em todos os aparelhos).</div>
