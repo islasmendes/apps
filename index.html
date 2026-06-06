@@ -207,6 +207,9 @@
   .month-breakdown .mb-val { background: var(--cell); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; font-weight: 700; color: var(--text-dim); }
   .chip-days { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); font-weight: 800; font-size: 10.5px; border-radius: 99px; padding: 1px 7px; }
   .seller-chip .x.esc:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+  .seller-chip .x.portal:hover { background: color-mix(in srgb, var(--accent-2) 22%, transparent); color: var(--accent-2); }
+  .seller-mat { width: 72px; font-size: 12px; font-weight: 700; padding: 4px 6px; text-align: center; }
+  .consultor-qr { display: block; margin: 12px auto 0; border-radius: 12px; border: 1px solid var(--border); }
   .escala-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 10px; }
   .escala-cal .eh { font-size: 10px; color: var(--text-faint); text-align: center; text-transform: uppercase; font-weight: 700; padding-bottom: 2px; }
   .escala-cal .ed { aspect-ratio: 1; border: 1px solid var(--border); border-radius: 9px; background: var(--cell); color: var(--text-dim); font-weight: 700; cursor: pointer; display: grid; place-items: center; font-size: 13px; transition: .12s; }
@@ -504,7 +507,7 @@
         <div class="hint" id="workdaysHint" style="margin-top:8px;"></div>
       </div>
       <div class="panel" style="flex:1.4; min-width:280px; margin:0;">
-        <h2>Vendedores</h2><div class="sub">Cadastro dinâmico.</div>
+        <h2>Vendedores</h2><div class="sub">Cadastro dinâmico · <b>Matr.</b> = login do portal consultor · 🔗 link · 📅 escala e PIN</div>
         <div id="sellerList"></div>
         <div class="row" style="margin-top:12px;">
           <input type="text" id="newSeller" placeholder="Nome do consultor" style="flex:1; min-width:160px;">
@@ -562,12 +565,29 @@
   </section>
 </main>
 
-<div class="modal-bg" id="escalaModal"><div class="modal">
-  <div class="flex-between"><h3>📅 Escala — <span id="escalaName"></span> · <span id="escalaMonth"></span></h3><button class="iconbtn" id="closeEscala">✕</button></div>
-  <div class="sub">Dias marcados = trabalhados. Desmarque as folgas. Domingos só contam se "Trabalha domingo" estiver ligado.</div>
+<div class="modal-bg" id="escalaModal"><div class="modal" style="max-width:480px">
+  <div class="flex-between"><h3>📅 <span id="escalaName"></span> · <span id="escalaMonth"></span></h3><button class="iconbtn" id="closeEscala">✕</button></div>
+  <div class="sub">Escala, matrícula e portal do consultor (check-in/out pelo celular).</div>
+  <div class="row" style="align-items:flex-end; gap:10px; margin:10px 0;">
+    <div class="field" style="flex:1"><label>Matrícula (login)</label><input type="text" id="escalaMatricula" placeholder="Ex.: 10482" inputmode="numeric" style="width:100%"></div>
+    <div class="field"><label>PIN</label><button class="btn sec sm" id="escalaPinBtn" type="button">🔐 Definir</button></div>
+  </div>
+  <div class="hint" id="escalaPinStatus" style="margin-bottom:8px;">—</div>
+  <div class="row" style="gap:8px; margin-bottom:12px;">
+    <button class="btn sec sm" id="escalaCopyLink" type="button">📋 Link do consultor</button>
+    <button class="btn sec sm" id="escalaShowQr" type="button">QR Code</button>
+  </div>
+  <div class="sub" style="margin-bottom:6px;">Escala — dias marcados = trabalhados</div>
   <label class="switch" style="margin:6px 0 2px;"><input type="checkbox" id="escalaSunday"><span class="track"></span>Trabalha domingo</label>
   <div id="escalaCal" class="escala-cal"></div>
   <div class="hint" style="margin-top:10px;">Dias trabalhados no mês: <b id="escalaCount" class="neon">0</b></div>
+</div></div>
+<div class="modal-bg" id="consultorQrModal"><div class="modal" style="max-width:360px;text-align:center">
+  <div class="flex-between"><h3>Portal do consultor</h3><button class="iconbtn" id="closeConsultorQr">✕</button></div>
+  <p class="sub">Escaneie para abrir o check-in no celular. Login com matrícula + PIN.</p>
+  <img id="consultorQrImg" class="consultor-qr" width="200" height="200" alt="QR Code">
+  <div class="hint" id="consultorLinkTxt" style="word-break:break-all;margin-top:8px;"></div>
+  <button class="btn sec sm" id="consultorCopyLink2" style="margin-top:12px">📋 Copiar link</button>
 </div></div>
 
 <div class="modal-bg" id="lancamentoModal"><div class="modal modal-wide">
@@ -706,9 +726,12 @@ function migrate(s) {
     });
     (i.rates || []).forEach(r => { if (r.lowerBetter == null) r.lowerBetter = false; });
   });
+  (s.sellers || []).forEach(seller => {
+    if (seller.matricula == null) seller.matricula = "";
+  });
   return s;
 }
-function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); } if (typeof fbPush === "function") fbPush(); }
+function save(opts) { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); } if (!opts?.skipPush && typeof fbPush === "function") fbPush(); }
 
 let currentMonth = todayISO();
 function monthData(m = currentMonth) {
@@ -900,8 +923,99 @@ function cfgById(id) { for (const ind of state.indicators) { if (ind.id === id) 
 /* Dados diários */
 function getCell(sellerId, fieldId, day, m = currentMonth) { const md = monthData(m); return (md.daily[sellerId] && md.daily[sellerId][fieldId] && md.daily[sellerId][fieldId][day]) || {}; }
 function setCell(sellerId, fieldId, day, key, val, m = currentMonth) {
-  const md = monthData(m); md.daily[sellerId] = md.daily[sellerId] || {}; md.daily[sellerId][fieldId] = md.daily[sellerId][fieldId] || {}; md.daily[sellerId][fieldId][day] = md.daily[sellerId][fieldId][day] || {};
-  if (val === "" || val === null || isNaN(val)) delete md.daily[sellerId][fieldId][day][key]; else md.daily[sellerId][fieldId][day][key] = val; save();
+  const md = monthData(m);
+  md.daily[sellerId] = md.daily[sellerId] || {};
+  md.daily[sellerId][fieldId] = md.daily[sellerId][fieldId] || {};
+  const cell = md.daily[sellerId][fieldId][day] || {};
+  md.daily[sellerId][fieldId][day] = cell;
+  if (val === "" || val === null || isNaN(val)) {
+    delete cell[key]; delete cell[key + "By"]; delete cell[key + "At"];
+  } else {
+    cell[key] = val; cell[key + "By"] = "gestor"; cell[key + "At"] = Date.now();
+  }
+  save();
+}
+function cellSourceTag(cell, key) {
+  if (cell[key] == null || cell[key] === "") return "";
+  const by = cell[key + "By"];
+  if (by === "consultor") return ' <span class="hint" style="font-size:8px;color:var(--ok)">👤</span>';
+  if (by === "gestor") return ' <span class="hint" style="font-size:8px;color:var(--accent)">👔</span>';
+  return "";
+}
+function mergeDailyFromRemote(remoteMonths) {
+  if (!remoteMonths || typeof remoteMonths !== "object") return false;
+  let changed = false;
+  Object.keys(remoteMonths).forEach(m => {
+    const daily = remoteMonths[m]?.daily;
+    if (!daily) return;
+    const md = monthData(m);
+    Object.keys(daily).forEach(sid => {
+      Object.keys(daily[sid] || {}).forEach(fid => {
+        Object.keys(daily[sid][fid] || {}).forEach(day => {
+          const rc = daily[sid][fid][day];
+          if (!rc || typeof rc !== "object") return;
+          md.daily[sid] = md.daily[sid] || {};
+          md.daily[sid][fid] = md.daily[sid][fid] || {};
+          const lc = { ...(md.daily[sid][fid][day] || {}) };
+          let cellChanged = false;
+          ["plan", "real", "planBy", "realBy", "planAt", "realAt"].forEach(k => {
+            if (rc[k] !== undefined && rc[k] !== lc[k]) {
+              if (rc[k] === null || rc[k] === "") delete lc[k];
+              else lc[k] = rc[k];
+              cellChanged = true;
+            }
+          });
+          if (cellChanged) { md.daily[sid][fid][day] = lc; changed = true; }
+        });
+      });
+    });
+  });
+  return changed;
+}
+let lojaDataListenerOn = false;
+let lojaMergeTimer = null;
+function startLojaDataListener() {
+  if (!fbReady || !fbDb || !lojaCode || divisionalMode() || lojaDataListenerOn) return;
+  lojaDataListenerOn = true;
+  fbDb.ref("lojas/" + lojaCode + "/data/months").on("value", snap => {
+    clearTimeout(lojaMergeTimer);
+    lojaMergeTimer = setTimeout(() => {
+      if (mergeDailyFromRemote(snap.val())) {
+        save({ skipPush: true });
+        if (activeView === "diario") renderDiario();
+        else if (activeView === "matriz") renderMatriz();
+      }
+    }, 450);
+  });
+}
+function consultorPortalUrl() {
+  const base = location.href.replace(/[^/]*$/, "");
+  const loja = lojaCode || state.storeName || "";
+  return base + "consultor.html?loja=" + encodeURIComponent(String(loja).toUpperCase());
+}
+async function setSellerPin(sellerId, pin) {
+  const s = state.sellers.find(x => x.id === sellerId);
+  if (!s) throw new Error("Vendedor não encontrado");
+  if (!/^\d{4,8}$/.test(pin)) throw new Error("PIN deve ter 4 a 8 dígitos numéricos.");
+  if (typeof pbkdf2Record !== "function") throw new Error("Autenticação indisponível.");
+  const rec = await pbkdf2Record(pin, null);
+  s.pinHash = rec.hash; s.pinSalt = rec.salt;
+  save();
+}
+function normalizeMatricula(v) { return String(v || "").trim(); }
+function matriculaUnique(mat, excludeId) {
+  const m = normalizeMatricula(mat);
+  if (!m) return true;
+  return !state.sellers.some(s => s.id !== excludeId && normalizeMatricula(s.matricula) === m);
+}
+function saveEscalaMatricula() {
+  if (!escalaSellerId) return;
+  const s = state.sellers.find(x => x.id === escalaSellerId);
+  const inp = document.getElementById("escalaMatricula");
+  if (!s || !inp) return;
+  const m = normalizeMatricula(inp.value);
+  if (!matriculaUnique(m, s.id)) { toast("Matrícula já usada", true); inp.value = s.matricula || ""; return; }
+  s.matricula = m; save();
 }
 function accum(sellerId, fieldId, key, days, m = currentMonth) { let sum = 0, has = false; days.forEach(d => { const c = getCell(sellerId, fieldId, d, m); if (c[key] != null) { sum += Number(c[key]); has = true; } }); return has ? sum : null; }
 function monthDays(m = currentMonth) { return Array.from({ length: daysInMonth(m) }, (_, i) => i + 1); }
@@ -2121,11 +2235,11 @@ function diarioRow(cfg, color, isSub) {
     const editable = diarioDayEditable(d);
     const ro = editable ? "" : ' readonly tabindex="-1"';
     const c = getCell(diarioSeller, cfg.id, d); let cell = '<div class="daycell">';
-    if (ci) cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"${ro}></label>`;
+    if (ci) cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"${ro}></label>`;
     if (co) {
       const metaD = metaForDay(cfg, currentMonth, d);
       const pct = metaD ? (c.real != null ? c.real / metaD : null) : null;
-      cell += `<label class="dio-field dio-checkout"><span class="dio-lbl">Check-out</span><input class="cellinput checkout-cell" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${c.real ?? ''}" placeholder="—" style="color:${c.real != null ? heatText(pct) : 'var(--text)'};"${ro}></label>`;
+      cell += `<label class="dio-field dio-checkout"><span class="dio-lbl">Check-out${cellSourceTag(c, "real")}</span><input class="cellinput checkout-cell" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${c.real ?? ''}" placeholder="—" style="color:${c.real != null ? heatText(pct) : 'var(--text)'};"${ro}></label>`;
     }
     cell += '</div>'; row += `<td class="${dayCls(d)}${editable ? "" : " dio-locked-day"}">${cell}</td>`;
   });
@@ -2346,7 +2460,31 @@ function renderResumo() {
 
 let escalaSellerId = null;
 function ensureSched(sellerId){ const md=monthData(); md.sched=md.sched||{}; if(!md.sched[sellerId]){ const o={}; const n=daysInMonth(currentMonth); for(let d=1;d<=n;d++) if(defaultWorks(currentMonth,d)) o[d]=1; md.sched[sellerId]=o; } return md.sched[sellerId]; }
-function openEscala(sellerId){ const s=state.sellers.find(x=>x.id===sellerId); if(!s) return; escalaSellerId=sellerId; document.getElementById("escalaName").textContent=s.name; document.getElementById("escalaMonth").textContent=monthLabel(currentMonth); document.getElementById("escalaSunday").checked=sellerWorksAnySunday(sellerId); renderEscalaCal(); document.getElementById("escalaModal").classList.add("show"); }
+let consultorQrSellerId = null;
+function openConsultorPortal(sellerId) {
+  const s = state.sellers.find(x => x.id === sellerId);
+  if (!s) return;
+  consultorQrSellerId = sellerId;
+  const url = consultorPortalUrl();
+  document.getElementById("consultorLinkTxt").textContent = url;
+  document.getElementById("consultorQrImg").src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(url);
+  document.getElementById("consultorQrModal").classList.add("show");
+  if (!s.matricula) toast("Defina a matrícula antes de enviar o link ao consultor", true);
+  else if (!s.pinHash) toast("Defina o PIN do consultor em 📅 Escala", true);
+}
+function openEscala(sellerId){
+  const s=state.sellers.find(x=>x.id===sellerId); if(!s) return;
+  escalaSellerId=sellerId;
+  document.getElementById("escalaName").textContent=s.name;
+  document.getElementById("escalaMonth").textContent=monthLabel(currentMonth);
+  document.getElementById("escalaSunday").checked=sellerWorksAnySunday(sellerId);
+  const matInp = document.getElementById("escalaMatricula");
+  if (matInp) matInp.value = s.matricula || "";
+  const pinSt = document.getElementById("escalaPinStatus");
+  if (pinSt) pinSt.innerHTML = s.pinHash ? '<span style="color:var(--ok)">✓ PIN configurado</span> · login com matrícula <b>' + escapeHtml(s.matricula || "—") + "</b>" : '<span style="color:var(--warn)">⚠ PIN não definido — o consultor não consegue entrar</span>';
+  renderEscalaCal();
+  document.getElementById("escalaModal").classList.add("show");
+}
 function renderEscalaCal(){ const m=currentMonth, n=daysInMonth(m); const sunOn=document.getElementById("escalaSunday").checked; const dn=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"]; let html=dn.map(x=>`<div class="eh">${x}</div>`).join(""); const fw=weekday(m,1); for(let i=0;i<fw;i++) html+=`<div class="ed blank"></div>`; for(let d=1;d<=n;d++){ const sun=isSunday(m,d); const on=sellerWorks(escalaSellerId,d,m); const dis=sun&&!sunOn; html+=`<div class="ed ${on&&!dis?'on':''} ${dis?'disabled':''}" data-day="${d}">${d}</div>`; } const cal=document.getElementById("escalaCal"); cal.innerHTML=html; cal.querySelectorAll(".ed[data-day]").forEach(el=>{ el.onclick=()=>{ if(el.classList.contains("disabled")) return; const d=+el.dataset.day; const sc=ensureSched(escalaSellerId); if(sc[d]) delete sc[d]; else sc[d]=1; save(); renderEscalaCal(); }; }); document.getElementById("escalaCount").textContent=sellerWorkedCount(escalaSellerId); }
 
 /* ============================================================ CONFIG */
@@ -2364,13 +2502,23 @@ function renderConfig() {
   const shown = showAll ? sellers : sellers.slice(0, LIMIT);
   if (!sellers.length) { sl.innerHTML = '<div class="empty">Nenhum vendedor.</div>'; }
   else {
-    sl.innerHTML = '<div class="seller-chips">' + shown.map(s => `<div class="seller-chip"><input type="text" value="${escapeHtml(s.name)}" data-seller="${s.id}" class="seller-name" style="width:${Math.max(4, s.name.length + 1)}ch"><span class="chip-days" title="Dias trabalhados no mês">${sellerWorkedCount(s.id)}${sellerWorksAnySunday(s.id)?' · dom':''}</span><button class="x esc" data-esc-seller="${s.id}" title="Escala / domingos">📅</button><button class="x" data-del-seller="${s.id}" title="Remover">✕</button></div>`).join("") + '</div>'
+    sl.innerHTML = '<div class="seller-chips">' + shown.map(s => `<div class="seller-chip"><input type="text" value="${escapeHtml(s.name)}" data-seller="${s.id}" class="seller-name" style="width:${Math.max(4, s.name.length + 1)}ch"><input type="text" value="${escapeHtml(s.matricula||'')}" data-mat-seller="${s.id}" class="seller-mat" placeholder="Matr." title="Matrícula (login consultor)"><span class="chip-days" title="Dias trabalhados">${sellerWorkedCount(s.id)}${sellerWorksAnySunday(s.id)?'·dom':''}</span><button class="x portal" data-portal-seller="${s.id}" title="Portal consultor">🔗</button><button class="x esc" data-esc-seller="${s.id}" title="Escala / PIN / QR">📅</button><button class="x" data-del-seller="${s.id}" title="Remover">✕</button></div>`).join("") + '</div>'
       + (sellers.length > LIMIT ? `<button class="btn sec sm" id="toggleSellers" style="margin-top:12px;">${showAll ? '▴ Mostrar menos' : '▾ Ver todos ('+sellers.length+')'}</button>` : '');
     sl.querySelectorAll(".seller-name").forEach(i => {
       i.addEventListener("input", () => { i.style.width = Math.max(4, i.value.length + 1) + "ch"; });
       i.addEventListener("change", () => { const s = state.sellers.find(x=>x.id===i.dataset.seller); if(s){ s.name=i.value; save(); toast("Salvo"); } });
     });
     sl.querySelectorAll("[data-del-seller]").forEach(b => b.addEventListener("click", () => { if(confirm("Remover este vendedor e seus dados deste mês?")){ state.sellers = state.sellers.filter(x=>x.id!==b.dataset.delSeller); if(state.order.sellers) state.order.sellers = state.order.sellers.filter(id=>id!==b.dataset.delSeller); save(); renderConfig(); } }));
+    sl.querySelectorAll("[data-mat-seller]").forEach(i => {
+      i.addEventListener("change", () => {
+        const s = state.sellers.find(x => x.id === i.dataset.matSeller);
+        if (!s) return;
+        const m = normalizeMatricula(i.value);
+        if (!matriculaUnique(m, s.id)) { toast("Matrícula já usada por outro consultor", true); i.value = s.matricula || ""; return; }
+        s.matricula = m; save(); toast("Matrícula salva");
+      });
+    });
+    sl.querySelectorAll("[data-portal-seller]").forEach(b => b.addEventListener("click", () => openConsultorPortal(b.dataset.portalSeller)));
     sl.querySelectorAll("[data-esc-seller]").forEach(b => b.addEventListener("click", () => openEscala(b.dataset.escSeller)));
     const tg = document.getElementById("toggleSellers"); if (tg) tg.onclick = () => { sellersExpanded = !sellersExpanded; renderConfig(); };
   }
@@ -3097,7 +3245,7 @@ function finishAuthEnter(code) {
   myLojaId = code;
   saveAuthSession(code);
   unlockAuth();
-  if (fbReady) pullLoja();
+  if (fbReady) { pullLoja(); startLojaDataListener(); }
   else {
     state.storeName = divisionalMode() ? "RSCEN — Divisional" : code;
     save(); syncStore(); renderActive();
@@ -3209,8 +3357,8 @@ function pullLoja(){
   if (!fbReady || !fbDb || !lojaCode) return;
   fbDb.ref("lojas/"+lojaCode).once("value").then(snap => {
     const v = snap.val();
-    if (v && v.data) { state = migrate(v.data); state.storeName = v.name || lojaCode; save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); toast("Loja "+lojaCode+" carregada da nuvem"); }
-    else { state.storeName = lojaCode; save(); fbPush(); syncStore(); renderActive(); toast("Nova loja "+lojaCode+" criada"); }
+    if (v && v.data) { state = migrate(v.data); state.storeName = v.name || lojaCode; save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); startLojaDataListener(); toast("Loja "+lojaCode+" carregada da nuvem"); }
+    else { state.storeName = lojaCode; save(); fbPush(); syncStore(); renderActive(); startLojaDataListener(); toast("Nova loja "+lojaCode+" criada"); }
   }).catch(e => { console.warn("pull falhou", e); });
 }
 function askLoja(){
@@ -3277,8 +3425,8 @@ function pullLoja(){
   if (divisionalMode()){ state.storeName = "RSCEN — Divisional"; syncStore(); showView("rscen"); toast("Modo Divisional: vendo todas as lojas"); return; }
   fbDb.ref("lojas/"+lojaCode).once("value").then(snap => {
     const v = snap.val();
-    if (v && v.data) { state = migrate(v.data); state.storeName = v.name || lojaCode; save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); toast("Loja "+lojaCode+" carregada da nuvem"); }
-    else { state.storeName = lojaCode; save(); fbPush(); syncStore(); renderActive(); toast("Nova loja "+lojaCode+" criada"); }
+    if (v && v.data) { state = migrate(v.data); state.storeName = v.name || lojaCode; save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); startLojaDataListener(); toast("Loja "+lojaCode+" carregada da nuvem"); }
+    else { state.storeName = lojaCode; save(); fbPush(); syncStore(); renderActive(); startLojaDataListener(); toast("Nova loja "+lojaCode+" criada"); }
   }).catch(e => console.warn("pull falhou", e));
 }
 function submitLoja(){
@@ -3395,9 +3543,29 @@ function init() {
   document.getElementById("auditoriaParaLancamento").onclick = () => { const sid = modalSellerId; closeAuditoriaModal(); if (sid) openLancamentoModal(sid); };
   const goKpis = document.getElementById("goKpisMetas");
   if (goKpis) goKpis.onclick = () => { showView("kpis"); toast("Cadastre metas em cada indicador abaixo"); };
-  document.getElementById("closeEscala").onclick = () => { document.getElementById("escalaModal").classList.remove("show"); renderConfig(); };
-  document.getElementById("escalaModal").addEventListener("click", e => { if (e.target.id === "escalaModal") { e.currentTarget.classList.remove("show"); renderConfig(); } });
+  document.getElementById("closeEscala").onclick = () => { saveEscalaMatricula(); document.getElementById("escalaModal").classList.remove("show"); renderConfig(); };
+  document.getElementById("escalaModal").addEventListener("click", e => { if (e.target.id === "escalaModal") { saveEscalaMatricula(); e.currentTarget.classList.remove("show"); renderConfig(); } });
   document.getElementById("escalaSunday").addEventListener("change", e => { const sc = ensureSched(escalaSellerId); const n = daysInMonth(currentMonth); if(!e.target.checked){ for(let d=1;d<=n;d++) if(isSunday(currentMonth,d)) delete sc[d]; } save(); renderEscalaCal(); });
+  const escMat = document.getElementById("escalaMatricula");
+  if (escMat) escMat.addEventListener("change", saveEscalaMatricula);
+  const escPin = document.getElementById("escalaPinBtn");
+  if (escPin) escPin.onclick = async () => {
+    if (!escalaSellerId) return;
+    const pin = prompt("Defina o PIN do consultor (4 a 8 dígitos):");
+    if (pin == null) return;
+    try { await setSellerPin(escalaSellerId, pin.trim()); toast("PIN salvo"); openEscala(escalaSellerId); }
+    catch (e) { toast(e.message || "Erro ao salvar PIN", true); }
+  };
+  const escLink = document.getElementById("escalaCopyLink");
+  if (escLink) escLink.onclick = () => { const url = consultorPortalUrl(); try { navigator.clipboard.writeText(url); toast("Link copiado"); } catch (e) { prompt("Copie o link:", url); } };
+  const escQr = document.getElementById("escalaShowQr");
+  if (escQr) escQr.onclick = () => { if (escalaSellerId) openConsultorPortal(escalaSellerId); };
+  const closeQr = document.getElementById("closeConsultorQr");
+  if (closeQr) closeQr.onclick = () => document.getElementById("consultorQrModal").classList.remove("show");
+  const consultorQrModal = document.getElementById("consultorQrModal");
+  if (consultorQrModal) consultorQrModal.addEventListener("click", e => { if (e.target.id === "consultorQrModal") e.currentTarget.classList.remove("show"); });
+  const copyLink2 = document.getElementById("consultorCopyLink2");
+  if (copyLink2) copyLink2.onclick = () => { const url = consultorPortalUrl(); try { navigator.clipboard.writeText(url); toast("Link copiado"); } catch (e) { prompt("Copie:", url); } };
   document.getElementById("diasUteis").addEventListener("change", e => { monthData().diasUteis = Number(e.target.value)||0; save(); updateWorkdaysBadge(); renderConfig(); toast("Dias úteis salvos"); });
   document.getElementById("sabados").addEventListener("change", e => { monthData().sabados = Number(e.target.value)||0; save(); updateWorkdaysBadge(); renderConfig(); toast("Sábados salvos"); });
   document.getElementById("autoWorkdays").onclick = () => { const md = monthData(); delete md.diasUteis; delete md.sabados; save(); renderConfig(); updateWorkdaysBadge(); toast("Recalculado automático"); };
