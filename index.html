@@ -3317,13 +3317,39 @@ function diarioTodayDay() { return todayISO() === currentMonth ? new Date().getD
 function weekForDay(day, m = currentMonth) {
   return weeksOf(m).find(w => w.includes(day)) || [day];
 }
-/** Indicador "só domingo" bloqueado quando o CV não trabalha domingo na semana. */
+/** Sub só domingo: preenche na véspera (ex. sábado), não no domingo. */
+function diarioSundayOnlyActive(sellerId, day, m = currentMonth) {
+  if (isSunday(m, day)) return false;
+  const week = weekForDay(day, m);
+  const sunDay = week.find(d => isSunday(m, d) && sellerWorks(sellerId, d, m));
+  if (!sunDay || day >= sunDay) return false;
+  if (day !== sunDay - 1) return false;
+  return sellerWorks(sellerId, day, m);
+}
 function diarioFieldGated(sellerId, cfg, day, m = currentMonth) {
-  return !!(cfg.sundayOnly && !weekHasWorkedSunday(sellerId, weekForDay(day, m), m));
+  if (!cfg.sundayOnly) return false;
+  return !diarioSundayOnlyActive(sellerId, day, m);
 }
 function diarioFieldNeeds(sellerId, cfg, day, m = currentMonth) {
-  if (diarioFieldGated(sellerId, cfg, day, m)) return { checkin: false, checkout: false };
+  if (!sellerWorks(sellerId, day, m)) return { checkin: false, checkout: false };
+  if (cfg.sundayOnly) {
+    if (!diarioSundayOnlyActive(sellerId, day, m)) return { checkin: false, checkout: false };
+    return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
+  }
+  const wd = weekday(m, day);
+  const metaSat = Number(cfg.metaSat) || 0;
+  const metaDay = Number(cfg.metaDay) || 0;
+  const metaSun = Number(cfg.metaSun) || 0;
+  if (metaSat > 0 && wd !== 6 && !cfg.checkin && cfg.checkout && metaDay <= 1 && metaSun === 0) {
+    return { checkin: false, checkout: false };
+  }
   return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
+}
+function diarioRowNeedsAnyDay(sellerId, cfg, days) {
+  return days.some(d => {
+    const n = diarioFieldNeeds(sellerId, cfg, d);
+    return n.checkin || n.checkout;
+  });
 }
 function diarioCheckoutFieldIds(sellerId, day) {
   const ids = [];
