@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v7";
+  var BUILD = "v8";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -260,6 +260,12 @@
   .resumo-bar { height: 5px; border-radius: 99px; background: var(--border); margin-top: 8px; overflow: hidden; }
   .resumo-bar i { display: block; height: 100%; border-radius: 99px; background: var(--bc); max-width: 100%; }
   .resumo-rank { font-size: 10px; font-weight: 800; color: var(--accent-2); margin-top: 4px; }
+  .resumo-rank-note {
+    margin-top: 6px; padding: 8px 10px; border-radius: 10px; font-size: 10px; font-weight: 700;
+    line-height: 1.4; color: var(--warn);
+    background: color-mix(in srgb, var(--warn) 10%, var(--panel));
+    border: 1px solid color-mix(in srgb, var(--warn) 32%, var(--border));
+  }
   .resumo-callout {
     margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; line-height: 1.45;
     border: 1px solid var(--border);
@@ -413,7 +419,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v7";
+const APP_BUILD = "v8";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -835,19 +841,63 @@ function sellerMetrics(sellerId, m = todayISO()) {
   };
 }
 function teamSellerTotal() { return orderedSellers().length; }
-function teamRankByProjPct(fieldId, cfg, sellerId, m = todayISO(), parentInd = null) {
-  const sellers = orderedSellers();
-  const total = sellers.length;
-  if (!total) return { pos: 0, total: 0 };
+function rankScoresTied(a, b) {
+  if (a === -Infinity || b === -Infinity) return false;
+  return Math.abs(a - b) < 1e-9;
+}
+function compareTeamRankRows(a, b, lb) {
+  if (b.score !== a.score) return b.score - a.score;
+  const adA = a.adherence ?? -1, adB = b.adherence ?? -1;
+  if (adB !== adA) return adB - adA;
+  const accA = a.accuracy ?? -1, accB = b.accuracy ?? -1;
+  if (accB !== accA) return accB - accA;
+  if (lb) return a.projAbs - b.projAbs;
+  return b.projAbs - a.projAbs;
+}
+function buildTeamRankRows(fieldId, cfg, m = todayISO(), parentInd = null) {
   const lb = cfgLowerBetter(cfg, parentInd);
-  const rows = sellers.map(s => {
-    const real = matrizFieldValue(s.id, fieldId, monthDays(m), "mes", m);
+  const days = monthDays(m);
+  return orderedSellers().map(s => {
+    const real = matrizFieldValue(s.id, fieldId, days, "mes", m);
     const meta = sellerMetaFor(cfg, s.id, m);
     const proj = real != null ? sellerProjFromReal(s.id, fieldId, real, m) : null;
     const score = meta && proj != null ? matrizProjPerfRatio(proj, meta, lb) : null;
-    return { id: s.id, score: score ?? -Infinity };
-  }).sort((a, b) => b.score - a.score);
-  return { pos: rows.findIndex(r => r.id === sellerId) + 1, total };
+    const discipline = consultantDisciplineStats(s.id, m);
+    const metrics = sellerMetrics(s.id, m);
+    return {
+      id: s.id,
+      score: score ?? -Infinity,
+      adherence: discipline.pct,
+      accuracy: metrics.acc,
+      projAbs: proj ?? (lb ? Infinity : -Infinity)
+    };
+  }).sort((a, b) => compareTeamRankRows(a, b, lb))
+    .map((r, i) => ({ ...r, pos: i + 1 }));
+}
+function rankDisciplineNote(rows, sellerId, lb) {
+  const my = rows.find(r => r.id === sellerId);
+  if (!my || my.pos <= 1 || my.score === -Infinity) return null;
+  const sameScoreAbove = rows.filter(r => r.pos < my.pos && rankScoresTied(r.score, my.score));
+  if (!sameScoreAbove.length) return null;
+  const ref = sameScoreAbove[0];
+  const myProjBetter = lb ? my.projAbs < ref.projAbs : my.projAbs > ref.projAbs;
+  if (!myProjBetter) return null;
+  const myAd = my.adherence ?? -1, myAcc = my.accuracy ?? -1;
+  const refAd = ref.adherence ?? -1, refAcc = ref.accuracy ?? -1;
+  if (myAd >= refAd && myAcc >= refAcc) return null;
+  return "Você está com maior projeção absoluta neste indicador, mas perdeu posição porque sua aderência e acurácia estão muito baixas — precisa, urgentemente, ajustar!";
+}
+function teamRankByProjPct(fieldId, cfg, sellerId, m = todayISO(), parentInd = null) {
+  const rows = buildTeamRankRows(fieldId, cfg, m, parentInd);
+  const total = rows.length;
+  if (!total) return { pos: 0, total: 0, note: null };
+  const lb = cfgLowerBetter(cfg, parentInd);
+  const mine = rows.find(r => r.id === sellerId);
+  return {
+    pos: mine ? mine.pos : 0,
+    total,
+    note: mine ? rankDisciplineNote(rows, sellerId, lb) : null
+  };
 }
 function teamRitmoRank(sellerId, m = todayISO()) {
   const sellers = orderedSellers();
@@ -888,8 +938,11 @@ function resumoFieldRow(cfg, color, sellerId, opts, m = todayISO()) {
   const lbTag = lb ? " ↓" : "";
   let rankHtml = "";
   if (opts.showRank) {
-    const { pos, total } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
-    if (pos > 0 && total > 1) rankHtml = `<div class="resumo-rank">${pos}º de ${total} na equipe</div>`;
+    const { pos, total, note } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
+    if (pos > 0 && total > 1) {
+      rankHtml = `<div class="resumo-rank">${pos}º de ${total} na equipe</div>`;
+      if (note) rankHtml += `<div class="resumo-rank-note">${note}</div>`;
+    }
   }
   const callout = opts.main ? resumoCallout(cfg, sellerId, m, true, parentInd).html : "";
   const chev = opts.toggle ? `<span class="resumo-chev">${opts.open ? "▾" : "▸"}</span>` : "";
@@ -947,7 +1000,7 @@ function renderResumo() {
   const venda = findVendaIndicator();
   const vendaSt = venda ? fieldProjStats(venda, sid, m) : null;
   const vendaCallout = venda ? resumoCallout(venda, sid, m, false) : { html: '<div class="resumo-callout muted">Indicador Vendas não configurado.</div>', tone: "muted" };
-  const vendaRank = venda ? teamRankByProjPct(venda.id, venda, sid, m) : { pos: 0, total: teamSellerTotal() };
+  const vendaRank = venda ? teamRankByProjPct(venda.id, venda, sid, m) : { pos: 0, total: teamSellerTotal(), note: null };
   const cards = [];
   orderedIndicators().forEach(ind => {
     const color = ind.color || "var(--accent)";
@@ -1013,7 +1066,8 @@ function renderResumo() {
         </div>
         <div class="resumo-chip-item">
           <span class="resumo-chip" style="color:var(--accent-2)">${vendaRankTxt}</span>
-          <span class="resumo-chip-leg">Posição na equipe pela projeção de vendas.</span>
+          <span class="resumo-chip-leg">% da meta · desempate: aderência, acurácia e projeção.</span>
+          ${vendaRank.note ? `<span class="resumo-rank-note" style="margin-top:4px;display:block;">${vendaRank.note}</span>` : ""}
         </div>
       </div>
     </div>
