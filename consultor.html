@@ -45,6 +45,10 @@
   .top-titles { flex: 1; min-width: 0; }
   .top-titles .t1 { font-weight: 800; font-size: 12px; letter-spacing: .12px; line-height: 1.25; }
   .top-titles .t1-sep { color: var(--text-faint); font-weight: 600; margin: 0 2px; }
+  .top-titles .app-ver {
+    font-size: 8.5px; font-weight: 600; letter-spacing: .35px; margin-top: 2px;
+    color: color-mix(in srgb, var(--text-faint) 55%, transparent); opacity: .65;
+  }
   .live-pill {
     display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 800;
     text-transform: uppercase; letter-spacing: .4px; padding: 4px 9px; border-radius: 99px;
@@ -127,10 +131,10 @@
     padding: 4px 6px; border-radius: 99px; min-width: 0; min-height: 42px;
     font-family: var(--font); text-align: center;
   }
-  .hero-pill .pill-lbl, .hero-pills .urgency-pill #urgencyLbl, .hero-pills .btn-resumo .resumo-lbl {
+  .hero-pill .pill-lbl, .hero-pills .urgency-pill #urgencyLbl {
     font-size: 7px; letter-spacing: .45px; opacity: .92; line-height: 1.1;
   }
-  .hero-pill .pill-txt, .hero-pills .urgency-pill #urgencyTxt, .hero-pills .btn-resumo .resumo-txt {
+  .hero-pill .pill-txt, .hero-pills .urgency-pill #urgencyTxt {
     font-size: 11px; line-height: 1.1;
   }
   .hero-pill.date-pill {
@@ -141,16 +145,34 @@
   }
   .hero-pills .urgency-pill { min-width: 0; width: 100%; }
   .hero-pills .btn-resumo {
-    cursor: pointer; grid-column: span 2;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 20%, var(--panel)), var(--panel-2));
-    border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--border));
-    color: var(--accent);
+    cursor: pointer; grid-column: span 2; flex-direction: row; gap: 7px;
+    width: 100%; min-height: 46px; padding: 8px 10px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 24%, var(--panel)), var(--panel-2));
+    border: 1.5px solid color-mix(in srgb, var(--accent) 50%, var(--border));
+    color: var(--text);
     box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 16%, transparent);
-    transition: transform .12s, box-shadow .12s;
+    animation: resumo-neon-pulse 2.2s ease-in-out infinite;
+    transition: transform .12s;
+  }
+  .hero-pills .btn-resumo .resumo-txt {
+    font-size: 12px; font-weight: 800; letter-spacing: .15px; line-height: 1.15;
+    white-space: nowrap; color: var(--text);
+  }
+  .hero-pills .btn-resumo .resumo-ico { font-size: 15px; line-height: 1; flex: none; }
+  @keyframes resumo-neon-pulse {
+    0%, 100% {
+      border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+      box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+    50% {
+      border-color: color-mix(in srgb, var(--accent-2) 72%, var(--border));
+      box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 38%, transparent), 0 0 32px color-mix(in srgb, var(--accent-2) 16%, transparent);
+    }
   }
   .hero-pills .btn-resumo:active {
     transform: scale(.98);
-    box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 30%, transparent);
+    animation: none;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 35%, transparent);
   }
   .resumo-overlay {
     position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.62); backdrop-filter: blur(6px);
@@ -278,6 +300,7 @@
       <div class="logo">GC</div>
       <div class="top-titles">
         <div class="t1">Gestão Alta Performance <span class="t1-sep">—</span> Meu Dia</div>
+        <div class="app-ver" id="appVerLbl"></div>
       </div>
       <div class="live-pill" id="livePill"><span class="dot"></span><span id="liveTxt">offline</span></div>
     </div>
@@ -318,8 +341,8 @@
           </div>
           <div class="urgency-pill" id="urgencyPill"><span id="urgencyLbl">CHECK-OUT</span><span id="urgencyTxt">—:—:—</span></div>
           <button type="button" class="btn-resumo" id="btnResumo" aria-label="Abrir resumo do mês">
-            <span class="resumo-lbl">RESUMO</span>
-            <span class="resumo-txt">📊 Mês</span>
+            <span class="resumo-ico" aria-hidden="true">📊</span>
+            <span class="resumo-txt">Resumo do mês</span>
           </button>
         </div>
       </div>
@@ -350,7 +373,8 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "2026.06.07-c2";
+const APP_BUILD = "v3";
+document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
 let fbDb = null, fbReady = false, connected = false;
