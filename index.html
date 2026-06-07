@@ -390,8 +390,24 @@
   .sysgroup-head.sys-toggle { cursor: pointer; user-select: none; margin-bottom: 0; }
   .sysgroup:not(.collapsed) .sysgroup-head.sys-toggle { margin-bottom: 12px; }
   .sysgroup.collapsed .sysgroup-fields { display: none; }
-  .audit-summary { display: flex; gap: 10px; flex-wrap: wrap; }
+  .audit-summary { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
   .audit-summary .pill { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 99px; font-weight: 700; }
+  .audit-discipline { margin-top: 14px; padding: 14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; }
+  .audit-discipline h4 { margin: 0 0 10px; font-size: 13px; letter-spacing: .2px; }
+  .audit-disc-statgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .audit-disc-stat { background: var(--cell); border: 1px solid var(--border-soft); border-radius: 9px; padding: 8px 10px; }
+  .audit-disc-stat .k { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .35px; font-weight: 700; }
+  .audit-disc-stat .v { font-size: 18px; font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .audit-disc-stat .v small { font-size: 11px; font-weight: 600; color: var(--text-dim); }
+  #auditoriaDiscTable { font-size: 12px; }
+  #auditoriaDiscTable td.gaps { text-align: left; white-space: normal; max-width: 320px; line-height: 1.45; }
+  #auditoriaDiscTable tr.ok td { color: var(--ok); }
+  #auditoriaDiscTable tr.bad td { color: var(--text); }
+  #auditoriaDiscTable .gap-tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 6px; margin: 1px 4px 1px 0; background: color-mix(in srgb, var(--danger) 14%, var(--cell)); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 28%, transparent); }
+  #auditoriaDiscTable .gap-tag.in { background: color-mix(in srgb, var(--accent) 14%, var(--cell)); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
+  #auditoriaDiscTable .gap-tag.out { background: color-mix(in srgb, var(--accent-2) 14%, var(--cell)); color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 28%, transparent); }
+  .audit-section-title { margin: 16px 0 8px; font-size: 12.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .45px; font-weight: 800; }
+  #auditoriaModal .modal.modal-wide { max-width: 820px; max-height: 92vh; overflow-y: auto; }
   .modal h3 { margin: 0 0 4px; }
   .meta-loja-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
   .meta-loja-row.sub { padding-left: 18px; }
@@ -654,7 +670,9 @@
 <div class="modal-bg" id="auditoriaModal"><div class="modal modal-wide">
   <div class="flex-between"><h3>Auditoria — <span id="auditoriaName"></span> · <span id="auditoriaMonth"></span></h3><button class="iconbtn" id="closeAuditoria">✕</button></div>
   <div id="auditoriaSummary" class="audit-summary"></div>
-  <div class="table-wrap" style="margin-top:10px;"><table id="auditoriaTable"></table></div>
+  <div id="auditoriaDiscipline" class="audit-discipline"></div>
+  <div class="audit-section-title">Acuracidade · relato × sistema</div>
+  <div class="table-wrap" style="margin-top:4px;"><table id="auditoriaTable"></table></div>
   <div class="row" style="margin-top:12px; justify-content:flex-end;"><button class="ghost-btn" id="auditoriaParaLancamento">✎ Lançar no sistema</button></div>
 </div></div>
 
@@ -2777,20 +2795,18 @@ function closeLancamentoModal() {
 }
 function renderAuditoriaModal(sellerId) {
   const days = monthDays(); const m = sellerMetrics(sellerId);
-  const aderLbl = m.ader != null ? pctTxt(m.ader) + (m.disc?.closed ? " · " + m.disc.complete + "/" + m.disc.closed + " dias" : "") : "—";
-  document.getElementById("auditoriaSummary").innerHTML =
-    `<span class="pill" style="color:${heatText(m.acc)}">Acuracidade ${pctTxt(m.acc)}</span>` +
-    `<span class="pill" style="color:${heatText(m.ader)}">Aderência ${aderLbl}</span>`;
-  const fields = acuracidadeFieldList().filter(f => !f.rate || fieldHasSistema(sellerId, f));
+  const disc = consultantDisciplineDetails(sellerId);
+  const aderLbl = m.ader != null ? pctTxt(m.ader) + (disc.closed ? " · " + disc.complete + "/" + disc.closed + " dias" : "") : "—";
+  const sumEl = document.getElementById("auditoriaSummary");
+  sumEl.innerHTML =
+    `<span class="pill" style="color:${heatText(m.acc)}"${m.acc != null ? matrizTipData("Média de acuracidade (relato × sistema ⚙) nos indicadores com lançamento do gestor.\n" + pctTxt(m.acc), "var(--accent)") : ""}>Acuracidade ${pctTxt(m.acc)}</span>` +
+    `<span class="pill" style="color:${heatText(m.ader)}"${disc.closed ? matrizTipData(`${disc.complete} de ${disc.closed} dias encerrados completos\n${disc.incompleteDays.length} incompleto(s)\n${disc.scheduled} dias na escala do mês`, "var(--accent-2)") : ""}>Aderência escala ${aderLbl}</span>`;
+  bindMatrizTips(sumEl);
+  renderAuditoriaDiscipline(sellerId);
+  const fields = acuracidadeFieldList().filter(f => !f.rate && fieldHasSistema(sellerId, f));
   let head = '<thead><tr><th class="name">Indicador</th><th>Check-in</th><th>Relato</th><th>Sistema</th><th>Acurac.</th></tr></thead>';
   let body = "<tbody>";
   fields.forEach(f => {
-    if (f.rate) {
-      const sys = getSystemRate(sellerId, f.rateId);
-      if (sys == null) return;
-      body += `<tr><td class="name">% ${f.name}</td><td>—</td><td>—</td><td><span class="heat matriz-from-sys matriz-real acur-sys">${fmt(sys,0)}%</span></td><td>—</td></tr>`;
-      return;
-    }
     const sys = getSystem(sellerId, f.id);
     if (sys == null) return;
     const cfg = cfgById(f.id);
@@ -2826,36 +2842,92 @@ function diarioFieldList() {
   const list = [];
   orderedIndicators().forEach(ind => {
     if (ind.pctOnly) return;
-    if (cfgHasDiario(ind)) list.push(ind);
-    (ind.subs || []).filter(cfgHasDiario).forEach(s => list.push(s));
+    if (cfgHasDiario(ind)) list.push({ cfg: ind, parent: null });
+    (ind.subs || []).filter(cfgHasDiario).forEach(s => list.push({ cfg: s, parent: ind }));
   });
   return list;
+}
+function fieldDiarioLabel(entry) {
+  const cfg = entry.cfg;
+  return entry.parent ? "↳ " + cfg.name : cfg.name;
 }
 function hasCellValue(cell, key) {
   return cell[key] != null && cell[key] !== "";
 }
+const AUDIT_DN = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 /** Aderência: % de dias encerrados na escala com check-in e check-out completos (igual app consultor). */
 function consultantDisciplineStats(sellerId, m = currentMonth) {
+  const detail = consultantDisciplineDetails(sellerId, m);
+  return { pct: detail.pct, complete: detail.complete, closed: detail.closed, scheduled: detail.scheduled };
+}
+function consultantDisciplineDetails(sellerId, m = currentMonth) {
   const n = daysInMonth(m);
   const isCurrent = todayISO() === m;
   const today = isCurrent ? new Date().getDate() : n + 1;
   const fields = diarioFieldList();
   let scheduled = 0, closed = 0, complete = 0;
-  if (!fields.length) return { pct: null, complete: 0, closed: 0, scheduled: 0 };
+  const closedDays = [], pendingDays = [];
+  if (!fields.length) return { pct: null, complete: 0, closed: 0, scheduled: 0, closedDays, pendingDays };
   for (let d = 1; d <= n; d++) {
     if (!sellerWorks(sellerId, d, m)) continue;
     scheduled++;
-    if (isCurrent && d >= today) continue;
+    const wd = AUDIT_DN[weekday(m, d)];
+    if (isCurrent && d >= today) { pendingDays.push({ day: d, wd }); continue; }
     closed++;
-    let req = 0, ok = 0;
-    fields.forEach(cfg => {
+    const gaps = [];
+    fields.forEach(entry => {
+      const cfg = entry.cfg;
       const c = getCell(sellerId, cfg.id, d, m);
-      if (cfg.checkin) { req++; if (hasCellValue(c, "plan")) ok++; }
-      if (cfg.checkout) { req++; if (hasCellValue(c, "real")) ok++; }
+      const label = fieldDiarioLabel(entry);
+      if (cfg.checkin && !hasCellValue(c, "plan")) gaps.push({ type: "in", field: label });
+      if (cfg.checkout && !hasCellValue(c, "real")) gaps.push({ type: "out", field: label });
     });
-    if (req > 0 && ok === req) complete++;
+    const dayComplete = gaps.length === 0;
+    if (dayComplete) complete++;
+    closedDays.push({ day: d, wd, complete: dayComplete, gaps });
   }
-  return { pct: closed ? complete / closed : null, complete, closed, scheduled };
+  return {
+    pct: closed ? complete / closed : null,
+    complete, closed, scheduled,
+    closedDays,
+    pendingDays,
+    incompleteDays: closedDays.filter(x => !x.complete)
+  };
+}
+function renderAuditoriaDiscipline(sellerId) {
+  const box = document.getElementById("auditoriaDiscipline");
+  if (!box) return;
+  const disc = consultantDisciplineDetails(sellerId);
+  const pctColor = heatText(disc.pct);
+  let html = `<h4>Aderência na escala · check-in / check-out</h4>`;
+  html += `<div class="hint" style="margin:-4px 0 10px;">Dia <b>completo</b> = todos os check-ins e check-outs obrigatórios preenchidos naquele dia da escala (📅). Só contam dias <b>encerrados</b> (até ontem).</div>`;
+  html += `<div class="audit-disc-statgrid">`;
+  html += `<div class="audit-disc-stat"><div class="k">Na escala</div><div class="v">${disc.scheduled} <small>dias</small></div></div>`;
+  html += `<div class="audit-disc-stat"><div class="k">Encerrados</div><div class="v">${disc.closed} <small>dias</small></div></div>`;
+  html += `<div class="audit-disc-stat"><div class="k">Completos</div><div class="v" style="color:${pctColor}">${disc.complete} <small>/ ${disc.closed}</small></div></div>`;
+  html += `<div class="audit-disc-stat"><div class="k">Aderência</div><div class="v" style="color:${pctColor}">${disc.pct == null ? "—" : pctTxt(disc.pct)}</div></div>`;
+  html += `</div>`;
+  if (!disc.closed) {
+    html += `<div class="empty" style="padding:12px;">Ainda não há dias encerrados na escala deste mês.</div>`;
+  } else if (!disc.incompleteDays.length) {
+    html += `<div class="hint" style="color:var(--ok); font-weight:700;">✓ Todos os ${disc.closed} dias encerrados estão com check-in e check-out completos.</div>`;
+    if (disc.pendingDays.length) html += `<div class="hint" style="margin-top:6px;">${disc.pendingDays.length} dia(s) futuro(s) na escala ainda em curso (não entram no cálculo).</div>`;
+  } else {
+    html += `<div class="table-wrap"><table id="auditoriaDiscTable"><thead><tr><th>Dia</th><th>Sem</th><th>Status</th><th class="name">Pendências</th></tr></thead><tbody>`;
+    disc.incompleteDays.forEach(row => {
+      const gapHtml = row.gaps.map(g =>
+        `<span class="gap-tag ${g.type}">${g.type === "in" ? "check-in" : "check-out"} · ${escapeHtml(g.field)}</span>`
+      ).join("");
+      html += `<tr class="bad"><td><b>${row.day}</b></td><td>${row.wd}</td><td style="color:var(--danger);font-weight:700">Incompleto</td><td class="gaps">${gapHtml || "—"}</td></tr>`;
+    });
+    const okDays = disc.closedDays.filter(x => x.complete);
+    if (okDays.length) {
+      html += `<tr class="ok"><td colspan="4" style="text-align:left;padding-top:10px;"><span style="color:var(--ok);font-weight:700;">✓ Completos (${okDays.length}):</span> <span class="muted">${okDays.map(x => x.day + " " + x.wd).join(", ")}</span></td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+    if (disc.pendingDays.length) html += `<div class="hint" style="margin-top:8px;">+ ${disc.pendingDays.length} dia(s) futuro(s) na escala (${disc.pendingDays.map(x => x.day).join(", ")}) — ainda não entram na aderência.</div>`;
+  }
+  box.innerHTML = html;
 }
 
 /* ============================================================ FOCO */
