@@ -2632,12 +2632,43 @@ function fieldAccuracy(sellerId, fieldId, days) {
   if (sys > 0) return Math.max(0, 1 - Math.abs(r - sys) / sys);
   return r === 0 ? 1 : 0;
 }
+function acurEquipeMetrics(sellerIds, fields, days) {
+  let accSum = 0, accN = 0;
+  fields.forEach(f => {
+    if (!sellerIds.some(sid => acurFieldActive(sid, f, days))) return;
+    const t = arvAcurTotalsForSellers(sellerIds, f, days);
+    if (t.acc != null) { accSum += t.acc; accN++; }
+  });
+  let complete = 0, closed = 0;
+  sellerIds.forEach(sid => {
+    const d = consultantDisciplineDetails(sid);
+    complete += d.complete;
+    closed += d.closed;
+  });
+  const ader = closed ? complete / closed : null;
+  return { acc: accN ? accSum / accN : null, ader, disc: { complete, closed } };
+}
+function acurEquipeRowHtml(sellerIds, fields, days) {
+  if (!sellerIds.length || !fields.length) return "";
+  const m = acurEquipeMetrics(sellerIds, fields, days);
+  let row = `<tr class="acur-equipe" style="font-weight:800; background:var(--panel-2);"><td class="name">⌀ Equipe</td>`;
+  fields.forEach(f => {
+    const t = arvAcurTotalsForSellers(sellerIds, f, days);
+    row += arvAcurAggregateCellHtml(f, t.rel, t.sys, t.acc, "Total da equipe — soma relato × sistema ⚙");
+  });
+  row += `<td style="color:${heatText(m.acc)};font-weight:700;"${m.acc != null ? matrizTipData("Média de acuracidade da equipe\n" + pctTxt(m.acc), "var(--accent)") : ""}>${m.acc == null ? "—" : pctTxt(m.acc)}</td>`;
+  const aderDisp = m.ader == null ? "—" : pctTxt(m.ader) + (m.disc?.closed ? ` · ${m.disc.complete}/${m.disc.closed}` : "");
+  const aderTip = m.disc?.closed ? `${m.disc.complete} de ${m.disc.closed} dias completos (equipe)` : "";
+  row += `<td style="color:${heatText(m.ader)};font-weight:700;"${aderTip ? matrizTipData(aderTip, "var(--accent-2)") : ""}>${aderDisp}</td></tr>`;
+  return row;
+}
 function renderAcuracidade() {
   const allSellers = orderedSellers();
   const days = monthDays();
   const sellers = matrizApplySellerOrder(matrizFilteredSellers(allSellers), days);
   const allFields = acuracidadeFieldList().filter(f => !f.rate);
   const fields = acuracidadeVisibleFields(sellers, allFields);
+  const hasFilter = (state.ui.matrizFilter || []).length > 0;
   let head = '<thead><tr><th class="name">Vendedor</th>';
   if (!fields.length) {
     head += '<th class="muted" style="font-weight:600">—</th>';
@@ -2660,6 +2691,7 @@ function renderAcuracidade() {
       const aderDisp = m.ader == null ? "—" : pctTxt(m.ader) + (m.disc?.closed ? ` · ${m.disc.complete}/${m.disc.closed}` : "");
       body += `<td style="color:${heatText(m.ader)}; font-weight:700;"${aderTip ? matrizTipData(aderTip, "var(--accent-2)") : ""}>${aderDisp}</td></tr>`;
     });
+    if (!hasFilter) body += acurEquipeRowHtml(sellers.map(s => s.id), fields, days);
   }
   body += "</tbody>";
   const tbl = document.getElementById("acuracidadeTable");
