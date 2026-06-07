@@ -335,7 +335,10 @@
   .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: .2s; }
   .switch input:checked + .track { background: var(--accent); }
   .switch input:checked + .track::after { left: 18px; }
-  /* Foco & Ranking */
+  /* Foco */
+  .foco-seller-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; margin: 12px 0 4px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px; }
+  .foco-seller-bar .hint { margin: 0; white-space: nowrap; }
+  .foco-chart-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 8px; }
   .foco-charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; margin-top: 14px; }
   .foco-chart-panel canvas { width: 100%; display: block; }
   .foco-chart-legend { display: flex; flex-wrap: wrap; gap: 12px 18px; font-size: 11.5px; color: var(--text-dim); margin-top: 8px; }
@@ -509,7 +512,7 @@
 
 <nav class="tabs" id="tabs">
   <button data-view="matriz" class="active">Matriz / Painel</button>
-  <button data-view="foco">Foco &amp; Ranking</button>
+  <button data-view="foco">Foco</button>
   <button data-view="diario">Check-in / Check-out</button>
   <button data-view="fechamento">Fechamento Diário</button>
   <button data-view="rscen">RSCEN+</button>
@@ -548,35 +551,31 @@
   <!-- FOCO -->
   <section class="view" id="view-foco">
     <div class="panel">
-      <h2>Foco &amp; Ranking</h2>
-      <div class="sub">Projeção do mês, acuracidade do relato e disciplina de check-in/out — hoje e histórico.</div>
-      <details class="help foco-help" style="margin-top:8px;"><summary>O que significa cada coluna?</summary><div><b>Proj. vs meta</b> — média de (projeção de fechamento ÷ meta mensal) em cada indicador com meta. Ex.: 85% = fechando o mês em ~85% da meta, no conjunto dos KPIs.<br><b>% ritmo hoje</b> — mesmo cálculo da Matriz: realizado vs o que deveria ter até ontem na escala do CV (indicador principal de vendas).<br><b>Acurac.</b> — média da acuracidade do relato (bloco Acuracidade na Matriz).</div></details>
-      <div class="hint" style="margin:12px 0 4px; text-transform:uppercase; letter-spacing:.4px; font-weight:700;">Ranking do mês</div>
-      <div class="table-wrap"><table id="rankingTable"></table></div>
-      <div class="hint" style="margin:18px 0 8px; text-transform:uppercase; letter-spacing:.4px; font-weight:700;">⚠ Atenção — quem chamar pra conversar</div>
+      <h2>Foco</h2>
+      <div class="sub">Disciplina de check-in/out, acuracidade do relato e evolução mensal por consultor.</div>
+      <details class="help foco-help" style="margin-top:8px;"><summary>O que significa cada bloco?</summary><div><b>Check-in / check-out</b> — dias encerrados na escala sem plano da manhã ou sem realizado do dia.<br><b>Relato furado</b> — acuracidade do relato (check-out × sistema).<br><b>Dias completos</b> — dias com check-in e check-out ok.<br><b>Gráficos</b> — selecione o consultor nos chips e o indicador; ritmo acumulado no mês e histórico mês a mês.</div></details>
+      <div class="hint" style="margin:14px 0 8px; text-transform:uppercase; letter-spacing:.4px; font-weight:700;">⚠ Atenção — quem chamar pra conversar</div>
       <div class="attn-cols" id="attnCols"></div>
     </div>
     <div class="foco-charts-grid">
       <div class="panel foco-chart-panel">
-        <div class="flex-between">
-          <div><h2 style="margin:0;font-size:16px;">Ritmo do mês — real vs meta ideal</h2><div class="sub" style="margin-top:4px;">Curva acumulada no mês · linha tracejada = projeção de fechamento</div></div>
-          <div class="row" style="align-items:center;">
-            <div class="field"><label>Indicador</label><select id="chartInd"></select></div>
-            <div class="field"><label>Quem</label><select id="chartWho"></select></div>
-          </div>
+        <h2 style="margin:0;font-size:16px;">Ritmo do mês — real vs meta ideal</h2>
+        <div class="sub" style="margin-top:4px;">Curva acumulada no mês · linha tracejada = projeção de fechamento</div>
+        <div class="foco-seller-bar" id="focoRitmoSellerBar"></div>
+        <div class="foco-chart-controls">
+          <div class="field"><label>Indicador</label><select id="chartInd"></select></div>
         </div>
         <canvas id="ritmoChart" height="280"></canvas>
         <div class="foco-chart-legend" id="ritmoChartLegend"></div>
       </div>
       <div class="panel foco-chart-panel">
-        <div class="flex-between">
-          <div><h2 style="margin:0;font-size:16px;">Histórico mensal — produtividade</h2><div class="sub" style="margin-top:4px;">Realizado mês a mês (matrícula do CV · todos os meses com dado)</div></div>
-          <div class="row" style="align-items:center;">
-            <div class="field"><label>Indicador</label><select id="histChartInd"></select></div>
-            <div class="field"><label>Consultor</label><select id="histChartWho"></select></div>
-          </div>
+        <h2 style="margin:0;font-size:16px;">Histórico mensal — produtividade</h2>
+        <div class="sub" style="margin-top:4px;">Realizado mês a mês (mesma matrícula · meses com escala ou lançamento)</div>
+        <div class="foco-seller-bar" id="focoHistSellerBar"></div>
+        <div class="foco-chart-controls">
+          <div class="field"><label>Indicador</label><select id="histChartInd"></select></div>
         </div>
-        <canvas id="histChart" height="280"></canvas>
+        <canvas id="histChart" height="300"></canvas>
         <div class="foco-chart-legend" id="histChartLegend"></div>
       </div>
     </div>
@@ -836,6 +835,7 @@ function migrate(s) {
   if (!Array.isArray(s.ui.arvSellerFilter)) s.ui.arvSellerFilter = [];
   if (!s.ui.matrizSort) s.ui.matrizSort = { key: null, dir: "desc" };
   if (!s.ui.focoAttnSort) s.ui.focoAttnSort = { checkin: "desc", checkout: "desc", acc: "asc", complete: "desc" };
+  if (s.ui.focoSeller == null) s.ui.focoSeller = null;
   const _duKey = (() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; })();
   if (!s.ui.diarioUnlock || s.ui.diarioUnlock.resetDate !== _duKey) {
     s.ui.diarioUnlock = { resetDate: _duKey, days: [], past: false, future: false, week: false };
@@ -3679,35 +3679,47 @@ function setupCanvas(cv, h = 280) {
   ctx.clearRect(0, 0, W, H);
   return { ctx, W, H };
 }
+function focoSelectedSeller(sellers) {
+  let sel = state.ui.focoSeller;
+  if (!sel || !sellers.find(s => s.id === sel)) sel = sellers[0]?.id || null;
+  state.ui.focoSeller = sel;
+  return sel;
+}
+function renderFocoSellerToolbars(sellers) {
+  const sel = focoSelectedSeller(sellers);
+  ["focoRitmoSellerBar", "focoHistSellerBar"].forEach(barId => {
+    const bar = document.getElementById(barId);
+    if (!bar) return;
+    if (!sellers.length) {
+      bar.innerHTML = '<span class="muted">Cadastre consultores para ver os gráficos.</span>';
+      return;
+    }
+    bar.innerHTML = `<span class="hint">Consultor</span>
+      <div class="matriz-filter-chips">${sellers.map(s =>
+        `<button type="button" class="matriz-filter-chip${sel === s.id ? " active" : ""}" data-sid="${s.id}">${escapeHtml(s.name)}</button>`
+      ).join("")}</div>`;
+    bar.querySelectorAll(".matriz-filter-chip").forEach(btn => {
+      btn.onclick = () => {
+        state.ui.focoSeller = btn.dataset.sid;
+        save();
+        renderFocoSellerToolbars(sellers);
+        drawFocoCharts();
+      };
+    });
+  });
+}
 function renderFoco() {
   const sellers = orderedSellers();
   const metrics = sellers.map(s => ({ s, ...sellerMetrics(s.id) }));
-  const ranked = metrics.slice().sort((a, b) => (b.projVsMeta ?? -1) - (a.projVsMeta ?? -1));
-  const medals = ["🥇", "🥈", "🥉"];
-  let head = '<thead><tr><th class="name">#</th><th class="name">Vendedor</th><th title="Média: projeção de fechamento ÷ meta mensal (por indicador)">Proj. vs meta</th><th title="Ritmo de hoje vs esperado na escala (indicador principal)">% ritmo hoje</th><th title="Média acuracidade do relato (Matriz)">Acurac.</th></tr></thead>';
-  let body = "<tbody>";
-  if (!ranked.length) body = '<tbody><tr><td class="empty" colspan="5">Cadastre vendedores para ver o ranking.</td></tr>';
-  else ranked.forEach((m, i) => {
-    body += `<tr><td class="name">${medals[i] || (i + 1)}</td><td class="name">${escapeHtml(m.s.name)}${m.s.matricula ? ' <span class="muted" style="font-size:10px">· ' + escapeHtml(m.s.matricula) + "</span>" : ""}</td>` +
-      `<td style="color:${heatMatrizText(m.projVsMeta)}; font-weight:700;">${m.projVsMeta == null ? "—" : pctTxt(m.projVsMeta)}</td>` +
-      `<td style="color:${heatMatrizPaceText(m.pace)}; font-weight:700;">${m.pace == null ? "—" : pctTxt(m.pace)}</td>` +
-      `<td style="color:${heatText(m.acc)}; font-weight:700;">${m.acc == null ? "—" : pctTxt(m.acc)}</td></tr>`;
-  });
-  body += "</tbody>";
-  document.getElementById("rankingTable").innerHTML = head + body;
-
   _focoLastMetrics = metrics;
   renderFocoAttnCols(metrics);
+  renderFocoSellerToolbars(sellers);
 
   const indOpts = state.indicators.filter(i => !i.pctOnly).map(i => `<option value="${i.id}">${escapeHtml(i.name)}</option>`).join("");
-  const whoOpts = '<option value="__team">⌀ Equipe (todos)</option>' + sellers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
   const ci = document.getElementById("chartInd");
-  const cw = document.getElementById("chartWho");
   const hi = document.getElementById("histChartInd");
-  const hw = document.getElementById("histChartWho");
-  if (ci) { ci.innerHTML = indOpts; if (!ci.dataset.bound) { ci.addEventListener("change", drawFocoCharts); cw.addEventListener("change", drawFocoCharts); ci.dataset.bound = "1"; } }
-  if (hi) { hi.innerHTML = indOpts; if (!hi.dataset.bound) { hi.addEventListener("change", drawFocoCharts); hw.addEventListener("change", drawFocoCharts); hi.dataset.bound = "1"; } }
-  if (hw) hw.innerHTML = sellers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}${s.matricula ? " · " + escapeHtml(s.matricula) : ""}</option>`).join("");
+  if (ci) { ci.innerHTML = indOpts; if (!ci.dataset.bound) { ci.addEventListener("change", drawFocoCharts); ci.dataset.bound = "1"; } }
+  if (hi) { hi.innerHTML = indOpts; if (!hi.dataset.bound) { hi.addEventListener("change", drawFocoCharts); hi.dataset.bound = "1"; } }
   if (!window._focoResizeBound) {
     window._focoResizeBound = 1;
     window.addEventListener("resize", () => { if (activeView === "foco") drawFocoCharts(); });
@@ -3715,18 +3727,30 @@ function renderFoco() {
   drawFocoCharts();
 }
 function drawFocoCharts() { drawRitmo(); drawHistoricoChart(); }
+function monthShortLabel(m) {
+  const { y, mo } = parseMonth(m);
+  const months = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  return months[mo - 1] + "/" + String(y).slice(-2);
+}
 function drawRitmo() {
   const cv = document.getElementById("ritmoChart");
   const indId = document.getElementById("chartInd")?.value;
-  const who = document.getElementById("chartWho")?.value;
   const ind = state.indicators.find(i => i.id === indId);
   const leg = document.getElementById("ritmoChartLegend");
   if (!ind || !cv) return;
   const sellers = orderedSellers();
-  const ids = who === "__team" ? sellers.map(s => s.id) : [who];
+  const who = focoSelectedSeller(sellers);
+  if (!who) {
+    const { ctx, W, H } = setupCanvas(cv, 280);
+    ctx.fillStyle = focoChartColors().dim; ctx.font = "13px sans-serif";
+    ctx.fillText("Cadastre consultores para ver o ritmo.", 20, H / 2);
+    if (leg) leg.innerHTML = "";
+    return;
+  }
+  const ids = [who];
   const n = daysInMonth(currentMonth);
-  const totalWorked = ids.reduce((a, id) => a + sellerWorkedCount(id), 0) || 1;
-  const metaTotal = metaMonthFor(ind) * (ids.length || 1);
+  const totalWorked = sellerWorkedCount(who) || 1;
+  const metaTotal = metaMonthFor(ind);
   const realCum = [];
   let run = 0;
   for (let d = 1; d <= n; d++) {
@@ -3769,7 +3793,8 @@ function drawRitmo() {
     line([last, [X(n - 1), Y(projTotal)]], projColor, [4, 4], 2);
     ctx.fillStyle = projColor; ctx.beginPath(); ctx.arc(X(n - 1), Y(projTotal), 3.5, 0, Math.PI * 2); ctx.fill();
   }
-  if (leg) leg.innerHTML = `<span><i style="background:${c.accent}"></i> Real acumulado</span><span><i style="background:${c.dim}"></i> Meta ideal (escala)</span><span><i style="background:${projColor}"></i> Projeção ${Math.round(projTotal)} (${pctTxt(metaTotal ? projTotal / metaTotal : null)} da meta)</span>`;
+  const seller = state.sellers.find(s => s.id === who);
+  if (leg) leg.innerHTML = `<span class="muted">${escapeHtml(seller?.name || "—")}</span><span><i style="background:${c.accent}"></i> Real acumulado</span><span><i style="background:${c.dim}"></i> Meta ideal (escala)</span><span><i style="background:${projColor}"></i> Projeção ${Math.round(projTotal)} (${pctTxt(metaTotal ? projTotal / metaTotal : null)} da meta)</span>`;
 }
 function sellerMonthlyHistory(sellerId, fieldId) {
   const seller = state.sellers.find(s => s.id === sellerId);
@@ -3786,53 +3811,82 @@ function sellerMonthlyHistory(sellerId, fieldId) {
     const cfg = cfgById(fieldId);
     const meta = cfg ? metaMonthFor(cfg) : 0;
     const proj = sellerProjVal(sid, fieldId, m);
-    if (real == null && !proj) return null;
-    const { y, mo } = parseMonth(m);
-    const shortLbl = new Date(y, mo - 1, 1).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).replace(".", "");
-    return { m, label: shortLbl, real: real ?? 0, meta, proj };
+    const worked = sellerWorkedCount(sid, m) > 0;
+    if (real == null && !proj && !worked) return null;
+    const realVal = real ?? 0;
+    return { m, label: monthShortLabel(m), real: realVal, meta, proj, pct: meta > 0 ? realVal / meta : null };
   }).filter(Boolean);
 }
 function drawHistoricoChart() {
   const cv = document.getElementById("histChart");
   const indId = document.getElementById("histChartInd")?.value;
-  const who = document.getElementById("histChartWho")?.value;
   const leg = document.getElementById("histChartLegend");
   const ind = state.indicators.find(i => i.id === indId);
-  if (!cv || !ind || !who) return;
-  const hist = sellerMonthlyHistory(who, ind.id);
+  if (!cv || !ind) return;
+  const sellers = orderedSellers();
+  const who = focoSelectedSeller(sellers);
   const c = focoChartColors();
-  const { ctx, W, H } = setupCanvas(cv, 280);
-  const pad = { l: 44, r: 12, t: 20, b: 36 };
-  if (!hist.length) {
-    ctx.fillStyle = c.dim; ctx.font = "13px sans-serif"; ctx.fillText("Sem histórico ainda — lance check-outs nos meses anteriores.", pad.l, H / 2);
+  const { ctx, W, H } = setupCanvas(cv, 300);
+  const pad = { l: 48, r: 14, t: 28, b: 52 };
+  if (!who) {
+    ctx.fillStyle = c.dim; ctx.font = "13px sans-serif";
+    ctx.fillText("Cadastre consultores para ver o histórico.", pad.l, H / 2);
     if (leg) leg.innerHTML = "";
     return;
   }
-  const maxY = Math.max(...hist.map(h => Math.max(h.real, h.meta, h.proj)), 1) * 1.15;
-  const slot = (W - pad.l - pad.r) / hist.length;
-  const barW = Math.min(28, slot * 0.55);
+  const hist = sellerMonthlyHistory(who, ind.id);
+  if (!hist.length) {
+    ctx.fillStyle = c.dim; ctx.font = "13px sans-serif";
+    ctx.fillText("Sem histórico ainda — lance check-outs ou defina escala nos meses anteriores.", pad.l, H / 2);
+    if (leg) leg.innerHTML = "";
+    return;
+  }
+  const maxY = Math.max(...hist.map(h => Math.max(h.real, h.meta, h.proj || 0)), 1) * 1.12;
+  const chartW = W - pad.l - pad.r;
+  const n = hist.length;
+  const slot = chartW / n;
+  const barW = Math.min(40, Math.max(14, slot * 0.52));
   const Y = v => H - pad.b - (H - pad.t - pad.b) * (v / maxY);
   ctx.strokeStyle = c.grid; ctx.fillStyle = c.dim; ctx.font = "11px sans-serif";
   for (let g = 0; g <= 4; g++) {
     const v = maxY * g / 4, y = Y(v);
     ctx.globalAlpha = .35; ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
-    ctx.globalAlpha = 1; ctx.fillText(Math.round(v), 4, y + 3);
+    ctx.globalAlpha = 1; ctx.fillText(Math.round(v), 6, y + 4);
   }
   hist.forEach((h, i) => {
     const cx = pad.l + slot * i + slot / 2;
-    const rh = H - pad.b - Y(h.real);
-    ctx.fillStyle = c.accent;
-    ctx.fillRect(cx - barW / 2, Y(h.real), barW, rh);
+    const barTop = Y(h.real);
+    const barH = Math.max(H - pad.b - barTop, h.real > 0 ? 2 : 0);
+    const barColor = h.pct == null ? c.accent : (h.pct >= 0.79 ? c.ok : (h.pct >= 0.51 ? c.warn : c.danger));
+    ctx.fillStyle = barColor;
+    ctx.fillRect(cx - barW / 2, barTop, barW, barH);
     if (h.meta > 0) {
       const my = Y(h.meta);
-      ctx.strokeStyle = c.dim; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
-      ctx.beginPath(); ctx.moveTo(cx - barW / 2 - 2, my); ctx.lineTo(cx + barW / 2 + 2, my); ctx.stroke();
+      ctx.strokeStyle = c.dim; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(cx - barW / 2 - 4, my); ctx.lineTo(cx + barW / 2 + 4, my); ctx.stroke();
       ctx.setLineDash([]);
     }
-    ctx.fillStyle = c.dim; ctx.font = "10px sans-serif";
-    ctx.save(); ctx.translate(cx, H - 10); ctx.rotate(-0.45); ctx.textAlign = "right"; ctx.fillText(h.label, 0, 0); ctx.restore();
+    if (h.real > 0) {
+      ctx.fillStyle = c.text; ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(Math.round(h.real), cx, barTop - 5);
+    }
+    ctx.fillStyle = c.dim; ctx.font = "10px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(h.label, cx, H - pad.b + 16);
+    if (h.pct != null) {
+      ctx.fillStyle = barColor; ctx.font = "9px sans-serif";
+      ctx.fillText(pctTxt(h.pct), cx, H - pad.b + 30);
+    }
   });
-  if (leg) leg.innerHTML = `<span><i style="background:${c.accent}"></i> Realizado no mês</span><span><i style="background:transparent;border:1px dashed ${c.dim}"></i> Meta do consultor</span><span class="muted">Matrícula · ${escapeHtml(state.sellers.find(s => s.id === who)?.matricula || "—")}</span>`;
+  const seller = state.sellers.find(s => s.id === who);
+  const avgPct = (() => {
+    const vals = hist.filter(h => h.pct != null).map(h => h.pct);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  })();
+  if (leg) leg.innerHTML =
+    `<span><i style="background:${c.accent}"></i> Realizado no mês</span>` +
+    `<span><i style="background:transparent;border:1px dashed ${c.dim}"></i> Meta do consultor</span>` +
+    `<span class="muted">${escapeHtml(seller?.name || "—")}${seller?.matricula ? " · mat. " + escapeHtml(seller.matricula) : ""}</span>` +
+    (avgPct != null ? `<span style="color:${heatMatrizText(avgPct)}">Média ${pctTxt(avgPct)} da meta</span>` : "");
 }
 function daysElapsedIndex() { return todayISO() === currentMonth ? new Date().getDate() - 1 : daysInMonth(currentMonth) - 1; }
 
