@@ -655,8 +655,7 @@ function resumoPctOnlyHead(ind, color, isOpen) {
   const rates = ind.rates || [];
   const chev = rates.length ? `<span class="resumo-chev">${isOpen ? "▾" : "▸"}</span>` : "";
   const hint = rates.length ? `${rates.length} taxa${rates.length > 1 ? "s" : ""}` : "—";
-  const toggle = rates.length ? ` toggle" data-ind-toggle="${ind.id}` : "";
-  return `<div class="resumo-row resumo-ind-main resumo-pct-only-head${toggle}" style="--rc:${color}">
+  return `<div class="resumo-row resumo-ind-main resumo-pct-only-head${rates.length ? " toggle" : ""}"${rates.length ? ` data-ind-toggle="${ind.id}"` : ""} style="--rc:${color}">
     <div class="resumo-row-top"><b>${ind.name}${chev}</b><span class="pct">${hint}</span></div>
     <div class="resumo-row-meta">${rates.length ? "Toque para ver taxas · dados da matriz" : "Sem taxas configuradas"}</div></div>`;
 }
