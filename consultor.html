@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v21";
+  var BUILD = "v22";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -443,7 +443,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v21";
+const APP_BUILD = "v22";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -612,10 +612,9 @@ function planCrossRefCandidates(cfg, day, month) {
   const parent = parentIndOfCfg(cfg);
   if (!parent) return [];
   const pool = [];
-  if (parent.checkin && !cfgOpenQuestion(parent) && parent.id !== cfg.id) pool.push(parent);
-  (parent.subs || []).forEach(s => {
-    if (s.id !== cfg.id && s.checkin && !cfgOpenQuestion(s)) pool.push(s);
-  });
+  const sibs = (parent.subs || []).filter(s => s.id !== cfg.id && !cfgOpenQuestion(s) && (s.checkin || s.checkout));
+  if (sibs.length) sibs.forEach(s => pool.push(s));
+  else if (parent.checkin && !cfgOpenQuestion(parent) && parent.id !== cfg.id) pool.push(parent);
   if (!pool.length) return [];
   const m = month || todayISO();
   const d = day != null ? day : todayDay();
@@ -624,9 +623,13 @@ function planCrossRefCandidates(cfg, day, month) {
   if (wd === 0) {
     const dom = pool.find(s => /domingo|\bdom\b/.test(normName(s.name)));
     if (dom) ordered.push(dom);
+  } else if (wd === 6) {
+    const sab = pool.find(s => /sabado|\bsab\b/.test(normName(s.name)));
+    if (sab) ordered.push(sab);
+  } else {
+    const prox = pool.find(s => /prox|amanh|seguinte/.test(normName(s.name)));
+    if (prox) ordered.push(prox);
   }
-  const prox = pool.find(s => /prox|amanh|seguinte/.test(normName(s.name)));
-  if (prox && !ordered.includes(prox)) ordered.push(prox);
   pool.forEach(c => { if (!ordered.includes(c)) ordered.push(c); });
   return ordered;
 }
@@ -668,9 +671,16 @@ function updateOpenCrossUi(box) {
   const fieldId = box.dataset.openFid;
   const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
   if (!cfg) return;
-  const yes = box.querySelector('[data-yn="1"]')?.classList.contains("active");
+  const month = todayISO(), day = todayDay();
+  const cell = getCell(seller.id, cfg.id, day, month);
+  const locked = cellLockedForConsultor(cell, "plan", day, month, cfg);
   const qtyInp = box.querySelector("[data-open-qty]");
   let wrap = box.querySelector(".open-cross-msg-wrap");
+  if (!locked) {
+    if (wrap) wrap.innerHTML = "";
+    if (qtyInp) qtyInp.classList.remove("below-target", "at-target");
+    return;
+  }
   if (!wrap) {
     wrap = document.createElement("div");
     wrap.className = "open-cross-msg-wrap";
@@ -678,15 +688,13 @@ function updateOpenCrossUi(box) {
     if (anchor) anchor.after(wrap);
     else return;
   }
-  if (!yes) {
+  if (cell.planYes !== true) {
     wrap.innerHTML = "";
     if (qtyInp) qtyInp.classList.remove("below-target", "at-target");
     return;
   }
-  const month = todayISO(), day = todayDay();
   const target = crossPlanTarget(seller.id, cfg, day, month);
-  const qtyRaw = qtyInp?.value.trim() ?? "";
-  const confirmed = qtyRaw === "" ? null : Number(qtyRaw);
+  const confirmed = cell.plan != null && cell.plan !== "" ? Number(cell.plan) : null;
   if (target == null || confirmed == null || isNaN(confirmed)) {
     wrap.innerHTML = "";
     if (qtyInp) qtyInp.classList.remove("below-target", "at-target");
@@ -1404,8 +1412,8 @@ function cellLockedForConsultor(cell, key, day, month, cfg) {
   if (!isViewingToday(day, month)) return true;
   if (key === "real" && !checkoutWindowOpen()) return true;
   if (key === "plan" && cfg && cfgOpenQuestion(cfg)) {
-    if (!isOpenPlanComplete(cell) && cell.planBy !== "gestor") return false;
     if (cell.planBy === "gestor") return true;
+    if (isOpenPlanComplete(cell) && cell.planBy === "consultor") return true;
     return false;
   }
   if (!hasCellValue(cell, key)) return false;
@@ -1428,7 +1436,8 @@ function lockLabel(cell, key, day, month, cfg) {
     if (!isOpenPlanComplete(cell)) return "";
     if (cell.planBy === "gestor") return '<span class="lock-tag gestor">👔 Gestor</span>';
     if (!isViewingToday(day, month)) return '<span class="lock-tag">🔒 Dia encerrado</span>';
-    return '<span class="lock-tag consultor">✎ Você · editável</span>';
+    if (cell.planBy === "consultor") return '<span class="lock-tag">🔒 Salvo</span>';
+    return "";
   }
   if (!hasCellValue(cell, key)) return "";
   const by = cell[key + "By"];
@@ -1576,16 +1585,16 @@ function renderFields() {
         html += `<div class="dio-lbl">Check-in ${lockLabel(c, "plan", day, month, cfg)}</div>`;
         html += `<div class="open-yn"><button type="button" class="open-yn-btn${yes ? " active yes" : ""}" data-yn="1" ${planLocked ? "disabled" : ""}>Sim</button>`;
         html += `<button type="button" class="open-yn-btn${no ? " active no" : ""}" data-yn="0" ${planLocked ? "disabled" : ""}>Não</button></div>`;
-        const crossHit = yes ? crossPlanHit(seller.id, cfg, day, month) : null;
+        const crossHit = yes && planLocked ? crossPlanHit(seller.id, cfg, day, month) : null;
         const crossTgt = crossHit?.value ?? null;
         const qtyNum = qty !== "" && qty != null ? Number(qty) : null;
-        const qtyCls = crossTgt != null && qtyNum != null && !isNaN(qtyNum) ? (qtyNum < crossTgt ? "below-target" : "at-target") : "";
+        const qtyCls = planLocked && crossTgt != null && qtyNum != null && !isNaN(qtyNum) ? (qtyNum < crossTgt ? "below-target" : "at-target") : "";
         html += `<div class="open-qty${yes ? "" : " hidden"}"><label>Quantas confirmações?</label>`;
         html += `<input type="number" inputmode="numeric" data-open-qty${qtyCls ? ` class="${qtyCls}"` : ""} value="${qty}" placeholder="0" min="0" ${planLocked ? "disabled" : ""}></div>`;
         const justLbl = no ? "Por que não fez? Qual dificuldade?" : yes ? "Complemento / detalhe" : "Justificativa";
         html += `<div class="open-justif"><label>${justLbl} <span class="hint">mín. ${OPEN_JUSTIF_MIN} caracteres</span></label>`;
         html += `<textarea data-open-justif rows="3" placeholder="Descreva com clareza…" ${planLocked ? "disabled" : ""}>${escText(justif)}</textarea></div>`;
-        const crossMsg = yes && crossTgt != null && qtyNum != null && !isNaN(qtyNum)
+        const crossMsg = yes && planLocked && crossTgt != null && qtyNum != null && !isNaN(qtyNum)
           ? openCrossFeedbackHtml(qtyNum, crossTgt, crossHit?.ref?.name) : "";
         html += `<div class="open-cross-msg-wrap">${crossMsg}</div>`;
         if (!planLocked) html += `<button type="button" class="btn open-save" data-open-save>Salvar resposta</button>`;
@@ -1650,7 +1659,7 @@ async function saveOpenPlan(box) {
     const snap = await ref.once("value");
     const cell = snap.val() || {};
     if (cellLockedForConsultor(cell, "plan", day, month, cfg) && isOpenPlanComplete(cell)) {
-      toast("Preenchido pelo gestor — não pode alterar", true);
+      toast(cell.planBy === "gestor" ? "Preenchido pelo gestor — não pode alterar" : "Resposta já salva — não pode alterar", true);
       renderFields();
       return;
     }

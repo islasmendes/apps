@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v21";
+  var BUILD = "v22";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1552,7 +1552,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v21";
+const APP_BUILD = "v22";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3705,19 +3705,22 @@ function planCrossRefCandidates(cfg, day, m = currentMonth) {
   const parent = parentIndOfCfg(cfg);
   if (!parent) return [];
   const pool = [];
-  if (parent.checkin && !cfgOpenQuestion(parent) && parent.id !== cfg.id) pool.push(parent);
-  (parent.subs || []).forEach(s => {
-    if (s.id !== cfg.id && s.checkin && !cfgOpenQuestion(s)) pool.push(s);
-  });
+  const sibs = (parent.subs || []).filter(s => s.id !== cfg.id && !cfgOpenQuestion(s) && (s.checkin || s.checkout));
+  if (sibs.length) sibs.forEach(s => pool.push(s));
+  else if (parent.checkin && !cfgOpenQuestion(parent) && parent.id !== cfg.id) pool.push(parent);
   if (!pool.length) return [];
   const wd = weekday(m, day);
   const ordered = [];
   if (wd === 0) {
     const dom = pool.find(s => /domingo|\bdom\b/.test(normNameCross(s.name)));
     if (dom) ordered.push(dom);
+  } else if (wd === 6) {
+    const sab = pool.find(s => /sabado|\bsab\b/.test(normNameCross(s.name)));
+    if (sab) ordered.push(sab);
+  } else {
+    const prox = pool.find(s => /prox|amanh|seguinte/.test(normNameCross(s.name)));
+    if (prox) ordered.push(prox);
   }
-  const prox = pool.find(s => /prox|amanh|seguinte/.test(normNameCross(s.name)));
-  if (prox && !ordered.includes(prox)) ordered.push(prox);
   pool.forEach(c => { if (!ordered.includes(c)) ordered.push(c); });
   return ordered;
 }
@@ -4487,7 +4490,7 @@ function renderIndicatorConfig() {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
       (ind.subs||[]).forEach(s => {
         const subLb = cfgLowerBetter(s) || cfgLowerBetter(ind);
-        const crossOpts = (ind.subs || []).filter(x => x.id !== s.id && x.checkin && !x.openQuestion)
+        const crossOpts = (ind.subs || []).filter(x => x.id !== s.id && !x.openQuestion && (x.checkin || x.checkout))
           .map(x => `<option value="${x.id}"${s.planCrossId === x.id ? " selected" : ""}>${escapeHtml(x.name)}</option>`).join("");
         const crossSel = s.openQuestion ? `<span class="hint" title="Check-in numérico para comparar confirmações">cruzar</span><select class="sub-field" data-sk="planCrossId" style="max-width:140px;font-size:11px"><option value="">auto</option>${crossOpts}</select>` : "";
         html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label>${crossSel}<label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`;
