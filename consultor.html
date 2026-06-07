@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v12";
+  var BUILD = "v13";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -291,7 +291,8 @@
   }
   .ind-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 12px; padding-left: 6px; }
   .ind-head b { font-size: 15px; color: var(--ic); }
-  .ind-meta { font-size: 11px; color: var(--text-faint); font-weight: 700; }
+  .ind-meta { font-size: 9px; color: var(--text-faint); font-weight: 600; line-height: 1.45; opacity: .55; }
+  .ind-meta .meta-sep { opacity: .45; font-weight: 800; }
   .dio-grid { display: grid; gap: 10px; }
   .dio-box {
     border-radius: 12px; padding: 10px 12px; border: 1.5px solid;
@@ -419,7 +420,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v12";
+const APP_BUILD = "v13";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -566,6 +567,84 @@ function fieldList() {
     (ind.subs || []).filter(cfgHasDiario).forEach(s => list.push({ cfg: s, color: ind.color, sub: true }));
   });
   return list;
+}
+function weeksOf(m) {
+  const n = daysInMonth(m);
+  const weeks = [];
+  for (let d = 1; d <= n; d += 7) {
+    const w = [];
+    for (let k = d; k < Math.min(d + 7, n + 1); k++) w.push(k);
+    weeks.push(w);
+  }
+  return weeks;
+}
+function weekForDay(day, m = todayISO()) {
+  return weeksOf(m).find(w => w.includes(day)) || [day];
+}
+function weekHasWorkedSunday(sellerId, days, m = todayISO()) {
+  return (days || []).some(d => isSunday(m, d) && sellerWorks(sellerId, d, m));
+}
+function countSellerSaturdays(sellerId, m = todayISO()) {
+  let c = 0;
+  for (let d = 1; d <= daysInMonth(m); d++) if (weekday(m, d) === 6 && sellerWorks(sellerId, d, m)) c++;
+  return c;
+}
+function countSellerSundays(sellerId, m = todayISO()) {
+  let c = 0;
+  for (let d = 1; d <= daysInMonth(m); d++) if (weekday(m, d) === 0 && sellerWorks(sellerId, d, m)) c++;
+  return c;
+}
+function consultorMetaSummary(cfg, sellerId, m = todayISO()) {
+  const parts = [];
+  const metaDay = Number(cfg.metaDay) || 0;
+  const metaSat = Number(cfg.metaSat) || 0;
+  const metaSun = Number(cfg.metaSun) || 0;
+  const metaMonth = Number(cfg.metaMonth) || 0;
+  if (cfg.sundayOnly) {
+    const domMeta = metaSun > 0 ? metaSun : metaDay;
+    if (domMeta > 0) {
+      const nd = countSellerSundays(sellerId, m);
+      parts.push(`Meta do Domingo: ${fmt(domMeta)}${nd ? ` (${nd} domingos)` : ""}`);
+    }
+    if (metaDay > 0 && metaSun > 0) parts.unshift(`Meta do dia: ${fmt(metaDay)}`);
+  } else {
+    if (metaDay > 0) parts.push(`Meta do dia: ${fmt(metaDay)}`);
+    if (metaSat > 0) {
+      const ns = countSellerSaturdays(sellerId, m);
+      parts.push(`Meta do Sábado: ${fmt(metaSat)}${ns ? ` (${ns} sábados)` : ""}`);
+    }
+    if (metaSun > 0) {
+      const nd = countSellerSundays(sellerId, m);
+      parts.push(`Meta do Domingo: ${fmt(metaSun)}${nd ? ` (${nd} domingos)` : ""}`);
+    }
+  }
+  if (metaMonth > 0) parts.push(`Meta Consultor: ${fmt(metaMonth)}`);
+  return parts.join('<span class="meta-sep"> &gt; </span>');
+}
+function consultorFieldGated(sellerId, cfg, day, m = todayISO()) {
+  return !!(cfg.sundayOnly && !weekHasWorkedSunday(sellerId, weekForDay(day, m), m));
+}
+function consultorFieldNeeds(sellerId, cfg, day, m = todayISO()) {
+  if (consultorFieldGated(sellerId, cfg, day, m)) return { checkin: false, checkout: false };
+  if (!sellerWorks(sellerId, day, m)) return { checkin: false, checkout: false };
+  const wd = weekday(m, day);
+  if (cfg.sundayOnly) {
+    if (wd !== 0) return { checkin: false, checkout: false };
+    return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
+  }
+  const metaSat = Number(cfg.metaSat) || 0;
+  const metaDay = Number(cfg.metaDay) || 0;
+  const metaSun = Number(cfg.metaSun) || 0;
+  if (metaSat > 0 && wd !== 6 && !cfg.checkin && cfg.checkout && metaDay <= 1 && metaSun === 0) {
+    return { checkin: false, checkout: false };
+  }
+  return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
+}
+function activeFieldList(sellerId, day, month) {
+  return fieldList().filter(({ cfg }) => {
+    const n = consultorFieldNeeds(sellerId, cfg, day, month);
+    return n.checkin || n.checkout;
+  });
 }
 function parseMonth(m) { const [y, mo] = m.split("-").map(Number); return { y, mo }; }
 function daysInMonth(m) { const { y, mo } = parseMonth(m); return new Date(y, mo, 0).getDate(); }
@@ -1225,13 +1304,14 @@ function stopTickLoop() {
 function countProgress() {
   const month = todayISO(), day = todayDay();
   let total = 0, done = 0, cinT = 0, cinD = 0, coutT = 0, coutD = 0;
-  fieldList().forEach(({ cfg }) => {
+  activeFieldList(seller.id, day, month).forEach(({ cfg }) => {
     const c = getCell(seller.id, cfg.id, day, month);
-    if (cfg.checkin) {
+    const needs = consultorFieldNeeds(seller.id, cfg, day, month);
+    if (needs.checkin) {
       total++; cinT++;
       if (cellFilledFromDom(cfg, "plan", c)) { done++; cinD++; }
     }
-    if (cfg.checkout) {
+    if (needs.checkout) {
       total++; coutT++;
       if (cellFilledFromDom(cfg, "real", c)) { done++; coutD++; }
     }
@@ -1279,24 +1359,25 @@ function updateProgress() {
 function renderFields() {
   const root = document.getElementById("fieldsRoot");
   const month = todayISO(), day = todayDay();
-  const fields = fieldList();
+  const fields = activeFieldList(seller.id, day, month);
   if (!fields.length) {
-    root.innerHTML = '<div class="empty">Nenhum indicador com check-in/out configurado.<br>O gestor precisa ativar em KPIs.</div>';
+    root.innerHTML = '<div class="empty">Nada para preencher hoje na sua escala.<br>Indicadores de domingo/sábado só aparecem quando você trabalha nesses dias.</div>';
     return;
   }
   root.innerHTML = fields.map(({ cfg, color, sub }) => {
     const c = getCell(seller.id, cfg.id, day, month);
-    const meta = metaForConsultorDay(cfg, month, day);
-  const planLocked = cellLockedForConsultor(c, "plan", day, month);
-  const realLocked = cellLockedForConsultor(c, "real", day, month);
-  const planMine = cellIsMine(c, "plan");
-  const realMine = cellIsMine(c, "real");
-    let html = `<div class="ind-card" style="--ic:${color}"><div class="ind-head"><div><b>${sub ? "↳ " : ""}${cfg.name}</b><div class="ind-meta">Meta do dia: ${fmt(meta)}</div></div></div><div class="dio-grid">`;
-    if (cfg.checkin) {
+    const needs = consultorFieldNeeds(seller.id, cfg, day, month);
+    const metaHtml = consultorMetaSummary(cfg, seller.id, month);
+    const planLocked = cellLockedForConsultor(c, "plan", day, month);
+    const realLocked = cellLockedForConsultor(c, "real", day, month);
+    const planMine = cellIsMine(c, "plan");
+    const realMine = cellIsMine(c, "real");
+    let html = `<div class="ind-card" style="--ic:${color}"><div class="ind-head"><div><b>${sub ? "↳ " : ""}${cfg.name}</b>${metaHtml ? `<div class="ind-meta">${metaHtml}</div>` : ""}</div></div><div class="dio-grid">`;
+    if (needs.checkin) {
       html += `<div class="dio-box in${planLocked ? " locked" : ""}${planMine && !planLocked ? " mine" : ""}"><div class="dio-lbl">Check-in ${lockLabel(c, "plan", day, month)}</div>`;
       html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="plan" value="${c.plan ?? ""}" placeholder="—" ${planLocked ? "disabled" : ""}></div>`;
     }
-    if (cfg.checkout) {
+    if (needs.checkout) {
       html += `<div class="dio-box out${realLocked ? " locked" : ""}${realMine && !realLocked ? " mine" : ""}"><div class="dio-lbl">Check-out ${lockLabel(c, "real", day, month)}</div>`;
       html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="real" value="${c.real ?? ""}" placeholder="—" ${realLocked ? "disabled" : ""}></div>`;
     }
