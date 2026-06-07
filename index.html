@@ -2564,10 +2564,21 @@ function fieldHasSistema(sellerId, f, m = currentMonth) {
   if (f.rate) return getSystemRate(sellerId, f.rateId, m) != null;
   return getSystem(sellerId, f.id, m) != null;
 }
-function acuracidadeVisibleFields(sellers, allFields) {
+/** Coluna na acuracidade: gestor lançou ⚙ e há comparação real (sistema ≠ 0 ou relato no mês). Evita coluna fantasma com 0/0. */
+function acurFieldActive(sellerId, f, days, m = currentMonth) {
+  if (!fieldHasSistema(sellerId, f, m)) return false;
+  if (f.rate) return true;
+  const sys = getSystem(sellerId, f.id, m);
+  if (sys == null) return false;
+  if (Number(sys) !== 0) return true;
+  const rel = accum(sellerId, f.id, "real", days, m);
+  return rel != null && rel !== 0;
+}
+function acuracidadeVisibleFields(sellers, allFields, days) {
+  const d = days || monthDays();
   const list = allFields || acuracidadeFieldList().filter(f => !f.rate);
   const scope = (sellers && sellers.length) ? sellers : orderedSellers();
-  return list.filter(f => scope.some(s => fieldHasSistema(s.id, f)));
+  return list.filter(f => scope.some(s => acurFieldActive(s.id, f, d)));
 }
 function acurTipRelato(f, rel, sys, acc) {
   const lines = [
@@ -2673,12 +2684,13 @@ function arvResolveFieldLocal(fTpl) {
   const ind = state.indicators.find(i => i.name === fTpl.name && !i.pctOnly);
   return ind ? { ...fTpl, id: ind.id, color: ind.color } : null;
 }
-function arvAcuracidadeVisibleFields(lojas) {
+function arvAcuracidadeVisibleFields(lojas, days) {
+  const d = days || monthDays();
   const allFields = acuracidadeFieldList().filter(f => !f.rate);
   return allFields.filter(fTpl => lojas.some(L => arvScoped(L, () => {
     const f = arvResolveFieldLocal(fTpl);
     if (!f) return false;
-    return arvTeamSellerIds(L).some(sid => fieldHasSistema(sid, f));
+    return arvTeamSellerIds(L).some(sid => acurFieldActive(sid, f, d));
   })));
 }
 function arvAcurAggregateCellHtml(fTpl, rel, sys, acc, tipExtra) {
@@ -2696,11 +2708,12 @@ function arvAcurAggregateCellHtml(fTpl, rel, sys, acc, tipExtra) {
     `<span class="heat matriz-from-sys matriz-real acur-sys">${fmt(sys)}</span>` +
     `<span class="acur-pct" style="color:${accColor}">${pctDisp}</span></td>`;
 }
-function arvAcurTotalsForSellers(sellerIds, fieldId, days) {
+function arvAcurTotalsForSellers(sellerIds, f, days) {
+  const fieldId = f.id;
   let sysSum = 0, relSum = 0, n = 0;
   sellerIds.forEach(sid => {
+    if (!acurFieldActive(sid, f, days)) return;
     const sys = getSystem(sid, fieldId);
-    if (sys == null) return;
     sysSum += sys;
     relSum += accum(sid, fieldId, "real", days) ?? 0;
     n++;
@@ -2714,7 +2727,7 @@ function arvLojaAcurCellHtml(loja, fTpl, days) {
     const f = arvResolveFieldLocal(fTpl);
     if (!f) return `<td class="relato muted">—</td>`;
     const ids = arvTeamSellerIds(loja);
-    const t = arvAcurTotalsForSellers(ids, f.id, days);
+    const t = arvAcurTotalsForSellers(ids, f, days);
     return arvAcurAggregateCellHtml(f, t.rel, t.sys, t.acc, "Total da loja " + loja.name);
   });
 }
@@ -2725,9 +2738,8 @@ function arvTotalAcurCellHtml(lojas, fTpl, days) {
       const f = arvResolveFieldLocal(fTpl);
       if (!f) return;
       arvTeamSellerIds(L).forEach(sid => {
-        const sys = getSystem(sid, f.id);
-        if (sys == null) return;
-        sysSum += sys;
+        if (!acurFieldActive(sid, f, days)) return;
+        sysSum += getSystem(sid, f.id);
         relSum += accum(sid, f.id, "real", days) ?? 0;
         n++;
       });
@@ -2743,8 +2755,8 @@ function arvLojaMetrics(loja, days, fields) {
     let accSum = 0, accN = 0;
     fields.forEach(fTpl => {
       const f = arvResolveFieldLocal(fTpl);
-      if (!f || !ids.some(sid => fieldHasSistema(sid, f))) return;
-      const t = arvAcurTotalsForSellers(ids, f.id, days);
+      if (!f || !ids.some(sid => acurFieldActive(sid, f, days))) return;
+      const t = arvAcurTotalsForSellers(ids, f, days);
       if (t.acc != null) { accSum += t.acc; accN++; }
     });
     let complete = 0, closed = 0, scheduled = 0;
@@ -2778,7 +2790,7 @@ function arvAcurSellerMetrics(loja, sellerId, days, fields) {
     let accSum = 0, accN = 0;
     fields.forEach(fTpl => {
       const f = arvResolveFieldLocal(fTpl);
-      if (!f || !fieldHasSistema(sellerId, f)) return;
+      if (!f || !acurFieldActive(sellerId, f, days)) return;
       const acc = fieldAccuracy(sellerId, f.id, days);
       if (acc != null) { accSum += acc; accN++; }
     });
@@ -2797,7 +2809,7 @@ function renderArvoreAcuracidade() {
     const set = new Set(lojaFilter);
     lojas = lojas.filter(L => set.has(L.id));
   }
-  const fields = arvAcuracidadeVisibleFields(lojas);
+  const fields = arvAcuracidadeVisibleFields(lojas, days);
   const filterLbl = (state.ui.arvSellerFilter || []).length ? "(vendedor)" : hasLojaFilter ? "(loja)" : "";
   let head = '<thead><tr><th class="name">Loja / Vendedor</th>';
   if (!fields.length) head += '<th class="muted" style="font-weight:600">—</th>';
@@ -3276,7 +3288,7 @@ function sellerMetrics(sellerId) {
     const real = accum(sellerId, ind.id, "real", days), meta = metaMonthFor(ind);
     if (meta && real != null) { projSum += (sellerProjVal(sellerId, ind.id)/meta); projN++; }
   });
-  acuracidadeFieldList().filter(f => !f.rate && fieldHasSistema(sellerId, f)).forEach(f => {
+  acuracidadeFieldList().filter(f => !f.rate && acurFieldActive(sellerId, f, days)).forEach(f => {
     const acc = fieldAccuracy(sellerId, f.id, days);
     if (acc != null) { accSum += acc; accN++; }
   });
