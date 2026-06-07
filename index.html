@@ -146,6 +146,9 @@
   .dio-lock-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 10px; padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px; }
   .dio-lock-bar .hint { margin: 0; }
   .dio-bulk-unlock.active { border-color: var(--accent-2); color: var(--accent-2); background: color-mix(in srgb, var(--accent-2) 14%, var(--panel-2)); }
+  .admin-loja-picker { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-soft); }
+  .admin-loja-chips { margin-top: 6px; }
+  .admin-loja-chip { font-size: 11px !important; }
   #diarioTable th.dio-locked-day { background: color-mix(in srgb, var(--panel-2) 82%, var(--text-faint)) !important; color: var(--text-dim); }
   #diarioTable th .dio-day-head { display: flex; flex-direction: column; align-items: center; gap: 3px; }
   #diarioTable th .dio-today-tag { font-size: 8px; font-weight: 800; color: var(--accent-2); letter-spacing: .3px; text-transform: uppercase; }
@@ -467,7 +470,7 @@
   </div>
   <div class="spacer"></div>
   <div class="header-controls">
-    <button class="iconbtn" id="trocarLojaTop" title="Trocar de loja / Divisional">🏪 Trocar</button>
+    <button class="iconbtn" id="trocarLojaTop" title="Trocar de loja">🏪 Trocar</button>
     <button class="iconbtn" id="themeToggle" title="Alternar tema" aria-label="Alternar tema">🌙</button>
     <div class="month-picker-wrap" id="monthPickerWrap">
       <button type="button" class="month-picker-btn" id="monthPickerBtn" aria-haspopup="dialog" aria-expanded="false">
@@ -724,9 +727,10 @@
   </div>
 </div>
 
-<div class="modal-bg" id="lojaModal"><div class="modal" style="max-width:420px">
+<div class="modal-bg" id="lojaModal"><div class="modal" style="max-width:440px">
   <h3>🏪 Qual é a sua loja?</h3>
-  <div class="sub">Digite o código da loja (começa com <b>VC</b>). Ex.: VCANT, VCBHZ, VCCMA. Em qualquer aparelho, digitar o mesmo código carrega a mesma configuração. Para o <b>Divisional</b> (ver todas as lojas), digite <b>RSCEN</b>.</div>
+  <div id="adminLojaPicker" class="admin-loja-picker" style="display:none"></div>
+  <div class="sub" id="lojaModalSub">Digite o código da loja (começa com <b>VC</b>). Ex.: VCANT, VCBHZ, VCCMA. Em qualquer aparelho, digitar o mesmo código carrega a mesma configuração. Para o <b>Divisional</b> (ver todas as lojas), digite <b>RSCEN</b>.</div>
   <input id="lojaCodeInput" placeholder="VCANT" style="text-transform:uppercase; width:100%; font-size:18px; font-weight:800; margin-top:8px;">
   <div class="hint" id="lojaErr" style="color:var(--danger); min-height:16px; margin-top:6px;"></div>
   <div class="row" style="margin-top:12px; justify-content:flex-end;"><button class="btn" id="lojaSubmit">Entrar na loja</button></div>
@@ -1305,11 +1309,23 @@ function mergeDailyFromRemote(remoteMonths) {
   return changed;
 }
 let lojaDataListenerOn = false;
+let lojaDataListenerPath = null;
 let lojaMergeTimer = null;
+function resetLojaDataListener() {
+  if (lojaDataListenerPath && fbDb) {
+    try { fbDb.ref(lojaDataListenerPath).off(); } catch (e) {}
+  }
+  lojaDataListenerPath = null;
+  lojaDataListenerOn = false;
+}
 function startLojaDataListener() {
-  if (!fbReady || !fbDb || !lojaCode || divisionalMode() || lojaDataListenerOn) return;
+  if (!fbReady || !fbDb || !lojaCode || divisionalMode()) return;
+  const path = "lojas/" + lojaCode + "/data/months";
+  if (lojaDataListenerOn && lojaDataListenerPath === path) return;
+  resetLojaDataListener();
   lojaDataListenerOn = true;
-  fbDb.ref("lojas/" + lojaCode + "/data/months").on("value", snap => {
+  lojaDataListenerPath = path;
+  fbDb.ref(path).on("value", snap => {
     clearTimeout(lojaMergeTimer);
     lojaMergeTimer = setTimeout(() => {
       if (mergeDailyFromRemote(snap.val())) {
@@ -3652,24 +3668,6 @@ function fbInit(){
     auth.signInAnonymously().catch(e => { console.warn("Login anônimo falhou — habilite Anonymous em Authentication:", e && e.message); setFbBadge(false); });
   }catch(e){ console.warn("Firebase init falhou:", e); setFbBadge(false); }
 }
-function renderSync(){
-  const el = document.getElementById("syncPanel"); if(!el) return;
-  const lojas = allLojas();
-  let html = `<h2>Sincronização &amp; Lojas</h2>`;
-  html += `<div class="sub">Tempo real: <b style="color:${fbReady?'var(--ok)':'var(--text-faint)'}">${fbReady?'ligado':'desligado (só local)'}</b> · Seu ID: <code style="background:var(--cell);border:1px solid var(--border);padding:2px 6px;border-radius:6px;font-size:11px">${escapeHtml(myLojaId)}</code> <button class="btn sec sm" id="copyId">copiar</button> ${isAdmin?'<span class="tag" style="background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)">ADMIN</span>':'<span class="tag">gestor</span>'}</div>`;
-  html += `<div class="row" style="margin-top:10px;"><button class="btn danger" id="clearMine">🗑 Limpar meus dados (esta loja)</button></div>`;
-  if (isAdmin) {
-    html += `<div style="margin-top:16px;"><b style="font-size:13px;">Lojas conectadas (admin)</b>` +
-      (lojas.length? lojas.map(L=>`<div class="row" style="align-items:center; margin-top:8px; border-top:1px solid var(--border-soft); padding-top:8px;"><span style="flex:1; min-width:160px;"><b>${escapeHtml(L.name)}</b> <span class="hint">${L.self?'· você':''} · ${escapeHtml(String(L.id).slice(0,10))}…</span></span>${L.self?'<span class="hint">(use Limpar acima)</span>':`<button class="btn danger sm" data-del-loja="${L.id}">Excluir loja</button>`}</div>`).join("") : '<div class="empty">Nenhuma loja.</div>') + `</div>`;
-  } else {
-    html += `<div class="hint" style="margin-top:12px;">Só o <b>admin</b> pode excluir outras lojas. Para virar admin, me envie o seu ID acima (ou cadastre-o em <code>/admins</code> no Firebase).</div>`;
-  }
-  el.innerHTML = html;
-  const cp=document.getElementById("copyId"); if(cp) cp.onclick=()=>{ try{ navigator.clipboard && navigator.clipboard.writeText(myLojaId); }catch(e){} toast("ID copiado"); };
-  const cm=document.getElementById("clearMine"); if(cm) cm.onclick=()=>{ if(confirm("Limpar os dados desta loja (local e na nuvem)? Não dá para desfazer.")){ try{ if(fbReady&&fbDb) fbDb.ref("lojas/"+myLojaId).remove(); }catch(e){} localStorage.removeItem(LS_KEY); location.reload(); } };
-  el.querySelectorAll("[data-del-loja]").forEach(b=>b.onclick=()=>{ if(confirm("Excluir esta loja da nuvem? O gestor dela perderá a sincronização até reenviar.")){ try{ fbDb.ref("lojas/"+b.dataset.delLoja).remove(); toast("Loja excluída"); }catch(e){ toast("Sem permissão", true); } } });
-}
-
 /* ============================================================ AUTENTICAÇÃO — senha mestra + senha por loja */
 const AUTH_SESSION_KEY = "gc_auth_session";
 const AUTH_PBKDF2_ITER = 310000;
@@ -3974,9 +3972,10 @@ function fbInit(){
         const was = isAdmin;
         isAdmin = (s.val() === true);
         if (isAdmin && !was) { configPushBlocked = false; configWriteOk = null; queueConfigPush(); }
+        updateTrocarLojaTopTitle();
         if (activeView === "config") renderSync();
       }); } catch(e){}
-      try { fbDb.ref("auth/adminDevices").on("value", s => { authAdminDevices = s.val() || {}; if(activeView==="config") renderSync(); }); } catch(e){}
+      try { fbDb.ref("auth/adminDevices").on("value", s => { authAdminDevices = s.val() || {}; updateTrocarLojaTopTitle(); if(activeView==="config") renderSync(); }); } catch(e){}
       try { fbDb.ref("auth/master").on("value", s => { authMasterCache = s.val(); }); } catch(e){}
       fbDb.ref("lojas").on("value", snap => { remoteLojas = snap.val() || {}; setFbBadge(true); if(activeView==="fechamento"||activeView==="rscen") renderActive(); if(activeView==="config") renderSync(); },
         err => { console.warn("leitura lojas negada:", err && err.message); setFbBadge(false); });
@@ -3991,37 +3990,129 @@ function fbInit(){
     auth.signInAnonymously().catch(e => { console.warn("Login anônimo falhou — habilite Anonymous:", e && e.message); setFbBadge(false); });
   }catch(e){ console.warn("Firebase init falhou:", e); setFbBadge(false); if (!authUnlocked) startAuthFlow(); }
 }
-function fbPush(){
-  if (!fbReady || !fbDb || !lojaCode) return;
-  clearTimeout(fbPushTimer);
-  fbPushTimer = setTimeout(()=>{ try{ fbDb.ref("lojas/"+lojaCode).set({ name: state.storeName || lojaCode, code: lojaCode, updatedAt: Date.now(), data: JSON.parse(JSON.stringify(state)) }); }catch(e){ console.warn("push falhou", e); } }, 1200);
+function isAdminSwitcher() { return isConfigAdmin(); }
+function updateTrocarLojaTopTitle() {
+  const b = document.getElementById("trocarLojaTop");
+  if (b) b.title = isAdminSwitcher() ? "Trocar de loja (admin — sem senha)" : "Trocar de loja";
 }
-function pullLoja(){
-  if (!fbReady || !fbDb || !lojaCode) return;
-  fbDb.ref("lojas/"+lojaCode).once("value").then(snap => {
-    const v = snap.val();
-    if (v && v.data) { state = migrate(v.data); state.storeName = v.name || lojaCode; save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); startLojaDataListener(); toast("Loja "+lojaCode+" carregada da nuvem"); }
-    else { state.storeName = lojaCode; save(); fbPush(); syncStore(); renderActive(); startLojaDataListener(); toast("Nova loja "+lojaCode+" criada"); }
-  }).catch(e => { console.warn("pull falhou", e); });
+function lojaCodeFromRemote(id, r) {
+  const c = String(r?.code || "").trim().toUpperCase();
+  if (/^VC[A-Z0-9]+$/.test(c)) return c;
+  if (/^RSCEN[A-Z0-9]*$/.test(c)) return c;
+  const idU = String(id || "").trim().toUpperCase();
+  if (/^VC[A-Z0-9]+$/.test(idU)) return idU;
+  const n = String(r?.name || "").trim().toUpperCase();
+  if (/^VC[A-Z0-9]+$/.test(n)) return n;
+  return idU || c;
 }
-function askLoja(){
-  if (!authUnlocked) { startAuthFlow(); return; }
-  const m = document.getElementById("lojaModal"); if(!m) return;
+function adminLojaOptions() {
+  const list = [], seen = new Set();
+  const add = (code, label) => {
+    const c = String(code || "").trim().toUpperCase();
+    if (!c || seen.has(c)) return;
+    const ok = (/^VC[A-Z0-9]+$/.test(c) && c.length >= 3) || /^RSCEN[A-Z0-9]*$/.test(c);
+    if (!ok) return;
+    seen.add(c);
+    list.push({ code: c, label: label || c, active: c === String(lojaCode || "").toUpperCase() });
+  };
+  add("RSCEN", "RSCEN+ Divisional");
+  Object.entries(remoteLojas || {}).forEach(([id, r]) => add(lojaCodeFromRemote(id, r), r?.name || lojaCodeFromRemote(id, r)));
+  if (lojaCode) add(lojaCode, state.storeName || lojaCode);
+  list.sort((a, b) => {
+    if (a.code.startsWith("RSCEN")) return -1;
+    if (b.code.startsWith("RSCEN")) return 1;
+    if (a.active) return -1;
+    if (b.active) return 1;
+    return a.code.localeCompare(b.code, "pt-BR");
+  });
+  return list;
+}
+function renderAdminLojaPicker() {
+  const box = document.getElementById("adminLojaPicker");
+  const sub = document.getElementById("lojaModalSub");
+  if (!box) return;
+  if (!isAdminSwitcher() || !authUnlocked) {
+    box.style.display = "none";
+    box.innerHTML = "";
+    if (sub) sub.style.display = "";
+    return;
+  }
+  const opts = adminLojaOptions();
+  box.style.display = "block";
+  box.innerHTML =
+    `<div class="hint" style="margin-bottom:6px;"><b>Admin</b> — clique para entrar na loja <b>sem nova senha</b>:</div>` +
+    `<div class="matriz-filter-chips admin-loja-chips">${opts.map(o =>
+      `<button type="button" class="matriz-filter-chip admin-loja-chip${o.active ? " active" : ""}" data-code="${escapeHtml(o.code)}">${escapeHtml(o.label)}</button>`
+    ).join("")}</div>` +
+    `<div class="hint" style="margin:10px 0 4px;">Ou digite outro código:</div>`;
+  if (sub) sub.style.display = "none";
+  box.querySelectorAll(".admin-loja-chip").forEach(btn => {
+    btn.onclick = () => switchToLoja(btn.dataset.code);
+  });
+}
+function switchToLoja(code) {
+  const err = document.getElementById("lojaErr");
+  if (err) err.textContent = "";
+  const c = String(code || "").trim().toUpperCase().replace(/\s+/g, "");
+  const okLoja = /^VC[A-Z0-9]+$/.test(c) && c.length >= 3;
+  const okDiv = /^RSCEN[A-Z0-9]*$/.test(c);
+  if (!okLoja && !okDiv) {
+    if (err) err.textContent = "Use VC… (ex.: VCANT) ou RSCEN para o Divisional.";
+    return false;
+  }
+  if (c === String(lojaCode || "").toUpperCase()) {
+    document.getElementById("lojaModal")?.classList.remove("show");
+    toast("Já está nesta loja");
+    return true;
+  }
+  if (fbReady && lojaCode && !divisionalMode()) save({ skipConfigPush: true });
+  lojaCode = c;
+  localStorage.setItem("gc_loja_code", c);
+  myLojaId = c;
+  if (authUnlocked) saveAuthSession(c);
+  resetLojaDataListener();
+  document.getElementById("lojaModal")?.classList.remove("show");
+  if (fbReady) pullLoja();
+  else {
+    state.storeName = okDiv ? "RSCEN — Divisional" : c;
+    save();
+    syncStore();
+    renderActive();
+  }
+  const hdr = document.getElementById("storeName");
+  if (hdr && !okDiv) hdr.value = c;
+  toast(okDiv ? "Modo Divisional ativo" : "Loja: " + c);
+  return true;
+}
+function askLoja() {
+  if (!authUnlocked && !isAdminSwitcher()) { startAuthFlow(); return; }
+  const m = document.getElementById("lojaModal");
+  if (!m) return;
   const inp = document.getElementById("lojaCodeInput");
-  if (inp) inp.value = (state.storeName||"").toUpperCase().indexOf("VC")===0 ? state.storeName.toUpperCase() : "VC";
-  m.classList.add("show"); if(inp) setTimeout(()=>{ try{ inp.focus(); }catch(e){} },60);
+  const err = document.getElementById("lojaErr");
+  if (err) err.textContent = "";
+  if (inp) inp.value = lojaCode || "VC";
+  renderAdminLojaPicker();
+  m.classList.add("show");
+  updateTrocarLojaTopTitle();
+  if (inp && !isAdminSwitcher()) setTimeout(() => { try { inp.focus(); } catch (e) {} }, 60);
 }
-function submitLoja(){
-  if (!authUnlocked) { document.getElementById("authLojaInput").value = document.getElementById("lojaCodeInput").value; submitAuthLoja(); return; }
-  const inp = document.getElementById("lojaCodeInput"); const err = document.getElementById("lojaErr");
-  let code = (inp.value||"").trim().toUpperCase().replace(/\s+/g,"");
-  if (!/^VC[A-Z0-9]+$/.test(code) || code.length < 3) { if(err) err.textContent = "O código deve começar com VC e ter pelo menos 3 letras (ex.: VCANT, VCBHZ)."; return; }
-  lojaCode = code; localStorage.setItem("gc_loja_code", code); myLojaId = code;
-  document.getElementById("lojaModal").classList.remove("show");
-  saveAuthSession(code);
-  if (fbReady) pullLoja(); else { state.storeName = code; save(); syncStore(); renderActive(); }
+function submitLoja() {
+  if (!authUnlocked && !isAdminSwitcher()) {
+    const src = document.getElementById("lojaCodeInput");
+    if (src) document.getElementById("authLojaInput").value = src.value;
+    submitAuthLoja();
+    return;
+  }
+  const inp = document.getElementById("lojaCodeInput");
+  switchToLoja(inp?.value || "");
 }
-function trocarLoja(){
+function trocarLoja() {
+  if (isAdminSwitcher()) {
+    if (!authUnlocked) { startAuthFlow(); return; }
+    askLoja();
+    return;
+  }
   if (!confirm("Trocar de loja? Será necessário autenticar novamente.")) return;
   localStorage.removeItem("gc_loja_code");
   clearAuthSession();
@@ -4029,25 +4120,6 @@ function trocarLoja(){
   authUnlocked = false;
   document.body.classList.add("auth-locked");
   startAuthFlow();
-}
-
-function renderSync(){
-  const el = document.getElementById("syncPanel"); if(!el) return;
-  const lojas = allLojas();
-  let html = `<h2>Sincronização &amp; Lojas</h2>`;
-  html += `<div class="sub">Tempo real: <b style="color:${fbReady?'var(--ok)':'var(--text-faint)'}">${fbReady?'ligado':'desligado (só local)'}</b> · Sua loja: <code style="background:var(--cell);border:1px solid var(--border);padding:2px 8px;border-radius:6px;font-weight:800">${escapeHtml(lojaCode||state.storeName||'—')}</code> <button class="btn sec sm" id="trocarLoja">Trocar loja</button> ${isAdmin?'<span class="tag" style="background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)">ADMIN</span>':'<span class="tag">gestor</span>'}</div>`;
-  html += `<div class="hint" style="margin-top:6px;">Qualquer aparelho que abrir e digitar <b>${escapeHtml(lojaCode||'sua loja')}</b> carrega esta mesma configuração (a última sincronizada).</div>`;
-  html += `<div class="row" style="margin-top:10px;"><button class="btn danger" id="clearMine">🗑 Apagar e recomeçar esta loja</button></div>`;
-  if (isAdmin) {
-    html += `<div style="margin-top:16px;"><b style="font-size:13px;">Lojas conectadas (admin)</b>` +
-      (lojas.length? lojas.map(L=>`<div class="row" style="align-items:center; margin-top:8px; border-top:1px solid var(--border-soft); padding-top:8px;"><span style="flex:1; min-width:160px;"><b>${escapeHtml(L.name)}</b> <span class="hint">${L.self?'· você':''} · ${escapeHtml(String(L.id))}</span></span>${L.self?'<span class="hint">(use Apagar acima)</span>':`<button class="btn danger sm" data-del-loja="${L.id}">Excluir loja</button>`}</div>`).join("") : '<div class="empty">Nenhuma loja.</div>') + `</div>`;
-  } else {
-    html += `<div class="hint" style="margin-top:12px;">Só o <b>admin</b> exclui lojas. ID deste aparelho (para virar admin): <code style="font-size:10px">${escapeHtml(authUid||'—')}</code></div>`;
-  }
-  el.innerHTML = html;
-  const tl=document.getElementById("trocarLoja"); if(tl) tl.onclick=trocarLoja;
-  const cm=document.getElementById("clearMine"); if(cm) cm.onclick=()=>{ if(confirm("Apagar os dados desta loja e recomeçar? (admin remove também da nuvem)")){ try{ if(fbReady&&fbDb&&lojaCode) fbDb.ref("lojas/"+lojaCode).remove(); }catch(e){} localStorage.removeItem(LS_KEY); location.reload(); } };
-  el.querySelectorAll("[data-del-loja]").forEach(b=>b.onclick=()=>{ if(confirm("Excluir esta loja da nuvem?")){ try{ fbDb.ref("lojas/"+b.dataset.delLoja).remove(); toast("Loja excluída"); }catch(e){ toast("Sem permissão", true); } } });
 }
 
 /* ============================================================ FASE 2.3 — MODO DIVISIONAL (RSCEN) + trocar no topo */
@@ -4100,23 +4172,6 @@ function pullLoja(){
     }
   }).catch(e => console.warn("pull falhou", e));
 }
-function submitLoja(){
-  if (!authUnlocked) {
-    const src = document.getElementById("lojaCodeInput");
-    if (src) document.getElementById("authLojaInput").value = src.value;
-    submitAuthLoja();
-    return;
-  }
-  const inp = document.getElementById("lojaCodeInput"); const err = document.getElementById("lojaErr");
-  let code = (inp.value||"").trim().toUpperCase().replace(/\s+/g,"");
-  const okLoja = /^VC[A-Z0-9]+$/.test(code) && code.length>=3;
-  const okDiv = /^RSCEN[A-Z0-9]*$/.test(code);
-  if (!okLoja && !okDiv) { if(err) err.textContent = "Use o código da sua loja (começa com VC, ex.: VCANT) ou RSCEN para o Divisional."; return; }
-  lojaCode = code; localStorage.setItem("gc_loja_code", code); myLojaId = code;
-  document.getElementById("lojaModal").classList.remove("show");
-  saveAuthSession(code);
-  if (fbReady) pullLoja(); else { state.storeName = okDiv? "RSCEN — Divisional" : code; save(); syncStore(); renderActive(); }
-}
 function renderSync(){
   const el = document.getElementById("syncPanel"); if(!el) return;
   const div = divisionalMode(); const lojas = allLojas();
@@ -4124,7 +4179,14 @@ function renderSync(){
   const adminTag = isAdmin
     ? '<span class="tag" style="background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)">ADMIN Firebase</span>'
     : (isDeviceAdmin() ? '<span class="tag" style="background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)">ADMIN aparelho</span>' : (div ? '' : '<span class="tag">gestor</span>'));
-  html += `<div class="sub">Tempo real: <b style="color:${fbReady?'var(--ok)':'var(--text-faint)'}">${fbReady?'ligado':'desligado (só local)'}</b> · ${div? '<b style="color:var(--accent-2)">Modo Divisional ('+escapeHtml(lojaCode)+')</b> — vê todas as lojas' : 'Sua loja: <code style="background:var(--cell);border:1px solid var(--border);padding:2px 8px;border-radius:6px;font-weight:800">'+escapeHtml(lojaCode||state.storeName||'—')+'</code>'} <button class="btn sec sm" id="trocarLoja">Trocar</button> ${adminTag}</div>`;
+  const trocaLbl = isAdminSwitcher() ? "Trocar loja" : "Trocar";
+  html += `<div class="sub">Tempo real: <b style="color:${fbReady?'var(--ok)':'var(--text-faint)'}">${fbReady?'ligado':'desligado (só local)'}</b> · ${div? '<b style="color:var(--accent-2)">Modo Divisional ('+escapeHtml(lojaCode)+')</b> — vê todas as lojas' : 'Sua loja: <code style="background:var(--cell);border:1px solid var(--border);padding:2px 8px;border-radius:6px;font-weight:800">'+escapeHtml(lojaCode||state.storeName||'—')+'</code>'} <button class="btn sec sm" id="trocarLoja">${trocaLbl}</button> ${adminTag}</div>`;
+  if (isAdminSwitcher() && authUnlocked) {
+    const opts = adminLojaOptions();
+    html += `<div style="margin-top:10px;"><span class="hint">Trocar rápido <b>(sem senha)</b>:</span><div class="matriz-filter-chips admin-loja-chips" style="margin-top:6px;">${opts.map(o =>
+      `<button type="button" class="matriz-filter-chip admin-loja-chip${o.active ? " active" : ""}" data-quick-loja="${escapeHtml(o.code)}">${escapeHtml(o.label)}</button>`
+    ).join("")}</div></div>`;
+  }
   if (!div) {
     html += `<div class="hint" style="margin-top:6px;">Qualquer aparelho que abrir e digitar <b>${escapeHtml(lojaCode||'')}</b> carrega esta mesma configuração (a última sincronizada).</div>`;
     html += `<div class="row" style="margin-top:10px;"><button class="btn sec" id="reloadCloud">↻ Baixar da nuvem agora</button><button class="btn danger" id="clearMine">🗑 Apagar e recomeçar esta loja</button></div>`;
@@ -4133,7 +4195,13 @@ function renderSync(){
   }
   if (isAdmin) {
     html += `<div style="margin-top:16px;"><b style="font-size:13px;">Lojas conectadas (admin)</b>` +
-      (lojas.length? lojas.map(L=>`<div class="row" style="align-items:center; margin-top:8px; border-top:1px solid var(--border-soft); padding-top:8px;"><span style="flex:1; min-width:160px;"><b>${escapeHtml(L.name)}</b> <span class="hint">${L.self?'· você':''} · ${escapeHtml(String(L.id))}</span></span>${L.self?'<span class="hint">(use Apagar acima)</span>':`<button class="btn danger sm" data-del-loja="${L.id}">Excluir loja</button>`}</div>`).join("") : '<div class="empty">Nenhuma loja.</div>') + `</div>`;
+      (lojas.length? lojas.map(L => {
+        const code = L.self ? String(lojaCode || "").toUpperCase() : lojaCodeFromRemote(L.id, remoteLojas[L.id] || {});
+        const acts = L.self
+          ? '<span class="hint">(loja atual)</span>'
+          : `<button class="btn sec sm" data-enter-loja="${escapeHtml(code)}">Entrar</button> <button class="btn danger sm" data-del-loja="${escapeHtml(L.id)}">Excluir</button>`;
+        return `<div class="row" style="align-items:center; margin-top:8px; border-top:1px solid var(--border-soft); padding-top:8px;"><span style="flex:1; min-width:160px;"><b>${escapeHtml(L.name)}</b> <span class="hint">${L.self ? "· você" : ""} · ${escapeHtml(code || String(L.id))}</span></span>${acts}</div>`;
+      }).join("") : '<div class="empty">Nenhuma loja.</div>') + `</div>`;
     const cfgSyncOk = configWriteOk === true && !configPushBlocked;
     const cfgSyncBad = configPushBlocked || configWriteOk === false;
     html += `<div class="hint" style="margin-top:10px; padding:10px 12px; background:color-mix(in srgb,${cfgSyncBad ? 'var(--warn)' : 'var(--ok)'} 8%,transparent); border-radius:8px; border:1px solid color-mix(in srgb,${cfgSyncBad ? 'var(--warn)' : 'var(--ok)'} 25%,transparent);">`;
@@ -4175,6 +4243,8 @@ function renderSync(){
   html += `</div>`;
   el.innerHTML = html;
   const tl=document.getElementById("trocarLoja"); if(tl) tl.onclick=trocarLoja;
+  el.querySelectorAll("[data-quick-loja]").forEach(b => b.onclick = () => switchToLoja(b.dataset.quickLoja));
+  el.querySelectorAll("[data-enter-loja]").forEach(b => b.onclick = () => switchToLoja(b.dataset.enterLoja));
   const rc=document.getElementById("reloadCloud"); if(rc) rc.onclick=()=>{ pullLoja(); };
   const cm=document.getElementById("clearMine"); if(cm) cm.onclick=()=>{ if(confirm("Apagar os dados desta loja e recomeçar? (admin remove também da nuvem)")){ try{ if(fbReady&&fbDb&&lojaCode) fbDb.ref("lojas/"+lojaCode).remove(); }catch(e){} localStorage.removeItem(LS_KEY); clearAuthSession(); location.reload(); } };
   el.querySelectorAll("[data-del-loja]").forEach(b=>b.onclick=()=>{ if(confirm("Excluir esta loja da nuvem?")){ try{ fbDb.ref("lojas/"+b.dataset.delLoja).remove(); toast("Loja excluída"); }catch(e){ toast("Sem permissão", true); } } });
@@ -4293,6 +4363,7 @@ function init() {
   const _ls=document.getElementById("lojaSubmit"); if(_ls) _ls.onclick=submitLoja;
   const _lc=document.getElementById("lojaCodeInput"); if(_lc) _lc.addEventListener("keydown",e=>{ if(e.key==="Enter") submitLoja(); });
   const _tlt=document.getElementById("trocarLojaTop"); if(_tlt) _tlt.onclick=trocarLoja;
+  updateTrocarLojaTopTitle();
 }
 function currentWeekIndex() { const weeks = weeksOf(currentMonth); if (todayISO() !== currentMonth) return weeks.length-1; const day = new Date().getDate(); for (let i=0;i<weeks.length;i++) if (weeks[i].includes(day)) return i; return weeks.length-1; }
 const INDICATOR_COLOR_PALETTE = [
