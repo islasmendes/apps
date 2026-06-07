@@ -571,7 +571,7 @@ function sellerMetrics(sellerId, m = todayISO()) {
     }
     if (ind.checkin && ind.checkout) {
       const plan = accum(sellerId, ind.id, "plan", days, m);
-      const r = accum(sellerId, ind.id, "real", days, m);
+      const r = matrizFieldValue(sellerId, ind.id, days, "mes", m);
       if (plan) { aderSum += (r || 0) / plan; aderN++; }
     }
     if (ind.checkout) {
@@ -590,43 +590,29 @@ function sellerMetrics(sellerId, m = todayISO()) {
     acc: accN ? accSum / accN : null
   };
 }
-function teamSellerTotal() { return orderedSellers().length; }
 function teamRankByProjPct(fieldId, cfg, sellerId, m = todayISO()) {
   const sellers = orderedSellers();
-  const total = sellers.length;
-  if (!total) return { pos: 0, total: 0 };
   const rows = sellers.map(s => {
     const real = matrizFieldValue(s.id, fieldId, monthDays(m), "mes", m);
     const meta = sellerMetaFor(cfg, s.id, m);
     const proj = real != null ? sellerProjFromReal(s.id, fieldId, real, m) : null;
     const pct = meta && proj != null ? proj / meta : null;
-    return { id: s.id, pct: pct ?? -Infinity };
-  }).sort((a, b) => b.pct - a.pct);
-  return { pos: rows.findIndex(r => r.id === sellerId) + 1, total };
+    return { id: s.id, pct };
+  }).filter(r => r.pct != null).sort((a, b) => b.pct - a.pct);
+  const pos = rows.findIndex(r => r.id === sellerId) + 1;
+  return { pos, total: rows.length };
 }
 function teamRitmoRank(sellerId, m = todayISO()) {
   const sellers = orderedSellers();
-  const total = sellers.length;
-  if (!total) return { pos: 0, total: 0 };
-  const rows = sellers.map(s => ({ id: s.id, ritmo: sellerMetrics(s.id, m).ritmo ?? -Infinity }))
-    .sort((a, b) => b.ritmo - a.ritmo);
-  return { pos: rows.findIndex(r => r.id === sellerId) + 1, total };
-}
-function rateDisplayName(rate, ind) {
-  const raw = String(rate?.name || "").trim();
-  if (!raw || raw === "%") return ind?.name || "Taxa";
-  return raw.replace(/^%+\s*/, "");
-}
-function fmtTargetPct(target) {
-  const t = Number(target);
-  if (!t && t !== 0) return "—";
-  return (t % 1 ? fmt(t, 1) : fmt(t, 0)) + "%";
+  const rows = sellers.map(s => ({ id: s.id, ritmo: sellerMetrics(s.id, m).ritmo }))
+    .filter(r => r.ritmo != null).sort((a, b) => b.ritmo - a.ritmo);
+  return { pos: rows.findIndex(r => r.id === sellerId) + 1, total: rows.length };
 }
 function resumoFieldRow(cfg, color, sellerId, opts, m = todayISO()) {
   const st = fieldProjStats(cfg, sellerId, m);
   const { real, meta, proj, pct, gap, ritmo } = st;
   let rankHtml = "";
-  if (opts.showRank) {
+  if (opts.showRank && meta && proj != null) {
     const { pos, total } = teamRankByProjPct(cfg.id, cfg, sellerId, m);
     if (pos > 0 && total > 1) rankHtml = `<div class="resumo-rank">${pos}º de ${total} na equipe</div>`;
   }
@@ -640,25 +626,14 @@ function resumoFieldRow(cfg, color, sellerId, opts, m = todayISO()) {
     <div class="resumo-row-meta">Real ${fmt(real)} · Proj ${fmt(proj)} · Meta ${fmt(meta)}${gapTxt ? " · " + gapTxt : ""}${ritmo != null ? " · " + fmt(ritmo, ritmo % 1 ? 1 : 0) + "/dia" : ""}</div>
     <div class="resumo-bar"><i style="width:${Math.min(100, Math.round((pct || 0) * 100))}%"></i></div>${rankHtml}${callout}</div>`;
 }
-function resumoRateRow(rate, ind, color, sellerId, m = todayISO(), sub) {
+function resumoRateRow(rate, color, sellerId, m = todayISO()) {
   const val = rateValueForSeller(rate, sellerId, m);
   const target = Number(rate.target) || 0;
   const pct = target && val != null ? val / target : null;
-  const label = rateDisplayName(rate, ind);
-  const valDisp = val != null ? (val % 1 ? fmt(val, 1) : fmt(val, 0)) + "%" : "—";
-  return `<div class="resumo-row rate${sub ? " sub" : ""}" style="--rc:${color};--bc:${heatMatrizText(pct)}">
-    <div class="resumo-row-top"><b>${sub ? "↳ " : ""}${label}</b><span class="pct" style="color:${heatMatrizText(pct)}">${valDisp}</span></div>
-    <div class="resumo-row-meta">Alvo ${fmtTargetPct(target)}${pct != null ? " · " + pctTxt(pct) + " do alvo" : ""}</div>
+  return `<div class="resumo-row rate" style="--rc:${color};--bc:${heatMatrizText(pct)}">
+    <div class="resumo-row-top"><b>% ${rate.name}</b><span class="pct" style="color:${heatMatrizText(pct)}">${val != null ? Math.round(val) + "%" : "—"}</span></div>
+    <div class="resumo-row-meta">Alvo ${target}%${pct != null ? " · " + pctTxt(pct) + " do alvo" : ""}</div>
     <div class="resumo-bar"><i style="width:${Math.min(100, Math.round((pct || 0) * 100))}%"></i></div></div>`;
-}
-function resumoPctOnlyHead(ind, color, isOpen) {
-  const rates = ind.rates || [];
-  const chev = rates.length ? `<span class="resumo-chev">${isOpen ? "▾" : "▸"}</span>` : "";
-  const hint = rates.length ? `${rates.length} taxa${rates.length > 1 ? "s" : ""}` : "—";
-  const toggle = rates.length ? ` toggle" data-ind-toggle="${ind.id}` : "";
-  return `<div class="resumo-row resumo-ind-main resumo-pct-only-head${toggle}" style="--rc:${color}">
-    <div class="resumo-row-top"><b>${ind.name}${chev}</b><span class="pct">${hint}</span></div>
-    <div class="resumo-row-meta">${rates.length ? "Toque para ver taxas · dados da matriz" : "Sem taxas configuradas"}</div></div>`;
 }
 let resumoExpanded = {};
 function bindResumoToggles() {
@@ -677,75 +652,71 @@ function renderResumo() {
   const venda = findVendaIndicator();
   const vendaSt = venda ? fieldProjStats(venda, sid, m) : null;
   const vendaCallout = venda ? resumoCallout(venda, sid, m, false) : { html: '<div class="resumo-callout muted">Indicador Vendas não configurado.</div>', tone: "muted" };
-  const vendaRank = venda ? teamRankByProjPct(venda.id, venda, sid, m) : { pos: 0, total: teamSellerTotal() };
+  const vendaRank = venda && vendaSt?.pct != null ? teamRankByProjPct(venda.id, venda, sid, m) : { pos: 0, total: 0 };
   let g = 0, y = 0, r = 0;
   const cards = [];
   orderedIndicators().forEach(ind => {
     const color = ind.color || "var(--accent)";
-    const rates = ind.rates || [];
-    const subs = (ind.subs || []).filter(s => s.checkout || s.checkin);
-    const hasExpandable = subs.length > 0 || rates.length > 0;
-    const isOpen = !!resumoExpanded[ind.id];
     if (ind.pctOnly) {
-      let expandHtml = "";
-      if (rates.length) {
-        expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
-        rates.forEach(rate => {
-          const target = Number(rate.target) || 0;
-          const val = rateValueForSeller(rate, sid, m);
-          const pct = target && val != null ? val / target : null;
-          const band = countSemaforo(pct);
-          if (band === "g") g++; else if (band === "y") y++; else if (band === "r") r++;
-          expandHtml += resumoRateRow(rate, ind, color, sid, m, true);
-        });
-        expandHtml += "</div>";
-      }
-      const body = resumoPctOnlyHead(ind, color, isOpen) + expandHtml;
-      if (body) cards.push(`<div class="resumo-card" style="--rc:${color}">${body}</div>`);
-      return;
-    }
-    let mainHtml = "";
-    let expandHtml = "";
-    if (ind.checkout || ind.checkin) {
-      const band = countSemaforo(fieldProjStats(ind, sid, m).pct);
-      if (band === "g") g++; else if (band === "y") y++; else if (band === "r") r++;
-      mainHtml = resumoFieldRow(ind, color, sid, {
-        sub: false, showRank: true, main: true, toggle: hasExpandable, open: isOpen, indId: ind.id
-      }, m);
-    }
-    if (hasExpandable) {
-      expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
-      subs.forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false }, m); });
-      rates.forEach(rate => {
+      let rates = "";
+      (ind.rates || []).forEach(rate => {
         const target = Number(rate.target) || 0;
         const val = rateValueForSeller(rate, sid, m);
         const pct = target && val != null ? val / target : null;
         const band = countSemaforo(pct);
         if (band === "g") g++; else if (band === "y") y++; else if (band === "r") r++;
-        expandHtml += resumoRateRow(rate, ind, color, sid, m, true);
+        rates += resumoRateRow(rate, color, sid, m);
       });
-      expandHtml += "</div>";
+      if (rates) cards.push(`<div class="resumo-card">${rates}</div>`);
+      return;
     }
-    const body = mainHtml + expandHtml;
+    const subs = (ind.subs || []).filter(s => s.checkout || s.checkin);
+    const hasSubs = subs.length > 0;
+    const isOpen = !!resumoExpanded[ind.id];
+    let mainHtml = "";
+    let subsHtml = "";
+    let ratesHtml = "";
+    if (ind.checkout || ind.checkin) {
+      const band = countSemaforo(fieldProjStats(ind, sid, m).pct);
+      if (band === "g") g++; else if (band === "y") y++; else if (band === "r") r++;
+      mainHtml = resumoFieldRow(ind, color, sid, {
+        sub: false, showRank: true, main: true, toggle: hasSubs, open: isOpen, indId: ind.id
+      }, m);
+    }
+    if (hasSubs) {
+      subsHtml = `<div class="resumo-subs${isOpen ? " open" : ""}">`;
+      subs.forEach(sub => { subsHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false }, m); });
+      subsHtml += "</div>";
+    }
+    (ind.rates || []).forEach(rate => {
+      const target = Number(rate.target) || 0;
+      const val = rateValueForSeller(rate, sid, m);
+      const pct = target && val != null ? val / target : null;
+      const band = countSemaforo(pct);
+      if (band === "g") g++; else if (band === "y") y++; else if (band === "r") r++;
+      ratesHtml += resumoRateRow(rate, color, sid, m);
+    });
+    const body = mainHtml + subsHtml + (ratesHtml ? `<div class="resumo-rates-wrap">${ratesHtml}</div>` : "");
     if (body) cards.push(`<div class="resumo-card" style="--rc:${color}">${body}</div>`);
   });
   const monthLbl = new Date(m + "-02").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   const vendaPct = vendaSt?.pct;
   const vendaRankTxt = vendaRank.pos > 0 && vendaRank.total > 1 ? `${vendaRank.pos}º de ${vendaRank.total} em vendas` : "—";
+  const vendaLbl = venda ? (venda.abbr || venda.name || "Vendas") : "Vendas";
   document.getElementById("resumoRoot").innerHTML = `
     <div class="resumo-hero">
-      <div class="subline" style="margin:0 0 4px;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px;font-size:10px;">Foco Principal - VENDAS!</div>
+      <div class="subline" style="margin:0 0 4px;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px;font-size:10px;">${vendaLbl} · foco principal</div>
       <div class="big" style="color:${heatMatrizText(vendaPct)}">${pctTxt(vendaPct)}</div>
       <div class="subline">Projeção · ${monthLbl} · dados da matriz</div>
       ${vendaCallout.html}
       <div class="resumo-sema"><b class="ok">${g} verde</b><b class="warn">${y} atenção</b><b class="bad">${r} risco</b></div>
       <div class="resumo-chips">
-        <span class="resumo-chip" style="color:${heatMatrizText(metrics.ader)}" title="Check-out realizado ÷ check-in planejado (média dos indicadores com os dois)">Aderência ${pctTxt(metrics.ader)}</span>
+        <span class="resumo-chip" style="color:${heatMatrizText(metrics.ader)}">Aderência ${pctTxt(metrics.ader)}</span>
         <span class="resumo-chip" style="color:${heatMatrizText(metrics.acc)}">Acurácia ${pctTxt(metrics.acc)}</span>
         <span class="resumo-chip" style="color:var(--accent-2)">${vendaRankTxt}</span>
       </div>
     </div>
-    <div class="resumo-sec">Indicadores · toque para ver subs e taxas</div>
+    <div class="resumo-sec">Indicadores · taxas · toque no indicador para ver subs</div>
     ${cards.length ? cards.join("") : '<div class="empty">Sem indicadores configurados.</div>'}`;
   bindResumoToggles();
 }
