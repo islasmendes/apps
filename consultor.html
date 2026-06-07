@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v19";
+  var BUILD = "v20";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -443,7 +443,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v19";
+const APP_BUILD = "v20";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -597,7 +597,7 @@ function parentIndOfCfg(cfg) {
   }
   return null;
 }
-function planCrossRefCfg(cfg) {
+function planCrossRefCfg(cfg, day, month) {
   if (cfg.planCrossId) return cfgByIdLoqa(cfg.planCrossId);
   const parent = parentIndOfCfg(cfg);
   if (!parent) return null;
@@ -606,14 +606,38 @@ function planCrossRefCfg(cfg) {
   (parent.subs || []).forEach(s => {
     if (s.id !== cfg.id && s.checkin && !cfgOpenQuestion(s)) candidates.push(s);
   });
-  return candidates.find(s => /prox|amanh|seguinte|agend/.test(normName(s.name))) || null;
+  if (!candidates.length) return null;
+  const m = month || todayISO();
+  const d = day != null ? day : todayDay();
+  const wd = weekday(m, d);
+  if (wd === 0) {
+    const dom = candidates.find(s => /domingo|\bdom\b/.test(normName(s.name)));
+    if (dom) return dom;
+  }
+  const prox = candidates.find(s => /prox|amanh|seguinte|próx/.test(normName(s.name)));
+  if (prox) return prox;
+  return candidates.find(s => /agend/.test(normName(s.name))) || candidates[0];
 }
-function crossPlanTarget(sellerId, cfg, day, month) {
-  const ref = planCrossRefCfg(cfg);
-  if (!ref) return null;
-  const c = getCell(sellerId, ref.id, day, month);
+function crossPlanValueFromCell(c) {
   if (c.plan == null || c.plan === "" || isNaN(Number(c.plan))) return null;
   return Number(c.plan);
+}
+function crossPlanTarget(sellerId, cfg, day, month) {
+  const ref = planCrossRefCfg(cfg, day, month);
+  if (!ref) return null;
+  let v = crossPlanValueFromCell(getCell(sellerId, ref.id, day, month));
+  if (v != null) return v;
+  const week = weekForDay(day, month);
+  for (const d of week.filter(x => x < day).sort((a, b) => b - a)) {
+    v = crossPlanValueFromCell(getCell(sellerId, ref.id, d, month));
+    if (v != null) return v;
+  }
+  for (const d of week) {
+    if (d === day) continue;
+    v = crossPlanValueFromCell(getCell(sellerId, ref.id, d, month));
+    if (v != null) return v;
+  }
+  return null;
 }
 function openCrossFeedbackHtml(confirmed, target, refName) {
   if (target == null || confirmed == null || isNaN(confirmed)) return "";
@@ -652,7 +676,7 @@ function updateOpenCrossUi(box) {
     if (qtyInp) qtyInp.classList.remove("below-target", "at-target");
     return;
   }
-  const ref = planCrossRefCfg(cfg);
+  const ref = planCrossRefCfg(cfg, day, month);
   if (qtyInp) {
     qtyInp.classList.toggle("below-target", confirmed < target);
     qtyInp.classList.toggle("at-target", confirmed >= target);
@@ -1542,7 +1566,7 @@ function renderFields() {
         html += `<div class="open-qty${yes ? "" : " hidden"}"><label>Quantas confirmações?</label>`;
         html += `<input type="number" inputmode="numeric" data-open-qty class="${qtyCls.trim()}" value="${qty}" placeholder="0" min="0" ${planLocked ? "disabled" : ""}></div>`;
         if (yes && crossTgt != null && qtyNum != null && !isNaN(qtyNum)) {
-          const ref = planCrossRefCfg(cfg);
+          const ref = planCrossRefCfg(cfg, day, month);
           html += `<div class="open-cross-msg-wrap">${openCrossFeedbackHtml(qtyNum, crossTgt, ref?.name)}</div>`;
         } else {
           html += `<div class="open-cross-msg-wrap"></div>`;

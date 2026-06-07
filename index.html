@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v19";
+  var BUILD = "v20";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -373,6 +373,10 @@
   .open-plan-cell { display: block; max-width: 100%; overflow-x: auto; font-size: 10px; line-height: 1.35; padding: 4px 6px; border-radius: 7px; background: var(--dio-in-bg); border: 1.5px solid var(--dio-in-bd); white-space: nowrap; text-align: left; scrollbar-width: thin; }
   .open-plan-cell.pos { color: var(--ok); font-weight: 700; }
   .open-plan-cell.neg { color: var(--danger); font-weight: 700; }
+  .open-cross-mini { margin-top: 4px; max-height: 80px; overflow-y: auto; scrollbar-width: thin; }
+  .open-cross-mini .open-cross-msg { margin-top: 0; padding: 6px 8px; font-size: 9px; line-height: 1.35; border-radius: 7px; font-weight: 600; }
+  .open-cross-mini .open-cross-msg.bad { background: color-mix(in srgb, var(--danger) 14%, var(--panel-2)); border: 1px solid color-mix(in srgb, var(--danger) 50%, var(--border)); color: #ff8a94; }
+  .open-cross-mini .open-cross-msg.good { background: color-mix(in srgb, var(--ok) 14%, var(--panel-2)); border: 1px solid color-mix(in srgb, var(--ok) 50%, var(--border)); color: var(--ok); }
   .tag { font-size: 10.5px; padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); font-weight: 700; }
   .tag.sub { background: color-mix(in srgb, var(--accent-2) 20%, transparent); color: var(--accent-2); }
   .switch { position: relative; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: 12px; color: var(--text-dim); }
@@ -1548,7 +1552,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v19";
+const APP_BUILD = "v20";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3512,9 +3516,7 @@ function diarioRow(cfg, color, isSub) {
     let cell = '<div class="daycell">';
     if (needs.checkin) {
       if (cfgOpenQuestion(cfg)) {
-        const disp = openPlanDisplay(c);
-        const ynCls = c.planYes === true ? "pos" : c.planYes === false ? "neg" : "";
-        cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span><div class="open-plan-cell ${ynCls}" title="${escapeHtml(disp)}">${disp ? escapeHtml(disp) : '<span class="muted">—</span>'}</div></label>`;
+        cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span>${openPlanDiarioHtml(cfg, c, diarioSeller, d)}</label>`;
       } else {
         cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"${ro}></label>`;
       }
@@ -3680,6 +3682,75 @@ function openPlanDisplay(cell) {
   const j = String(cell.planJustif || "").trim();
   if (j) s += ", " + j;
   return s;
+}
+function normNameCross(s) { return String(s || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase(); }
+function parentIndOfCfg(cfg) {
+  for (const ind of orderedIndicators()) {
+    if (ind.id === cfg.id) return ind;
+    if ((ind.subs || []).some(s => s.id === cfg.id)) return ind;
+  }
+  return null;
+}
+function planCrossRefCfg(cfg, day, m = currentMonth) {
+  if (cfg.planCrossId) return cfgById(cfg.planCrossId);
+  const parent = parentIndOfCfg(cfg);
+  if (!parent) return null;
+  const candidates = [];
+  if (parent.checkin && !cfgOpenQuestion(parent) && parent.id !== cfg.id) candidates.push(parent);
+  (parent.subs || []).forEach(s => {
+    if (s.id !== cfg.id && s.checkin && !cfgOpenQuestion(s)) candidates.push(s);
+  });
+  if (!candidates.length) return null;
+  const wd = weekday(m, day);
+  if (wd === 0) {
+    const dom = candidates.find(s => /domingo|\bdom\b/.test(normNameCross(s.name)));
+    if (dom) return dom;
+  }
+  const prox = candidates.find(s => /prox|amanh|seguinte/.test(normNameCross(s.name)));
+  if (prox) return prox;
+  return candidates.find(s => /agend/.test(normNameCross(s.name))) || candidates[0];
+}
+function crossPlanValueFromCell(c) {
+  if (c.plan == null || c.plan === "" || isNaN(Number(c.plan))) return null;
+  return Number(c.plan);
+}
+function crossPlanTarget(sellerId, cfg, day, m = currentMonth) {
+  const ref = planCrossRefCfg(cfg, day, m);
+  if (!ref) return null;
+  let v = crossPlanValueFromCell(getCell(sellerId, ref.id, day, m));
+  if (v != null) return v;
+  const week = weekForDay(day, m);
+  for (const d of week.filter(x => x < day).sort((a, b) => b - a)) {
+    v = crossPlanValueFromCell(getCell(sellerId, ref.id, d, m));
+    if (v != null) return v;
+  }
+  for (const d of week) {
+    if (d === day) continue;
+    v = crossPlanValueFromCell(getCell(sellerId, ref.id, d, m));
+    if (v != null) return v;
+  }
+  return null;
+}
+function openCrossFeedbackHtml(confirmed, target, refName) {
+  if (target == null || confirmed == null || isNaN(confirmed)) return "";
+  const nome = escapeHtml(refName || "agendamentos");
+  if (confirmed < target) {
+    return `<div class="open-cross-msg bad"><b>Que pena!</b> Você está perdendo cliente pro concorrente — importante confirmar todas as suas visitas! Seriam <b>(${target})</b> que você disse em <b>${nome}</b>. A disciplina te levará a lugares onde o talento não alcança.</div>`;
+  }
+  return `<div class="open-cross-msg good"><b>Sensacional!</b> Se você de fato fez com qualidade essas confirmações, não tem como você não ter resultado! Nada resiste ao trabalho bem feito! Continue assim.</div>`;
+}
+function openPlanDiarioHtml(cfg, c, sellerId, day, m = currentMonth) {
+  const disp = openPlanDisplay(c);
+  if (!disp) return `<div class="open-plan-cell"><span class="muted">—</span></div>`;
+  let cls = c.planYes === true ? "pos" : c.planYes === false ? "neg" : "";
+  const confirmed = c.planYes === true && c.plan != null && c.plan !== "" ? Number(c.plan) : null;
+  const target = c.planYes === true ? crossPlanTarget(sellerId, cfg, day, m) : null;
+  if (confirmed != null && !isNaN(confirmed) && target != null) cls = confirmed < target ? "neg" : "pos";
+  let html = `<div class="open-plan-cell ${cls}" title="${escapeHtml(disp)}">${escapeHtml(disp)}</div>`;
+  if (confirmed != null && !isNaN(confirmed) && target != null) {
+    html += `<div class="open-cross-mini">${openCrossFeedbackHtml(confirmed, target, planCrossRefCfg(cfg, day, m)?.name)}</div>`;
+  }
+  return html;
 }
 function hasCellValue(cell, key) {
   return cell[key] != null && cell[key] !== "";
