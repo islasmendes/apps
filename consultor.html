@@ -104,15 +104,31 @@
   .progress-ring .fill { stroke: url(#grad); transition: stroke-dashoffset .5s ease; }
   .hero-mid { flex: 1; min-width: 0; }
   .hero-mid h1 { margin: 0; font-size: 20px; font-weight: 800; line-height: 1.15; }
-  .hero-mid p { margin: 4px 0 0; font-size: 13px; color: var(--text-dim); }
-  .hero-side { flex: none; margin-left: auto; display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-width: 72px; }
-  .hero-side .urgency-pill { min-width: 72px; }
-  .btn-resumo {
-    cursor: pointer; border: 1px solid var(--border); border-radius: 99px; padding: 5px 10px;
-    font-size: 10px; font-weight: 800; letter-spacing: .3px; font-family: var(--font);
-    background: var(--panel-2); color: var(--text-dim); text-align: center;
+  .hero-sub {
+    margin: 4px 0 0; font-size: 12px; color: var(--text-dim); font-weight: 600;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 5px; line-height: 1.3;
   }
-  .btn-resumo:active { transform: scale(.98); background: color-mix(in srgb, var(--accent) 12%, var(--panel-2)); color: var(--text); }
+  .hero-sub .hero-loja { color: var(--accent-2); font-weight: 800; letter-spacing: .2px; }
+  .hero-sub .hero-mat { color: var(--text-faint); font-size: 11px; font-weight: 700; }
+  .progress-ring .prog-center { fill: var(--text); font-size: 12px; font-weight: 800; font-family: var(--font); }
+  .hero-side { flex: none; margin-left: auto; display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-width: 72px; }
+  .hero-side .urgency-pill, .hero-side .btn-resumo { min-width: 72px; }
+  .btn-resumo {
+    cursor: pointer; display: inline-flex; flex-direction: column; align-items: center; gap: 1px;
+    font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .3px;
+    padding: 5px 10px; border-radius: 99px; font-family: var(--font); text-align: center;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-2) 22%, var(--panel)), var(--panel-2));
+    border: 1px solid color-mix(in srgb, var(--accent-2) 58%, var(--border));
+    color: var(--accent-2);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--accent-2) 22%, transparent);
+    transition: transform .12s, box-shadow .12s;
+  }
+  .btn-resumo .resumo-lbl { font-size: 8px; letter-spacing: .5px; opacity: .92; }
+  .btn-resumo .resumo-txt { font-size: 12px; line-height: 1.1; }
+  .btn-resumo:active {
+    transform: scale(.98);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--accent-2) 35%, transparent);
+  }
   .resumo-overlay {
     position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.62); backdrop-filter: blur(6px);
     display: none; align-items: flex-end; justify-content: center; padding: 0;
@@ -253,18 +269,25 @@
   <section class="screen" id="screenMain">
     <div class="content">
       <div class="hero">
-        <svg class="progress-ring" viewBox="0 0 64 64">
+        <svg class="progress-ring" viewBox="0 0 64 64" aria-hidden="true">
           <defs><linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#4f8cff"/><stop offset="100%" stop-color="#22d3aa"/></linearGradient></defs>
           <circle class="track" cx="32" cy="32" r="26"/>
           <circle class="fill" id="progArc" cx="32" cy="32" r="26" stroke-dasharray="163.36" stroke-dashoffset="163.36"/>
+          <text id="progCenter" class="prog-center" x="32" y="35" text-anchor="middle">—</text>
         </svg>
         <div class="hero-mid">
           <h1 id="helloName">—</h1>
-          <p id="helloStore">—</p>
+          <div class="hero-sub">
+            <span class="hero-loja" id="helloStore">—</span>
+            <span class="hero-mat" id="helloMat"></span>
+          </div>
         </div>
         <div class="hero-side">
           <div class="urgency-pill" id="urgencyPill"><span id="urgencyLbl">CHECK-OUT</span><span id="urgencyTxt">—:—:—</span></div>
-          <button type="button" class="btn-resumo" id="btnResumo">📊 Resumo</button>
+          <button type="button" class="btn-resumo" id="btnResumo" aria-label="Abrir resumo do mês">
+            <span class="resumo-lbl">RESUMO</span>
+            <span class="resumo-txt">📊 Mês</span>
+          </button>
         </div>
       </div>
       <div class="date-chip" id="dateChip">—</div>
@@ -999,9 +1022,14 @@ function updateProgress() {
   const circ = 163.36;
   const pct = total ? done / total : 0;
   arc.style.strokeDashoffset = String(circ * (1 - pct));
+  const center = document.getElementById("progCenter");
+  if (center) center.textContent = total ? `${done}/${total}` : "—";
   document.getElementById("helloName").textContent = seller.name;
   const sn = (lojaData.storeName || lojaCode || "").trim();
-  document.getElementById("helloStore").textContent = sn && sn.toUpperCase() !== lojaCode ? (lojaCode + " · " + sn) : lojaCode;
+  const lojaLbl = sn && sn.toUpperCase() !== lojaCode ? sn : lojaCode;
+  document.getElementById("helloStore").textContent = lojaLbl;
+  const matEl = document.getElementById("helloMat");
+  if (matEl) matEl.textContent = seller.matricula ? `· mat. ${seller.matricula}` : "";
   const dt = new Date();
   document.getElementById("dateChip").textContent = dt.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
 }
