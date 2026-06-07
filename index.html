@@ -1334,37 +1334,52 @@ function cellSourceTag(cell, key) {
   if (by === "gestor") return ' <span class="hint" style="font-size:8px;color:var(--accent)">👔</span>';
   return "";
 }
+function mergeCellFromRemote(lc, rc) {
+  if (!rc || typeof rc !== "object") return false;
+  let cellChanged = false;
+  ["plan", "real", "planBy", "realBy", "planAt", "realAt"].forEach(k => {
+    const remoteHas = Object.prototype.hasOwnProperty.call(rc, k);
+    if (remoteHas) {
+      if (rc[k] === null || rc[k] === "") {
+        if (Object.prototype.hasOwnProperty.call(lc, k)) { delete lc[k]; cellChanged = true; }
+      } else if (rc[k] !== lc[k]) {
+        lc[k] = rc[k];
+        cellChanged = true;
+      }
+    } else if (Object.prototype.hasOwnProperty.call(lc, k)) {
+      delete lc[k];
+      cellChanged = true;
+    }
+  });
+  return cellChanged;
+}
 function mergeDailyFromRemote(remoteMonths) {
   if (!remoteMonths || typeof remoteMonths !== "object") return false;
   let changed = false;
   Object.keys(remoteMonths).forEach(m => {
-    const daily = remoteMonths[m]?.daily;
-    if (!daily) return;
+    const remoteDaily = remoteMonths[m]?.daily;
+    if (!remoteDaily) return;
     const md = monthData(m);
-    Object.keys(daily).forEach(sid => {
-      Object.keys(daily[sid] || {}).forEach(fid => {
-        Object.keys(daily[sid][fid] || {}).forEach(day => {
-          const rc = daily[sid][fid][day];
-          if (!rc || typeof rc !== "object") return;
+    Object.keys(remoteDaily).forEach(sid => {
+      Object.keys(remoteDaily[sid] || {}).forEach(fid => {
+        const remoteDays = remoteDaily[sid][fid] || {};
+        const localDays = md.daily[sid]?.[fid] || {};
+        const allDays = new Set([...Object.keys(remoteDays), ...Object.keys(localDays)]);
+        allDays.forEach(day => {
+          const rc = remoteDays[day];
+          const hadLocal = localDays[day];
+          if (rc == null) {
+            if (hadLocal) {
+              delete md.daily[sid][fid][day];
+              changed = true;
+            }
+            return;
+          }
+          if (typeof rc !== "object") return;
           md.daily[sid] = md.daily[sid] || {};
           md.daily[sid][fid] = md.daily[sid][fid] || {};
-          const lc = { ...(md.daily[sid][fid][day] || {}) };
-          let cellChanged = false;
-          ["plan", "real", "planBy", "realBy", "planAt", "realAt"].forEach(k => {
-            const remoteHas = Object.prototype.hasOwnProperty.call(rc, k);
-            if (remoteHas) {
-              if (rc[k] === null || rc[k] === "") {
-                if (Object.prototype.hasOwnProperty.call(lc, k)) { delete lc[k]; cellChanged = true; }
-              } else if (rc[k] !== lc[k]) {
-                lc[k] = rc[k];
-                cellChanged = true;
-              }
-            } else if (Object.prototype.hasOwnProperty.call(lc, k)) {
-              delete lc[k];
-              cellChanged = true;
-            }
-          });
-          if (cellChanged) {
+          const lc = { ...(hadLocal || {}) };
+          if (mergeCellFromRemote(lc, rc)) {
             if (Object.keys(lc).length) md.daily[sid][fid][day] = lc;
             else delete md.daily[sid][fid][day];
             changed = true;
@@ -1396,13 +1411,14 @@ function startLojaDataListener() {
     clearTimeout(lojaMergeTimer);
     lojaMergeTimer = setTimeout(() => {
       if (mergeDailyFromRemote(snap.val())) {
+        clearTimeout(fbPushTimer);
         save({ skipPush: true });
         renderActive();
       }
     }, 450);
   });
 }
-const APP_BUILD = "2026.06.07-c1";
+const APP_BUILD = "2026.06.07-c2";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";

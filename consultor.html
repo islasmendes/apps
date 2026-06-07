@@ -350,7 +350,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "2026.06.07-c1";
+const APP_BUILD = "2026.06.07-c2";
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
 let fbDb = null, fbReady = false, connected = false;
@@ -1173,12 +1173,24 @@ async function saveField(inp) {
         updateProgress();
         return;
       }
-      await Promise.all([
-        ref.child(key).remove(),
-        ref.child(key + "By").remove(),
-        ref.child(key + "At").remove(),
-      ]);
+      const next = { ...cell };
+      delete next[key];
+      delete next[key + "By"];
+      delete next[key + "At"];
+      const stillHas = hasCellValue(next, "plan") || hasCellValue(next, "real");
+      if (!stillHas) await ref.remove();
+      else {
+        await Promise.all([
+          ref.child(key).remove(),
+          ref.child(key + "By").remove(),
+          ref.child(key + "At").remove(),
+        ]);
+      }
       setLocalCell(seller.id, fieldId, day, month, key, null);
+      if (!stillHas) {
+        const md = lojaData.months?.[month];
+        if (md?.daily?.[seller.id]?.[fieldId]) delete md.daily[seller.id][fieldId][day];
+      }
       await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
       toast("Campo limpo");
       updateProgress();
