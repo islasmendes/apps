@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v11";
+  var BUILD = "v12";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -419,7 +419,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v11";
+const APP_BUILD = "v12";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -526,12 +526,37 @@ function cellFilledFromDom(cfg, key, cell) {
   return hasCellValue(cell, key);
 }
 function cfgHasDiario(cfg) { return !!(cfg && (cfg.checkin || cfg.checkout)); }
+function normalizeCfgMeta(cfg) {
+  if (!cfg) return cfg;
+  cfg.metaDay = Number(cfg.metaDay) || 0;
+  cfg.metaSat = Number(cfg.metaSat) || 0;
+  cfg.metaSun = Number(cfg.metaSun) || 0;
+  cfg.metaMonth = Number(cfg.metaMonth) || 0;
+  return cfg;
+}
+function normalizeLojaIndicators() {
+  (lojaData?.indicators || []).forEach(ind => {
+    normalizeCfgMeta(ind);
+    (ind.subs || []).forEach(normalizeCfgMeta);
+  });
+}
 function metaForDay(cfg, month, day) {
-  const [y, mo] = month.split("-").map(Number);
-  const wd = new Date(y, mo - 1, day).getDay();
+  const wd = weekday(month, day);
   if (wd === 6) return Number(cfg.metaSat) || 0;
   if (wd === 0) return cfg.sundayOnly ? (Number(cfg.metaDay) || 0) : (Number(cfg.metaSun) || 0);
   return Number(cfg.metaDay) || 0;
+}
+/** Meta exibida no app do consultor (sub-indicadores com meta própria). */
+function metaForConsultorDay(cfg, month, day) {
+  const direct = metaForDay(cfg, month, day);
+  if (direct > 0) return direct;
+  const wd = weekday(month, day);
+  const metaDay = Number(cfg.metaDay) || 0;
+  const metaSat = Number(cfg.metaSat) || 0;
+  if (cfg.sundayOnly) return wd === 0 ? metaDay : 0;
+  if (wd === 0 && metaDay > 0) return metaDay;
+  if (wd === 6 && metaSat > 0) return metaSat;
+  return 0;
 }
 function fieldList() {
   const list = [];
@@ -1261,7 +1286,7 @@ function renderFields() {
   }
   root.innerHTML = fields.map(({ cfg, color, sub }) => {
     const c = getCell(seller.id, cfg.id, day, month);
-    const meta = metaForDay(cfg, month, day);
+    const meta = metaForConsultorDay(cfg, month, day);
   const planLocked = cellLockedForConsultor(c, "plan", day, month);
   const realLocked = cellLockedForConsultor(c, "real", day, month);
   const planMine = cellIsMine(c, "plan");
@@ -1363,6 +1388,7 @@ function attachLojaListener() {
     const v = snap.val();
     if (v && v.data) {
       lojaData = v.data;
+      normalizeLojaIndicators();
       const s = (lojaData.sellers || []).find(x => x.id === seller.id);
       if (s) seller = s;
       if (document.getElementById("screenMain").classList.contains("active")) {
@@ -1391,6 +1417,7 @@ async function doLogin(loja, mat, pin) {
     const v = snap.val();
     if (!v || !v.data) { err.textContent = "Loja não encontrada ou sem dados na nuvem."; return; }
     lojaData = v.data;
+    normalizeLojaIndicators();
     const found = (lojaData.sellers || []).find(s => String(s.matricula || "").trim() === matNorm);
     if (!found) { err.textContent = "Matrícula não encontrada nesta loja."; return; }
     if (!found.pinHash) { err.textContent = "PIN ainda não configurado. Peça ao gestor em Regras de Negócio."; return; }
@@ -1417,6 +1444,7 @@ async function tryRestore() {
     const v = snap.val();
     if (!v?.data) return false;
     lojaData = v.data;
+    normalizeLojaIndicators();
     seller = (lojaData.sellers || []).find(x => x.id === s.sellerId);
     if (!seller) return false;
     attachLojaListener();
