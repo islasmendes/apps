@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v20";
+  var BUILD = "v21";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1552,7 +1552,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v20";
+const APP_BUILD = "v21";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3691,45 +3691,59 @@ function parentIndOfCfg(cfg) {
   }
   return null;
 }
-function planCrossRefCfg(cfg, day, m = currentMonth) {
-  if (cfg.planCrossId) return cfgById(cfg.planCrossId);
-  const parent = parentIndOfCfg(cfg);
-  if (!parent) return null;
-  const candidates = [];
-  if (parent.checkin && !cfgOpenQuestion(parent) && parent.id !== cfg.id) candidates.push(parent);
-  (parent.subs || []).forEach(s => {
-    if (s.id !== cfg.id && s.checkin && !cfgOpenQuestion(s)) candidates.push(s);
-  });
-  if (!candidates.length) return null;
-  const wd = weekday(m, day);
-  if (wd === 0) {
-    const dom = candidates.find(s => /domingo|\bdom\b/.test(normNameCross(s.name)));
-    if (dom) return dom;
-  }
-  const prox = candidates.find(s => /prox|amanh|seguinte/.test(normNameCross(s.name)));
-  if (prox) return prox;
-  return candidates.find(s => /agend/.test(normNameCross(s.name))) || candidates[0];
-}
-function crossPlanValueFromCell(c) {
-  if (c.plan == null || c.plan === "" || isNaN(Number(c.plan))) return null;
-  return Number(c.plan);
-}
-function crossPlanTarget(sellerId, cfg, day, m = currentMonth) {
-  const ref = planCrossRefCfg(cfg, day, m);
-  if (!ref) return null;
-  let v = crossPlanValueFromCell(getCell(sellerId, ref.id, day, m));
-  if (v != null) return v;
-  const week = weekForDay(day, m);
-  for (const d of week.filter(x => x < day).sort((a, b) => b - a)) {
-    v = crossPlanValueFromCell(getCell(sellerId, ref.id, d, m));
-    if (v != null) return v;
-  }
-  for (const d of week) {
-    if (d === day) continue;
-    v = crossPlanValueFromCell(getCell(sellerId, ref.id, d, m));
-    if (v != null) return v;
+function prevWorkedDay(sellerId, day, m = currentMonth) {
+  for (let d = day - 1; d >= 1; d--) {
+    if (sellerWorks(sellerId, d, m)) return d;
   }
   return null;
+}
+function planCrossRefCandidates(cfg, day, m = currentMonth) {
+  if (cfg.planCrossId) {
+    const r = cfgById(cfg.planCrossId);
+    return r ? [r] : [];
+  }
+  const parent = parentIndOfCfg(cfg);
+  if (!parent) return [];
+  const pool = [];
+  if (parent.checkin && !cfgOpenQuestion(parent) && parent.id !== cfg.id) pool.push(parent);
+  (parent.subs || []).forEach(s => {
+    if (s.id !== cfg.id && s.checkin && !cfgOpenQuestion(s)) pool.push(s);
+  });
+  if (!pool.length) return [];
+  const wd = weekday(m, day);
+  const ordered = [];
+  if (wd === 0) {
+    const dom = pool.find(s => /domingo|\bdom\b/.test(normNameCross(s.name)));
+    if (dom) ordered.push(dom);
+  }
+  const prox = pool.find(s => /prox|amanh|seguinte/.test(normNameCross(s.name)));
+  if (prox && !ordered.includes(prox)) ordered.push(prox);
+  pool.forEach(c => { if (!ordered.includes(c)) ordered.push(c); });
+  return ordered;
+}
+function planCrossRefCfg(cfg, day, m = currentMonth) {
+  const cands = planCrossRefCandidates(cfg, day, m);
+  return cands[0] || null;
+}
+function crossPlanValueFromCell(c) {
+  const p = c.plan;
+  if (p != null && p !== "" && !isNaN(Number(p))) return Number(p);
+  const r = c.real;
+  if (r != null && r !== "" && !isNaN(Number(r))) return Number(r);
+  return null;
+}
+function crossPlanHit(sellerId, cfg, day, m = currentMonth) {
+  const prev = prevWorkedDay(sellerId, day, m);
+  if (prev == null) return null;
+  for (const ref of planCrossRefCandidates(cfg, day, m)) {
+    const value = crossPlanValueFromCell(getCell(sellerId, ref.id, prev, m));
+    if (value != null) return { ref, value, prevDay: prev };
+  }
+  return null;
+}
+function crossPlanTarget(sellerId, cfg, day, m = currentMonth) {
+  const hit = crossPlanHit(sellerId, cfg, day, m);
+  return hit ? hit.value : null;
 }
 function openCrossFeedbackHtml(confirmed, target, refName) {
   if (target == null || confirmed == null || isNaN(confirmed)) return "";
@@ -3744,11 +3758,12 @@ function openPlanDiarioHtml(cfg, c, sellerId, day, m = currentMonth) {
   if (!disp) return `<div class="open-plan-cell"><span class="muted">—</span></div>`;
   let cls = c.planYes === true ? "pos" : c.planYes === false ? "neg" : "";
   const confirmed = c.planYes === true && c.plan != null && c.plan !== "" ? Number(c.plan) : null;
-  const target = c.planYes === true ? crossPlanTarget(sellerId, cfg, day, m) : null;
+  const hit = c.planYes === true ? crossPlanHit(sellerId, cfg, day, m) : null;
+  const target = hit?.value ?? null;
   if (confirmed != null && !isNaN(confirmed) && target != null) cls = confirmed < target ? "neg" : "pos";
   let html = `<div class="open-plan-cell ${cls}" title="${escapeHtml(disp)}">${escapeHtml(disp)}</div>`;
   if (confirmed != null && !isNaN(confirmed) && target != null) {
-    html += `<div class="open-cross-mini">${openCrossFeedbackHtml(confirmed, target, planCrossRefCfg(cfg, day, m)?.name)}</div>`;
+    html += `<div class="open-cross-mini">${openCrossFeedbackHtml(confirmed, target, hit?.ref?.name)}</div>`;
   }
   return html;
 }
