@@ -399,13 +399,30 @@
   .audit-disc-stat .k { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .35px; font-weight: 700; }
   .audit-disc-stat .v { font-size: 18px; font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; }
   .audit-disc-stat .v small { font-size: 11px; font-weight: 600; color: var(--text-dim); }
-  #auditoriaDiscTable { font-size: 12px; }
-  #auditoriaDiscTable td.gaps { text-align: left; white-space: normal; max-width: 320px; line-height: 1.45; }
-  #auditoriaDiscTable tr.ok td { color: var(--ok); }
-  #auditoriaDiscTable tr.bad td { color: var(--text); }
-  #auditoriaDiscTable .gap-tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 6px; margin: 1px 4px 1px 0; background: color-mix(in srgb, var(--danger) 14%, var(--cell)); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 28%, transparent); }
-  #auditoriaDiscTable .gap-tag.in { background: color-mix(in srgb, var(--accent) 14%, var(--cell)); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
-  #auditoriaDiscTable .gap-tag.out { background: color-mix(in srgb, var(--accent-2) 14%, var(--cell)); color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 28%, transparent); }
+  .audit-days-sub { margin: 12px 0 8px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .35px; color: var(--text-dim); }
+  .audit-days-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr)); gap: 8px; }
+  .audit-day-card { background: var(--cell); border: 1px solid var(--border-soft); border-radius: 10px; padding: 10px 11px; min-width: 0; }
+  .audit-day-card.bad { border-color: color-mix(in srgb, var(--danger) 32%, var(--border)); }
+  .audit-day-card.ok { border-color: color-mix(in srgb, var(--ok) 28%, var(--border)); }
+  .audit-day-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px; }
+  .audit-day-head .dnum { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .audit-day-head .wd { font-size: 10px; color: var(--text-faint); font-weight: 700; text-transform: uppercase; }
+  .audit-day-status { font-size: 10px; font-weight: 800; }
+  .audit-day-status.bad { color: var(--danger); }
+  .audit-day-status.ok { color: var(--ok); }
+  .audit-day-gaps { display: flex; flex-wrap: wrap; gap: 4px; max-height: 64px; overflow: hidden; }
+  .audit-day-card.expanded .audit-day-gaps { max-height: none; }
+  .audit-day-card .gap-more { font-size: 10px; color: var(--text-dim); cursor: pointer; margin-top: 4px; font-weight: 700; }
+  .audit-day-card .gap-more:hover { color: var(--accent-2); }
+  .audit-days-more { display: none; margin-top: 8px; }
+  .audit-days-more.show { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr)); gap: 8px; }
+  .audit-expand-row { display: flex; justify-content: center; margin: 10px 0 4px; }
+  .audit-expand-btn { font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 99px; border: 1px dashed var(--border); background: transparent; color: var(--text-dim); cursor: pointer; }
+  .audit-expand-btn:hover { border-color: var(--accent-2); color: var(--accent-2); }
+  .gap-tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 6px; background: color-mix(in srgb, var(--danger) 14%, var(--cell)); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 28%, transparent); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gap-tag.in { background: color-mix(in srgb, var(--accent) 14%, var(--cell)); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
+  .gap-tag.out { background: color-mix(in srgb, var(--accent-2) 14%, var(--cell)); color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 28%, transparent); }
+  .audit-acur-hint { margin: -2px 0 8px; font-size: 11.5px; color: var(--text-dim); line-height: 1.45; }
   .audit-section-title { margin: 16px 0 8px; font-size: 12.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .45px; font-weight: 800; }
   #auditoriaModal .modal.modal-wide { max-width: 820px; max-height: 92vh; overflow-y: auto; }
   .modal h3 { margin: 0 0 4px; }
@@ -672,6 +689,7 @@
   <div id="auditoriaSummary" class="audit-summary"></div>
   <div id="auditoriaDiscipline" class="audit-discipline"></div>
   <div class="audit-section-title">Acuracidade · relato × sistema</div>
+  <div class="audit-acur-hint">Relato = soma do <b>check-out</b> do mês (o que o CV lança no fim do dia). Compara com o número real do gestor (sistema ⚙).</div>
   <div class="table-wrap" style="margin-top:4px;"><table id="auditoriaTable"></table></div>
   <div class="row" style="margin-top:12px; justify-content:flex-end;"><button class="ghost-btn" id="auditoriaParaLancamento">✎ Lançar no sistema</button></div>
 </div></div>
@@ -2599,14 +2617,24 @@ let diarioSeller = state.ui.diarioSeller || null;
 let diarioWeekIdx = state.ui.diarioWeek || 0;
 function dayCls(d) { let c = []; if (isToday(currentMonth, d)) c.push("today"); if (isSunday(currentMonth, d)) c.push("col-sun"); return c.join(" "); }
 function diarioTodayDay() { return todayISO() === currentMonth ? new Date().getDate() : null; }
+function weekForDay(day, m = currentMonth) {
+  return weeksOf(m).find(w => w.includes(day)) || [day];
+}
+/** Indicador "só domingo" bloqueado quando o CV não trabalha domingo na semana. */
+function diarioFieldGated(sellerId, cfg, day, m = currentMonth) {
+  return !!(cfg.sundayOnly && !weekHasWorkedSunday(sellerId, weekForDay(day, m), m));
+}
+function diarioFieldNeeds(sellerId, cfg, day, m = currentMonth) {
+  if (diarioFieldGated(sellerId, cfg, day, m)) return { checkin: false, checkout: false };
+  return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
+}
 function diarioCheckoutFieldIds(sellerId, day) {
-  const week = (weeksOf(currentMonth).find(w => w.includes(day)) || [day]);
   const ids = [];
   orderedIndicators().forEach(ind => {
     if (ind.pctOnly) return;
     const add = cfg => {
       if (!cfg.checkout) return;
-      if (cfg.sundayOnly && !weekHasWorkedSunday(sellerId, week)) return;
+      if (diarioFieldGated(sellerId, cfg, day)) return;
       ids.push(cfg.id);
     };
     if (cfgHasDiario(ind)) add(ind);
@@ -2710,7 +2738,7 @@ function renderDiario() {
 }
 function diarioRow(cfg, color, isSub) {
   const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
-  const gated = cfg.sundayOnly && !weekHasWorkedSunday(diarioSeller, days);
+  const gated = cfg.sundayOnly && days.some(d => diarioFieldGated(diarioSeller, cfg, d));
   const ci = cfg.checkin && !gated, co = cfg.checkout && !gated;
   const label = (isSub ? `<span class="tag sub">↳</span> ${cfg.name}` : `<b style="color:${color}">${cfg.name}</b>`) + (gated ? ` <span class="hint" style="font-size:9px">🔒 só domingo</span>` : (cfg.sundayOnly ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">dom</span>` : ""));
   let row = `<tr class="${isSub?'dsub':'dgroup'}" style="--gc:${color}"><td class="name" style="border-left:3px solid ${color};">${label}</td>`;
@@ -2804,23 +2832,21 @@ function renderAuditoriaModal(sellerId) {
   bindMatrizTips(sumEl);
   renderAuditoriaDiscipline(sellerId);
   const fields = acuracidadeFieldList().filter(f => !f.rate && fieldHasSistema(sellerId, f));
-  let head = '<thead><tr><th class="name">Indicador</th><th>Check-in</th><th>Relato</th><th>Sistema</th><th>Acurac.</th></tr></thead>';
+  let head = '<thead><tr><th class="name">Indicador</th><th>Relato</th><th>Sistema</th><th>Acurac.</th></tr></thead>';
   let body = "<tbody>";
   fields.forEach(f => {
     const sys = getSystem(sellerId, f.id);
     if (sys == null) return;
-    const cfg = cfgById(f.id);
-    const plan = cfg && cfg.checkin ? accum(sellerId, f.id, "plan", days) : null;
     const rel = accum(sellerId, f.id, "real", days);
     const acc = fieldAccuracy(sellerId, f.id, days);
     const accColor = acc != null ? heatText(acc) : "var(--text-dim)";
     const tip = acurTipRelato(f, rel, sys, acc);
-    body += `<tr${matrizTipData(tip, f.color)}><td class="name">${f.sub?'↳ ':''}${f.name}</td><td>${plan==null?'—':fmt(plan)}</td>` +
+    body += `<tr${matrizTipData(tip, f.color)}><td class="name">${f.sub?'↳ ':''}${f.name}</td>` +
       `<td style="color:${accColor};font-weight:700">${rel==null?'—':fmt(rel)}</td>` +
       `<td><span class="heat matriz-from-sys matriz-real acur-sys">${fmt(sys)}</span></td>` +
       `<td style="color:${accColor};font-weight:700">${acc==null?'—':pctTxt(acc)}</td></tr>`;
   });
-  if (!body.includes("<tr")) body += '<tr><td class="empty" colspan="5">Nenhum indicador com lançamento do gestor (sistema ⚙) para este vendedor.</td></tr>';
+  if (!body.includes("<tr")) body += '<tr><td class="empty" colspan="4">Nenhum indicador com lançamento do gestor (sistema ⚙) para este vendedor.</td></tr>';
   body += "</tbody>";
   const audTbl = document.getElementById("auditoriaTable");
   audTbl.innerHTML = head + body;
@@ -2877,10 +2903,12 @@ function consultantDisciplineDetails(sellerId, m = currentMonth) {
     const gaps = [];
     fields.forEach(entry => {
       const cfg = entry.cfg;
+      const needs = diarioFieldNeeds(sellerId, cfg, d, m);
+      if (!needs.checkin && !needs.checkout) return;
       const c = getCell(sellerId, cfg.id, d, m);
       const label = fieldDiarioLabel(entry);
-      if (cfg.checkin && !hasCellValue(c, "plan")) gaps.push({ type: "in", field: label });
-      if (cfg.checkout && !hasCellValue(c, "real")) gaps.push({ type: "out", field: label });
+      if (needs.checkin && !hasCellValue(c, "plan")) gaps.push({ type: "in", field: label });
+      if (needs.checkout && !hasCellValue(c, "real")) gaps.push({ type: "out", field: label });
     });
     const dayComplete = gaps.length === 0;
     if (dayComplete) complete++;
@@ -2894,13 +2922,40 @@ function consultantDisciplineDetails(sellerId, m = currentMonth) {
     incompleteDays: closedDays.filter(x => !x.complete)
   };
 }
+function auditDayCardHtml(row, cls) {
+  const maxTags = 4;
+  const vis = row.gaps.slice(0, maxTags);
+  const rest = row.gaps.length - vis.length;
+  const gapHtml = vis.map(g =>
+    `<span class="gap-tag ${g.type}" title="${g.type === "in" ? "Check-in" : "Check-out"} · ${escapeHtml(g.field)}">${g.type === "in" ? "in" : "out"} · ${escapeHtml(g.field)}</span>`
+  ).join("");
+  const more = rest > 0 ? `<div class="gap-more" data-expand-card>+ ${rest} pendência(s)</div>` : "";
+  const status = cls === "ok" ? `<span class="audit-day-status ok">Completo</span>` : `<span class="audit-day-status bad">Incompleto</span>`;
+  return `<div class="audit-day-card ${cls}" data-day="${row.day}"><div class="audit-day-head"><span><span class="dnum">${row.day}</span> <span class="wd">${row.wd}</span></span>${status}</div>` +
+    (row.gaps.length ? `<div class="audit-day-gaps">${gapHtml}${more}</div>` : `<div class="hint" style="margin:0;font-size:10px;color:var(--ok);">✓ Tudo preenchido</div>`) +
+    `</div>`;
+}
+function bindAuditoriaDisciplineUi(box) {
+  box.querySelectorAll("[data-expand-card]").forEach(el => {
+    el.onclick = () => el.closest(".audit-day-card")?.classList.toggle("expanded");
+  });
+  box.querySelectorAll("[data-audit-toggle]").forEach(btn => {
+    btn.onclick = () => {
+      const target = box.querySelector("#" + btn.dataset.auditToggle);
+      if (!target) return;
+      const open = target.classList.toggle("show");
+      btn.textContent = open ? btn.dataset.labelHide : btn.dataset.labelShow;
+    };
+  });
+}
 function renderAuditoriaDiscipline(sellerId) {
   const box = document.getElementById("auditoriaDiscipline");
   if (!box) return;
   const disc = consultantDisciplineDetails(sellerId);
   const pctColor = heatText(disc.pct);
+  const previewN = 6;
   let html = `<h4>Aderência na escala · check-in / check-out</h4>`;
-  html += `<div class="hint" style="margin:-4px 0 10px;">Dia <b>completo</b> = todos os check-ins e check-outs obrigatórios preenchidos naquele dia da escala (📅). Só contam dias <b>encerrados</b> (até ontem).</div>`;
+  html += `<div class="hint" style="margin:-4px 0 10px;">Dia <b>completo</b> = check-ins e check-outs obrigatórios daquele dia. Indicadores <b>só domingo</b> não contam se o CV não trabalha domingo na semana. Só entram dias <b>encerrados</b> (até ontem).</div>`;
   html += `<div class="audit-disc-statgrid">`;
   html += `<div class="audit-disc-stat"><div class="k">Na escala</div><div class="v">${disc.scheduled} <small>dias</small></div></div>`;
   html += `<div class="audit-disc-stat"><div class="k">Encerrados</div><div class="v">${disc.closed} <small>dias</small></div></div>`;
@@ -2910,24 +2965,31 @@ function renderAuditoriaDiscipline(sellerId) {
   if (!disc.closed) {
     html += `<div class="empty" style="padding:12px;">Ainda não há dias encerrados na escala deste mês.</div>`;
   } else if (!disc.incompleteDays.length) {
-    html += `<div class="hint" style="color:var(--ok); font-weight:700;">✓ Todos os ${disc.closed} dias encerrados estão com check-in e check-out completos.</div>`;
-    if (disc.pendingDays.length) html += `<div class="hint" style="margin-top:6px;">${disc.pendingDays.length} dia(s) futuro(s) na escala ainda em curso (não entram no cálculo).</div>`;
+    html += `<div class="hint" style="color:var(--ok); font-weight:700;">✓ Todos os ${disc.closed} dias encerrados estão completos.</div>`;
   } else {
-    html += `<div class="table-wrap"><table id="auditoriaDiscTable"><thead><tr><th>Dia</th><th>Sem</th><th>Status</th><th class="name">Pendências</th></tr></thead><tbody>`;
-    disc.incompleteDays.forEach(row => {
-      const gapHtml = row.gaps.map(g =>
-        `<span class="gap-tag ${g.type}">${g.type === "in" ? "check-in" : "check-out"} · ${escapeHtml(g.field)}</span>`
-      ).join("");
-      html += `<tr class="bad"><td><b>${row.day}</b></td><td>${row.wd}</td><td style="color:var(--danger);font-weight:700">Incompleto</td><td class="gaps">${gapHtml || "—"}</td></tr>`;
-    });
-    const okDays = disc.closedDays.filter(x => x.complete);
-    if (okDays.length) {
-      html += `<tr class="ok"><td colspan="4" style="text-align:left;padding-top:10px;"><span style="color:var(--ok);font-weight:700;">✓ Completos (${okDays.length}):</span> <span class="muted">${okDays.map(x => x.day + " " + x.wd).join(", ")}</span></td></tr>`;
+    const inc = disc.incompleteDays;
+    const incPrev = inc.slice(0, previewN);
+    const incRest = inc.slice(previewN);
+    html += `<div class="audit-days-sub">${inc.length} dia(s) incompleto(s)</div>`;
+    html += `<div class="audit-days-grid">${incPrev.map(r => auditDayCardHtml(r, "bad")).join("")}</div>`;
+    if (incRest.length) {
+      html += `<div class="audit-days-more" id="auditIncMore">${incRest.map(r => auditDayCardHtml(r, "bad")).join("")}</div>`;
+      html += `<div class="audit-expand-row"><button type="button" class="audit-expand-btn" data-audit-toggle="auditIncMore" data-label-show="Ver mais ${incRest.length} dia(s)" data-label-hide="Recolher">Ver mais ${incRest.length} dia(s)</button></div>`;
     }
-    html += `</tbody></table></div>`;
-    if (disc.pendingDays.length) html += `<div class="hint" style="margin-top:8px;">+ ${disc.pendingDays.length} dia(s) futuro(s) na escala (${disc.pendingDays.map(x => x.day).join(", ")}) — ainda não entram na aderência.</div>`;
+  }
+  const okDays = disc.closedDays.filter(x => x.complete);
+  if (okDays.length) {
+    const okPrev = okDays.slice(0, previewN);
+    const okRest = okDays.slice(previewN);
+    html += `<div class="audit-expand-row" style="margin-top:14px;"><button type="button" class="audit-expand-btn" data-audit-toggle="auditOkMore" data-label-show="Ver dias completos (${okDays.length})" data-label-hide="Ocultar completos">Ver dias completos (${okDays.length})</button></div>`;
+    html += `<div class="audit-days-more" id="auditOkMore">${okPrev.map(r => auditDayCardHtml({ ...r, gaps: [] }, "ok")).join("")}${okRest.map(r => auditDayCardHtml({ ...r, gaps: [] }, "ok")).join("")}</div>`;
+  }
+  if (disc.pendingDays.length) {
+    const nums = disc.pendingDays.map(x => x.day).join(", ");
+    html += `<div class="hint" style="margin-top:10px;">+ ${disc.pendingDays.length} dia(s) futuro(s) na escala (${nums}) — ainda não entram na aderência.</div>`;
   }
   box.innerHTML = html;
+  bindAuditoriaDisciplineUi(box);
 }
 
 /* ============================================================ FOCO */
