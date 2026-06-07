@@ -91,6 +91,7 @@
   nav.tabs button { cursor: grab; }
   nav.tabs button:active { cursor: grabbing; }
   nav.tabs button.active { color: var(--text); border-bottom-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  body.divisional-mode nav.tabs button:not([data-view="fechamento"]):not([data-view="rscen"]) { display: none; }
   /* Layout */
   main { padding: 20px; max-width: 100%; margin: 0 auto; }
   .view { display: none; animation: fade .25s ease; }
@@ -1746,11 +1747,20 @@ function pctTxt(p) { return p == null ? "—" : Math.round(p * 100) + "%"; }
 
 /* ===== Abas ===== */
 const views = ["matriz","foco","diario","fechamento","rscen","config","kpis"];
+const DIVISIONAL_VIEWS = ["fechamento", "rscen"];
 let activeView = state.ui.view || "matriz";
 if (activeView === "sistema" || !views.includes(activeView)) activeView = "matriz";
 function showView(v) {
   if (v === "resumo") v = "matriz";
-  activeView = v; state.ui.view = v; save(); document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.view === v)); views.forEach(x => document.getElementById("view-"+x).classList.toggle("active", x === v)); renderActive(); }
+  if (divisionalMode() && !DIVISIONAL_VIEWS.includes(v)) {
+    v = DIVISIONAL_VIEWS.includes(activeView) ? activeView : "rscen";
+  }
+  activeView = v; state.ui.view = v; save();
+  if (typeof updateDivisionalNav === "function") updateDivisionalNav();
+  document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+  views.forEach(x => document.getElementById("view-"+x).classList.toggle("active", x === v));
+  renderActive();
+}
 function renderActive() {
   updateWorkdaysBadge();
   if (activeView === "matriz") renderMatriz();
@@ -3882,7 +3892,10 @@ function finishAuthEnter(code) {
   if (fbReady) { pullLoja(); startLojaDataListener(); }
   else {
     state.storeName = divisionalMode() ? "RSCEN — Divisional" : code;
-    save(); syncStore(); renderActive();
+    save(); syncStore();
+    updateDivisionalNav();
+    if (divisionalMode()) showView(DIVISIONAL_VIEWS.includes(activeView) ? activeView : "rscen");
+    else renderActive();
   }
 }
 function submitAuthReveal() {
@@ -4077,7 +4090,9 @@ function switchToLoja(code) {
     state.storeName = okDiv ? "RSCEN — Divisional" : c;
     save();
     syncStore();
-    renderActive();
+    updateDivisionalNav();
+    if (okDiv) showView(DIVISIONAL_VIEWS.includes(activeView) ? activeView : "rscen");
+    else renderActive();
   }
   const hdr = document.getElementById("storeName");
   if (hdr && !okDiv) hdr.value = c;
@@ -4124,6 +4139,9 @@ function trocarLoja() {
 
 /* ============================================================ FASE 2.3 — MODO DIVISIONAL (RSCEN) + trocar no topo */
 function divisionalMode(){ return !!(lojaCode && String(lojaCode).toUpperCase().indexOf("RSCEN")===0); }
+function updateDivisionalNav() {
+  document.body.classList.toggle("divisional-mode", divisionalMode());
+}
 function allLojas(){
   const arr = [];
   if (!divisionalMode()) arr.push({ id: myLojaId, name: state.storeName || "Minha loja", data: state, self: true });
@@ -4140,6 +4158,7 @@ function pullLoja(){
   if (divisionalMode()){
     state.storeName = "RSCEN — Divisional";
     syncStore();
+    updateDivisionalNav();
     applyTemplateFromCloud().then(changed => {
       if (changed && activeView === "rscen") renderArvore();
       showView("rscen");
@@ -4151,6 +4170,7 @@ function pullLoja(){
     const v = snap.val();
     const finish = () => {
       applyTheme(); syncStore(); expandedBlocks = state.ui.expanded;
+      updateDivisionalNav();
       renderActive(); startLojaDataListener();
     };
     if (v && v.data) {
@@ -4357,6 +4377,8 @@ function init() {
   document.getElementById("fechPull").onclick = fechPull;
   bindAuthEvents();
   if (tryRestoreAuthSession()) { /* sessão válida neste aparelho */ }
+  if (divisionalMode() && !DIVISIONAL_VIEWS.includes(activeView)) activeView = "rscen";
+  updateDivisionalNav();
   showView(activeView);
   if (typeof fbInit === "function") fbInit();
   else if (!authUnlocked) startAuthFlow();
