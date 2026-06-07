@@ -148,8 +148,9 @@
   #diarioTable th.dio-locked-day { background: color-mix(in srgb, var(--panel-2) 82%, var(--text-faint)) !important; color: var(--text-dim); }
   #diarioTable th .dio-day-head { display: flex; flex-direction: column; align-items: center; gap: 3px; }
   #diarioTable th .dio-today-tag { font-size: 8px; font-weight: 800; color: var(--accent-2); letter-spacing: .3px; text-transform: uppercase; }
-  #diarioTable th .dio-unlock-day { cursor: pointer; border: 1px dashed var(--border); background: transparent; color: var(--text-dim); border-radius: 6px; padding: 1px 6px; font-size: 9px; font-weight: 700; font-family: var(--font); line-height: 1.4; }
+  #diarioTable th .dio-unlock-day, #diarioTable th .dio-lock-day { cursor: pointer; pointer-events: auto; border: 1px dashed var(--border); background: transparent; color: var(--text-dim); border-radius: 6px; padding: 1px 6px; font-size: 9px; font-weight: 700; font-family: var(--font); line-height: 1.4; position: relative; z-index: 2; }
   #diarioTable th .dio-unlock-day:hover { border-color: var(--accent); color: var(--accent); }
+  #diarioTable th .dio-lock-day:hover { border-color: var(--warn); color: var(--warn); }
   #diarioTable th .dio-unlocked-tag { font-size: 8px; color: var(--accent-2); font-weight: 700; }
   #diarioTable td.dio-locked-day { background: color-mix(in srgb, var(--panel-2) 78%, var(--text-faint)) !important; }
   #diarioTable td.dio-locked-day .dio-lbl { opacity: 0.4; color: var(--text-faint) !important; }
@@ -164,7 +165,7 @@
   #diarioTable tbody tr.dgroup td.name { box-shadow: inset 3px 0 0 var(--gc), 0 0 12px color-mix(in srgb, var(--gc) 20%, transparent); }
   .neon { color: var(--neon); font-weight: 800; text-shadow: 0 0 8px color-mix(in srgb, var(--neon) 55%, transparent); }
   /* Matrix compact + responsive */
-  #matrizTable th, #matrizTable td, #acuracidadeTable th, #acuracidadeTable td, #resumoTable th, #resumoTable td { padding: 7px 8px; }
+  #matrizTable th, #matrizTable td, #acuracidadeTable th, #acuracidadeTable td { padding: 7px 8px; }
   .heat { border-radius: 7px; font-weight: 700; padding: 4px 7px; display: inline-block; min-width: 34px; }
   .heat.matriz-from-sys { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-2) 55%, transparent); }
   .heat.matriz-from-sys::after { content: "⚙"; font-size: 9px; margin-left: 3px; opacity: .75; vertical-align: super; }
@@ -260,8 +261,9 @@
   .daystrip button.sun, .daystrip button.sat { opacity: .45; }
   .daystrip button.fech-locked { opacity: .38; background: color-mix(in srgb, var(--panel-2) 78%, var(--text-faint)); color: var(--text-faint); border-color: var(--border-soft); cursor: default; }
   .daystrip button.fech-locked.sel { background: color-mix(in srgb, var(--text-faint) 35%, var(--panel-2)); color: var(--text-dim); border-color: var(--border); }
-  .daystrip button .fech-unlock-day { display: block; font-size: 9px; margin-top: 1px; border: none; background: transparent; color: var(--text-faint); cursor: pointer; padding: 0; line-height: 1; font-family: var(--font); }
+  .daystrip button .fech-unlock-day, .daystrip button .fech-lock-day { display: block; font-size: 9px; margin-top: 1px; border: none; background: transparent; color: var(--text-faint); cursor: pointer; padding: 0; line-height: 1; font-family: var(--font); pointer-events: auto; position: relative; z-index: 2; }
   .daystrip button .fech-unlock-day:hover { color: var(--accent); }
+  .daystrip button .fech-lock-day:hover { color: var(--warn); }
   .daystrip button.has { box-shadow: inset 0 -3px 0 var(--ok); }
   #fechTable tr.fech-row-locked td { background: color-mix(in srgb, var(--panel-2) 78%, var(--text-faint)) !important; color: var(--text-dim); }
   #fechTable tr.fech-row-locked td.name { background: color-mix(in srgb, var(--panel-2) 82%, var(--text-faint)) !important; }
@@ -491,7 +493,6 @@
 
 <nav class="tabs" id="tabs">
   <button data-view="matriz" class="active">Matriz / Painel</button>
-  <button data-view="resumo">Resumo Geral</button>
   <button data-view="foco">Foco &amp; Ranking</button>
   <button data-view="diario">Check-in / Check-out</button>
   <button data-view="fechamento">Fechamento Diário</button>
@@ -526,21 +527,6 @@
       <div class="table-wrap" style="margin-top:6px;"><table id="acuracidadeTable"></table></div>
       <div class="acur-legend" id="acurLegend"></div>
       <div class="hint" style="margin-top:10px;">Só entram indicadores com <b>lançamento do gestor (sistema ⚙)</b> na matriz, para os vendedores do filtro atual. O número com ⚙ na matriz é o sistema; sem ⚙, o Real vem só do check-out. <b>Aderência</b> = dias encerrados na escala com check-in e check-out completos ÷ dias encerrados (igual ao app do consultor).</div>
-    </div>
-  </section>
-
-  <!-- RESUMO -->
-  <section class="view" id="view-resumo">
-    <div class="panel">
-      <div class="flex-between">
-        <div><h2>Resumo Geral da Equipe</h2><div class="sub">Totais consolidados — meta dos vendedores e meta real da loja, com projeção.</div></div>
-        <div class="row" style="align-items:center;">
-          <button class="ghost-btn" id="goKpisMetas" title="Cadastrar metas por indicador">⚙ Metas em KPIs</button>
-          <div class="seg" id="resumoWeeks"></div>
-        </div>
-      </div>
-      <div class="table-wrap" style="margin-top:12px;"><table id="resumoTable"></table></div>
-      <div class="hint" style="margin-top:10px;">Meta Vend. = meta do consultor × N vendedores · Meta Loja = cadastro em <b>KPIs</b> (por indicador/sub/taxa). O % e a projeção usam a Meta Loja quando definida. Meta Vend. em <b style="color:var(--danger)">vermelho</b> = soma dos consultores abaixo da meta da loja.</div>
     </div>
   </section>
 
@@ -805,8 +791,8 @@ function migrate(s) {
   }
   if (!s.ui.fechUnlock || typeof s.ui.fechUnlock !== "object") s.ui.fechUnlock = { month: null, days: [] };
   if (!Array.isArray(s.ui.fechUnlock.days)) s.ui.fechUnlock.days = [];
-  if (s.ui.view === "sistema") s.ui.view = "matriz";
-  if (s.ui.tabOrder) s.ui.tabOrder = s.ui.tabOrder.filter(v => v !== "sistema");
+  if (s.ui.view === "sistema" || s.ui.view === "resumo") s.ui.view = "matriz";
+  if (s.ui.tabOrder) s.ui.tabOrder = s.ui.tabOrder.filter(v => v !== "sistema" && v !== "resumo");
   (s.indicators || []).forEach(i => {
     if (i.pctOnly == null) i.pctOnly = false;
     if (i.lowerBetter == null) i.lowerBetter = false;
@@ -1026,7 +1012,7 @@ function startConfigListener() {
       lastPushedConfigHash = configHash(tpl);
       save({ skipPush: divisionalMode(), skipConfigPush: true });
       expandedBlocks = state.ui.expanded;
-      if (["matriz", "rscen", "kpis", "config", "diario", "resumo"].includes(activeView)) renderActive();
+      if (["matriz", "rscen", "kpis", "config", "diario"].includes(activeView)) renderActive();
     }, 300);
   });
 }
@@ -1060,7 +1046,6 @@ function ensureDiarioUnlockFresh() {
   const key = todayDateKey();
   if (!state.ui.diarioUnlock || state.ui.diarioUnlock.resetDate !== key) {
     state.ui.diarioUnlock = { resetDate: key, days: [], past: false, future: false, week: false };
-    save();
   }
   return state.ui.diarioUnlock;
 }
@@ -1094,17 +1079,26 @@ function diarioDayEditable(day) {
   if (diarioIsTodayDay(day)) return true;
   return diarioDayUnlocked(day);
 }
+function diarioDayIndividuallyUnlocked(day) {
+  return (ensureDiarioUnlockFresh().days || []).includes(day);
+}
 function unlockDiarioDay(day) {
   const u = ensureDiarioUnlockFresh();
   if (!u.days.includes(day)) u.days.push(day);
   save();
   renderDiario();
 }
+function lockDiarioDay(day) {
+  const u = ensureDiarioUnlockFresh();
+  u.days = (u.days || []).filter(d => d !== day);
+  save();
+  renderDiario();
+}
 function unlockDiarioBulk(mode) {
   const u = ensureDiarioUnlockFresh();
-  if (mode === "past") u.past = true;
-  if (mode === "future") u.future = true;
-  if (mode === "week") u.week = true;
+  if (mode === "past") u.past = !u.past;
+  if (mode === "future") u.future = !u.future;
+  if (mode === "week") u.week = !u.week;
   save();
   renderDiario();
 }
@@ -1118,9 +1112,11 @@ function diarioDayHeadHtml(d, dn) {
   const wd = weekday(currentMonth, d);
   const editable = diarioDayEditable(d);
   const unlocked = diarioDayUnlocked(d);
+  const individual = diarioDayIndividuallyUnlocked(d);
   const today = diarioIsTodayDay(d);
   let extra = "";
   if (today) extra = `<span class="dio-today-tag">hoje</span>`;
+  else if (individual) extra = `<button type="button" class="dio-lock-day" data-day="${d}" title="Bloquear este dia novamente">🔒</button>`;
   else if (editable && unlocked) extra = `<span class="dio-unlocked-tag">✓ livre</span>`;
   else if (!editable) extra = `<button type="button" class="dio-unlock-day" data-day="${d}" title="Desbloquear este dia para editar">🔓</button>`;
   return `<th class="${dayCls(d)}${editable ? "" : " dio-locked-day"}"><div class="dio-day-head">${d}<span style="font-size:9px;opacity:.7">${dn[wd]}</span>${extra}</div></th>`;
@@ -1130,9 +1126,9 @@ function renderDiarioLockBar() {
   if (!bar) return;
   const u = ensureDiarioUnlockFresh();
   bar.innerHTML = `<span class="hint">Edição bloqueada fora de hoje ·</span>
-    <button type="button" class="ghost-btn sm dio-bulk-unlock${u.past ? " active" : ""}" data-mode="past">Desbloquear passado</button>
-    <button type="button" class="ghost-btn sm dio-bulk-unlock${u.future ? " active" : ""}" data-mode="future">Desbloquear futuro</button>
-    <button type="button" class="ghost-btn sm dio-bulk-unlock${u.week ? " active" : ""}" data-mode="week">Desbloquear semana</button>
+    <button type="button" class="ghost-btn sm dio-bulk-unlock${u.past ? " active" : ""}" data-mode="past">${u.past ? "Passado liberado" : "Desbloquear passado"}</button>
+    <button type="button" class="ghost-btn sm dio-bulk-unlock${u.future ? " active" : ""}" data-mode="future">${u.future ? "Futuro liberado" : "Desbloquear futuro"}</button>
+    <button type="button" class="ghost-btn sm dio-bulk-unlock${u.week ? " active" : ""}" data-mode="week">${u.week ? "Semana liberada" : "Desbloquear semana"}</button>
     <button type="button" class="ghost-btn sm dio-lock-all" id="dioLockAll">Bloquear tudo novamente</button>
     <span class="hint">Valores sempre visíveis · à 00:00 tudo trava de novo</span>`;
   bar.querySelectorAll(".dio-bulk-unlock").forEach(btn => {
@@ -1707,14 +1703,15 @@ function fmt(n, dec = 0) { if (n == null || isNaN(n)) return "—"; return Numbe
 function pctTxt(p) { return p == null ? "—" : Math.round(p * 100) + "%"; }
 
 /* ===== Abas ===== */
-const views = ["matriz","resumo","foco","diario","fechamento","rscen","config","kpis"];
+const views = ["matriz","foco","diario","fechamento","rscen","config","kpis"];
 let activeView = state.ui.view || "matriz";
 if (activeView === "sistema" || !views.includes(activeView)) activeView = "matriz";
-function showView(v) { activeView = v; state.ui.view = v; save(); document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.view === v)); views.forEach(x => document.getElementById("view-"+x).classList.toggle("active", x === v)); renderActive(); }
+function showView(v) {
+  if (v === "resumo") v = "matriz";
+  activeView = v; state.ui.view = v; save(); document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.view === v)); views.forEach(x => document.getElementById("view-"+x).classList.toggle("active", x === v)); renderActive(); }
 function renderActive() {
   updateWorkdaysBadge();
   if (activeView === "matriz") renderMatriz();
-  else if (activeView === "resumo") renderResumo();
   else if (activeView === "foco") renderFoco();
   else if (activeView === "diario") renderDiario();
   else if (activeView === "fechamento") renderFechamento();
@@ -2139,6 +2136,7 @@ function renderArvoreToolbar() {
   bar.querySelector(".arv-loja-all").onclick = () => {
     state.ui.arvLojaFilter = [];
     state.ui.arvSellerFilter = [];
+    arvOpenLojas = {};
     save();
     matrizUiRerender();
   };
@@ -2149,7 +2147,10 @@ function renderArvoreToolbar() {
       if (f.has(id)) f.delete(id);
       else f.add(id);
       state.ui.arvLojaFilter = [...f];
-      if (state.ui.arvLojaFilter.length !== 1) state.ui.arvSellerFilter = [];
+      if (state.ui.arvLojaFilter.length !== 1) {
+        state.ui.arvSellerFilter = [];
+        if (!state.ui.arvLojaFilter.length) arvOpenLojas = {};
+      }
       save();
       matrizUiRerender();
     };
@@ -2722,9 +2723,6 @@ function renderDiario() {
   if (!anyDiario) body += `<tr><td class="empty" colspan="${days.length + 4}">Nenhum indicador com Check-in ou Check-out.<br>Ative em <b>KPIs</b> nos indicadores que entram no diário.</td></tr>`;
   body += "</tbody>";
   const table = document.getElementById("diarioTable"); table.innerHTML = head + body;
-  table.querySelectorAll(".dio-unlock-day").forEach(btn => {
-    btn.onclick = (e) => { e.stopPropagation(); unlockDiarioDay(+btn.dataset.day); toast("Dia " + btn.dataset.day + " liberado para edição"); };
-  });
   table.querySelectorAll(".cellinput").forEach(inp => {
     inp.addEventListener("input", () => {
       if (inp.readOnly) return;
@@ -3059,52 +3057,6 @@ function drawRitmo() {
 }
 function daysElapsedIndex(){ return todayISO()===currentMonth? new Date().getDate()-1 : daysInMonth(currentMonth)-1; }
 
-/* ============================================================ RESUMO */
-let resumoWeekIdx = state.ui.resumoWeek || 0;
-function renderResumo() {
-  const sellers = orderedSellers(); const inds = orderedIndicators(); const nS = sellers.length || 1;
-  const weeks = weeksOf(currentMonth); if (resumoWeekIdx >= weeks.length) resumoWeekIdx = 0;
-  const weekDays = weeks[resumoWeekIdx] || [];
-  const ewd = elapsedWorkdays(currentMonth), twd = workdaysOf(currentMonth);
-  const segW = document.getElementById("resumoWeeks");
-  segW.innerHTML = weeks.map((w, i) => `<button data-w="${i}" class="${i===resumoWeekIdx?'active':''}">Sem ${i+1}<br><span style="font-size:9px;opacity:.7">${w[0]}-${w[w.length-1]}</span></button>`).join("");
-  segW.querySelectorAll("button").forEach(b => b.onclick = () => { resumoWeekIdx = +b.dataset.w; state.ui.resumoWeek = resumoWeekIdx; save(); renderResumo(); });
-
-  let head = `<thead><tr><th class="name" rowspan="2">Indicador</th><th colspan="3">Semana ${resumoWeekIdx+1}</th><th colspan="4">Mês</th><th colspan="2">Projeção (vs loja)</th></tr><tr><th>Real</th><th>Meta</th><th>%</th><th>Real</th><th>Meta Vend.</th><th>Meta Loja</th><th>%</th><th>Proj.</th><th>%</th></tr></thead>`;
-  let body = "<tbody>";
-  const ids = sellers.map(s=>s.id);
-  function rowFor(cfg, isSub) {
-    let wReal=0, mReal=0; const mDays=monthDays();
-    ids.forEach(id=>{ const w=accum(id,cfg.id,"real",weekDays); if(w!=null)wReal+=w; const mm=accum(id,cfg.id,"real",mDays); if(mm!=null)mReal+=mm; });
-    const wMeta = weekMeta(cfg, weekDays)*nS;
-    const metaVend = metaMonthFor(cfg)*nS;
-    const metaLoja = getMetaLoja(cfg.id);
-    const target = metaLoja != null ? metaLoja : metaVend;
-    const wPct = wMeta? wReal/wMeta : null;
-    const mPct = target? mReal/target : null;
-    const proj = teamProjVal(ids, cfg.id);
-    const pPct = target && proj!=null? proj/target : null;
-    const vendRed = (metaLoja != null && metaVend < metaLoja);
-    const name = isSub ? `<span class="tag sub">↳</span> ${cfg.name}` : `<b>${cfg.name}</b>`;
-    return `<tr><td class="name" style="border-left:3px solid ${cfg._color}">${name}</td>
-      <td>${fmt(wReal)}</td><td class="muted">${fmt(wMeta)}</td><td style="color:${heatText(wPct)};font-weight:700;">${pctTxt(wPct)}</td>
-      <td>${fmt(mReal)}</td><td style="color:${vendRed?'var(--danger)':'var(--text-dim)'};font-weight:${vendRed?700:400};">${fmt(metaVend)}${vendRed?' ⚠':''}</td><td style="color:${metaLoja!=null?'var(--ok)':'var(--text-faint)'};font-weight:700;">${metaLoja!=null?fmt(metaLoja):'—'}</td><td style="color:${heatText(mPct)};font-weight:700;">${pctTxt(mPct)}</td>
-      <td>${proj==null?'—':fmt(proj)}</td><td><span class="heat" style="background:${heatColor(pPct)};color:${heatText(pPct)}">${pctTxt(pPct)}</span></td></tr>`;
-  }
-  inds.forEach(ind => {
-    ind._color = ind.color;
-    if (!ind.pctOnly) { body += rowFor(ind, false); (ind.subs||[]).forEach(s => { s._color = ind.color; body += rowFor(s, true); }); }
-    (ind.rates||[]).forEach(r => {
-      const rv = rateValue(r, ids); const tgt = Number(r.target)||0; const ml = getMetaLoja(r.id);
-      const rp = tgt ? (rv!=null?(rv/100)/(tgt/100):null) : null;
-      const mlDisp = ml != null ? fmt(ml,0)+'%' : '—';
-      body += `<tr><td class="name" style="border-left:3px solid ${ind.color}"><span class="tag">%</span> ${r.name}</td><td>—</td><td class="muted">—</td><td>—</td><td>—</td><td class="muted">—</td><td style="color:${ml!=null?'var(--ok)':'var(--text-faint)'};font-weight:700;">${mlDisp}</td><td style="color:${heatText(rp)};font-weight:700;">${rv==null?'—':fmt(rv,0)+'%'}</td><td>—</td><td>—</td></tr>`;
-    });
-  });
-  body += "</tbody>";
-  document.getElementById("resumoTable").innerHTML = head + body;
-}
-
 let escalaSellerId = null;
 function ensureSched(sellerId){ const md=monthData(); md.sched=md.sched||{}; if(!md.sched[sellerId]){ const o={}; const n=daysInMonth(currentMonth); for(let d=1;d<=n;d++) if(defaultWorks(currentMonth,d)) o[d]=1; md.sched[sellerId]=o; } return md.sched[sellerId]; }
 let consultorQrSellerId = null;
@@ -3385,25 +3337,37 @@ function ensureFechUnlock() {
 }
 function fechDayUnlocked(day) { return (ensureFechUnlock().days || []).includes(day); }
 function fechDayEditable(day) { return !fechIsWeekend(day) || fechDayUnlocked(day); }
-function unlockFechDay(day) {
+function toggleFechDayLock(day) {
   const u = ensureFechUnlock();
-  if (!u.days.includes(day)) u.days.push(day);
-  save();
-  renderFechamento();
-  toast("Dia " + day + " liberado para edição");
+  const i = (u.days || []).indexOf(day);
+  if (i >= 0) {
+    u.days.splice(i, 1);
+    save();
+    renderFechamento();
+    toast("Dia " + day + " bloqueado");
+  } else {
+    u.days.push(day);
+    save();
+    renderFechamento();
+    toast("Dia " + day + " liberado para edição");
+  }
 }
 function renderFechDays(){
   const n=daysInMonth(currentMonth), dn=["D","S","T","Q","Q","S","S"];
   const el=document.getElementById("fechDays"); if(!el) return;
   el.innerHTML = Array.from({length:n},(_,i)=>i+1).map(d=>{
     const w=weekday(currentMonth,d);
-    const locked = fechIsWeekend(d) && !fechDayUnlocked(d);
+    const isWe = fechIsWeekend(d);
+    const unlocked = isWe && fechDayUnlocked(d);
+    const locked = isWe && !unlocked;
     const cls=[d===fechDay?'sel':'', w===0?'sun':'', w===6?'sat':'', fechHasData(d)?'has':'', locked?'fech-locked':''].filter(Boolean).join(' ');
-    const unlock = locked ? `<button type="button" class="fech-unlock-day" data-day="${d}" title="Desbloquear fim de semana">🔓</button>` : (fechIsWeekend(d) && fechDayUnlocked(d) ? `<span class="wd" style="color:var(--accent-2)">✓</span>` : "");
-    return `<button type="button" class="${cls}" data-d="${d}">${d}<span class="wd">${dn[w]}</span>${unlock}</button>`;
+    const lockCtrl = isWe ? (locked
+      ? `<button type="button" class="fech-unlock-day" data-day="${d}" title="Desbloquear fim de semana">🔓</button>`
+      : `<button type="button" class="fech-lock-day" data-day="${d}" title="Bloquear fim de semana">🔒</button>`) : "";
+    return `<button type="button" class="${cls}" data-d="${d}">${d}<span class="wd">${dn[w]}</span>${lockCtrl}</button>`;
   }).join("");
-  el.querySelectorAll("button[data-d]").forEach(b=>b.onclick=(e)=>{ if(e.target.closest(".fech-unlock-day")) return; fechDay=+b.dataset.d; renderFechamento(); });
-  el.querySelectorAll(".fech-unlock-day").forEach(btn=>btn.onclick=(e)=>{ e.stopPropagation(); unlockFechDay(+btn.dataset.day); });
+  el.querySelectorAll("button[data-d]").forEach(b=>b.onclick=(e)=>{ if(e.target.closest(".fech-unlock-day, .fech-lock-day")) return; fechDay=+b.dataset.d; renderFechamento(); });
+  el.querySelectorAll(".fech-unlock-day, .fech-lock-day").forEach(btn=>btn.onclick=(e)=>{ e.stopPropagation(); toggleFechDayLock(+btn.dataset.day); });
 }
 function fechNumCell(day,key,val){ return `<td><input class="cellinput fechcell" data-day="${day}" data-key="${key}" value="${val??''}" placeholder="0"></td>`; }
 function renderFechamento(){
@@ -4201,10 +4165,33 @@ function renderSync(){
   };
 }
 
+function setupDiarioLockDelegation() {
+  const table = document.getElementById("diarioTable");
+  if (!table || table.dataset.lockDelegation) return;
+  table.dataset.lockDelegation = "1";
+  table.addEventListener("click", e => {
+    const ul = e.target.closest(".dio-unlock-day");
+    if (ul) {
+      e.preventDefault();
+      e.stopPropagation();
+      unlockDiarioDay(+ul.dataset.day);
+      toast("Dia " + ul.dataset.day + " liberado para edição");
+      return;
+    }
+    const lk = e.target.closest(".dio-lock-day");
+    if (lk) {
+      e.preventDefault();
+      e.stopPropagation();
+      lockDiarioDay(+lk.dataset.day);
+      toast("Dia " + lk.dataset.day + " bloqueado");
+    }
+  });
+}
 function init() {
   applyTheme(); syncStore();
   monthData(); save();
   setupMonthPicker();
+  setupDiarioLockDelegation();
   updateWorkdaysBadge();
   document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => showView(b.dataset.view));
   applyTabOrder(); setupTabDnD();
