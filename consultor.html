@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v13";
+  var BUILD = "v14";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -420,7 +420,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v13";
+const APP_BUILD = "v14";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -581,18 +581,14 @@ function weeksOf(m) {
 function weekForDay(day, m = todayISO()) {
   return weeksOf(m).find(w => w.includes(day)) || [day];
 }
-function weekHasWorkedSunday(sellerId, days, m = todayISO()) {
-  return (days || []).some(d => isSunday(m, d) && sellerWorks(sellerId, d, m));
-}
-function countSellerSaturdays(sellerId, m = todayISO()) {
-  let c = 0;
-  for (let d = 1; d <= daysInMonth(m); d++) if (weekday(m, d) === 6 && sellerWorks(sellerId, d, m)) c++;
-  return c;
-}
-function countSellerSundays(sellerId, m = todayISO()) {
-  let c = 0;
-  for (let d = 1; d <= daysInMonth(m); d++) if (weekday(m, d) === 0 && sellerWorks(sellerId, d, m)) c++;
-  return c;
+/** Sub só domingo: preenche na véspera (ex. sábado), não no domingo. */
+function consultorSundayOnlyActive(sellerId, day, m = todayISO()) {
+  if (isSunday(m, day)) return false;
+  const week = weekForDay(day, m);
+  const sunDay = week.find(d => isSunday(m, d) && sellerWorks(sellerId, d, m));
+  if (!sunDay || day >= sunDay) return false;
+  if (day !== sunDay - 1) return false;
+  return sellerWorks(sellerId, day, m);
 }
 function consultorMetaSummary(cfg, sellerId, m = todayISO()) {
   const parts = [];
@@ -602,36 +598,23 @@ function consultorMetaSummary(cfg, sellerId, m = todayISO()) {
   const metaMonth = Number(cfg.metaMonth) || 0;
   if (cfg.sundayOnly) {
     const domMeta = metaSun > 0 ? metaSun : metaDay;
-    if (domMeta > 0) {
-      const nd = countSellerSundays(sellerId, m);
-      parts.push(`Meta do Domingo: ${fmt(domMeta)}${nd ? ` (${nd} domingos)` : ""}`);
-    }
+    if (domMeta > 0) parts.push(`Meta do Domingo: ${fmt(domMeta)}`);
     if (metaDay > 0 && metaSun > 0) parts.unshift(`Meta do dia: ${fmt(metaDay)}`);
   } else {
     if (metaDay > 0) parts.push(`Meta do dia: ${fmt(metaDay)}`);
-    if (metaSat > 0) {
-      const ns = countSellerSaturdays(sellerId, m);
-      parts.push(`Meta do Sábado: ${fmt(metaSat)}${ns ? ` (${ns} sábados)` : ""}`);
-    }
-    if (metaSun > 0) {
-      const nd = countSellerSundays(sellerId, m);
-      parts.push(`Meta do Domingo: ${fmt(metaSun)}${nd ? ` (${nd} domingos)` : ""}`);
-    }
+    if (metaSat > 0) parts.push(`Meta do Sábado: ${fmt(metaSat)}`);
+    if (metaSun > 0) parts.push(`Meta do Domingo: ${fmt(metaSun)}`);
   }
   if (metaMonth > 0) parts.push(`Meta Consultor: ${fmt(metaMonth)}`);
   return parts.join('<span class="meta-sep"> &gt; </span>');
 }
-function consultorFieldGated(sellerId, cfg, day, m = todayISO()) {
-  return !!(cfg.sundayOnly && !weekHasWorkedSunday(sellerId, weekForDay(day, m), m));
-}
 function consultorFieldNeeds(sellerId, cfg, day, m = todayISO()) {
-  if (consultorFieldGated(sellerId, cfg, day, m)) return { checkin: false, checkout: false };
   if (!sellerWorks(sellerId, day, m)) return { checkin: false, checkout: false };
-  const wd = weekday(m, day);
   if (cfg.sundayOnly) {
-    if (wd !== 0) return { checkin: false, checkout: false };
+    if (!consultorSundayOnlyActive(sellerId, day, m)) return { checkin: false, checkout: false };
     return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
   }
+  const wd = weekday(m, day);
   const metaSat = Number(cfg.metaSat) || 0;
   const metaDay = Number(cfg.metaDay) || 0;
   const metaSun = Number(cfg.metaSun) || 0;
