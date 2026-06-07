@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v9";
+  var BUILD = "v10";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -419,7 +419,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v9";
+const APP_BUILD = "v10";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -750,9 +750,8 @@ function isVendaIndicator(cfg) {
   if (cfg.role === "venda") return true;
   return /venda/i.test(cfg.name || "");
 }
-/** Ranking: vendas sempre usa score % (maior melhor); demais indicadores respeitam ↓ se configurado. */
-function rankUsesLowerBetter(cfg, parentInd) {
-  if (isVendaIndicator(cfg)) return false;
+/** Score % no ranking: indicador pode ser ↓ (ex. vendas 2,2 vs meta 2,9 → 132%), mas maior % sempre vence. */
+function rankScoreLowerBetter(cfg, parentInd) {
   return cfgLowerBetter(cfg, parentInd);
 }
 function fieldProjStats(cfg, sellerId, m = todayISO(), parentInd = null) {
@@ -871,7 +870,7 @@ function compareTeamRankRows(a, b, lb, isVenda) {
 }
 function buildTeamRankRows(fieldId, cfg, m = todayISO(), parentInd = null) {
   const isVenda = isVendaIndicator(cfg);
-  const lb = rankUsesLowerBetter(cfg, parentInd);
+  const lb = rankScoreLowerBetter(cfg, parentInd);
   const days = monthDays(m);
   return orderedSellers().map(s => {
     const real = matrizFieldValue(s.id, fieldId, days, "mes", m);
@@ -911,7 +910,7 @@ function teamRankByProjPct(fieldId, cfg, sellerId, m = todayISO(), parentInd = n
   const total = rows.length;
   if (!total) return { pos: 0, total: 0, note: null };
   const isVenda = isVendaIndicator(cfg);
-  const lb = rankUsesLowerBetter(cfg, parentInd);
+  const lb = rankScoreLowerBetter(cfg, parentInd);
   const mine = rows.find(r => r.id === sellerId);
   return {
     pos: mine ? mine.pos : 0,
@@ -1086,7 +1085,7 @@ function renderResumo() {
         </div>
         <div class="resumo-chip-item">
           <span class="resumo-chip" style="color:var(--accent-2)">${vendaRankTxt}</span>
-          <span class="resumo-chip-leg">Score % (maior melhor) · desempate: aderência, acurácia e projeção.</span>
+          <span class="resumo-chip-leg">Score % (↓ no valor, maior % melhor) · empate: score, aderência, acurácia, projeção.</span>
           ${vendaRank.note ? `<span class="resumo-rank-note" style="margin-top:4px;display:block;">${vendaRank.note}</span>` : ""}
         </div>
       </div>
