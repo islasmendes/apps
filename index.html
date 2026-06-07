@@ -336,9 +336,13 @@
   .switch input:checked + .track { background: var(--accent); }
   .switch input:checked + .track::after { left: 18px; }
   /* Foco */
-  .foco-seller-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; margin: 12px 0 4px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px; }
-  .foco-seller-bar .hint { margin: 0; white-space: nowrap; }
-  .foco-chart-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 8px; }
+  .foco-seller-bar, .foco-ind-bar, .foco-period-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; margin: 8px 0 4px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px; }
+  .foco-seller-bar { margin-top: 12px; }
+  .foco-seller-bar .hint, .foco-ind-bar .hint, .foco-period-bar .hint { margin: 0; white-space: nowrap; }
+  .foco-period-bar .field { margin: 0; }
+  .foco-period-bar .field label { font-size: 10px; }
+  .foco-period-bar select { padding: 4px 8px; font-size: 12px; min-width: 72px; }
+  .foco-ind-chip.active { font-weight: 700; }
   .foco-charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; margin-top: 14px; }
   .foco-chart-panel canvas { width: 100%; display: block; }
   .foco-chart-legend { display: flex; flex-wrap: wrap; gap: 12px 18px; font-size: 11.5px; color: var(--text-dim); margin-top: 8px; }
@@ -553,29 +557,26 @@
     <div class="panel">
       <h2>Foco</h2>
       <div class="sub">Disciplina de check-in/out, acuracidade do relato e evolução mensal por consultor.</div>
-      <details class="help foco-help" style="margin-top:8px;"><summary>O que significa cada bloco?</summary><div><b>Check-in / check-out</b> — dias encerrados na escala sem plano da manhã ou sem realizado do dia.<br><b>Relato furado</b> — acuracidade do relato (check-out × sistema).<br><b>Dias completos</b> — dias com check-in e check-out ok.<br><b>Gráficos</b> — selecione o consultor nos chips e o indicador; ritmo acumulado no mês e histórico mês a mês.</div></details>
+      <details class="help foco-help" style="margin-top:8px;"><summary>O que significa cada bloco?</summary><div><b>Check-in / check-out</b> — dias encerrados na escala sem plano da manhã ou sem realizado do dia.<br><b>Relato furado</b> — acuracidade do relato (check-out × sistema).<br><b>Dias completos</b> — dias com check-in e check-out ok.<br><b>Ritmo</b> — meta ideal = média histórica × tendência do mês anterior (crescimento).<br><b>Histórico</b> — velas mês a mês (abertura = mês anterior, fechamento = realizado); compare indicadores no período escolhido.</div></details>
       <div class="hint" style="margin:14px 0 8px; text-transform:uppercase; letter-spacing:.4px; font-weight:700;">⚠ Atenção — quem chamar pra conversar</div>
       <div class="attn-cols" id="attnCols"></div>
     </div>
     <div class="foco-charts-grid">
       <div class="panel foco-chart-panel">
         <h2 style="margin:0;font-size:16px;">Ritmo do mês — real vs meta ideal</h2>
-        <div class="sub" style="margin-top:4px;">Curva acumulada no mês · linha tracejada = projeção de fechamento</div>
+        <div class="sub" style="margin-top:4px;">Meta ideal = média histórica ajustada pela tendência do mês anterior · tracejada = projeção</div>
         <div class="foco-seller-bar" id="focoRitmoSellerBar"></div>
-        <div class="foco-chart-controls">
-          <div class="field"><label>Indicador</label><select id="chartInd"></select></div>
-        </div>
+        <div class="foco-ind-bar" id="focoRitmoIndBar"></div>
         <canvas id="ritmoChart" height="280"></canvas>
         <div class="foco-chart-legend" id="ritmoChartLegend"></div>
       </div>
       <div class="panel foco-chart-panel">
         <h2 style="margin:0;font-size:16px;">Histórico mensal — produtividade</h2>
-        <div class="sub" style="margin-top:4px;">Realizado mês a mês (mesma matrícula · meses com escala ou lançamento)</div>
+        <div class="sub" style="margin-top:4px;">Velas por mês (abertura = mês anterior · fechamento = realizado) · selecione período e indicadores</div>
         <div class="foco-seller-bar" id="focoHistSellerBar"></div>
-        <div class="foco-chart-controls">
-          <div class="field"><label>Indicador</label><select id="histChartInd"></select></div>
-        </div>
-        <canvas id="histChart" height="300"></canvas>
+        <div class="foco-ind-bar" id="focoHistIndBar"></div>
+        <div class="foco-period-bar" id="focoHistPeriodBar"></div>
+        <canvas id="histChart" height="320"></canvas>
         <div class="foco-chart-legend" id="histChartLegend"></div>
       </div>
     </div>
@@ -836,6 +837,12 @@ function migrate(s) {
   if (!s.ui.matrizSort) s.ui.matrizSort = { key: null, dir: "desc" };
   if (!s.ui.focoAttnSort) s.ui.focoAttnSort = { checkin: "desc", checkout: "desc", acc: "asc", complete: "desc" };
   if (s.ui.focoSeller == null) s.ui.focoSeller = null;
+  if (!s.ui.focoRitmoInd) s.ui.focoRitmoInd = null;
+  if (!Array.isArray(s.ui.focoHistInds)) s.ui.focoHistInds = [];
+  const _cy = new Date().getFullYear(), _cm = new Date().getMonth() + 1;
+  if (!s.ui.focoHistYear) s.ui.focoHistYear = _cy;
+  if (!s.ui.focoHistFrom) s.ui.focoHistFrom = 1;
+  if (!s.ui.focoHistTo) s.ui.focoHistTo = _cm;
   const _duKey = (() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; })();
   if (!s.ui.diarioUnlock || s.ui.diarioUnlock.resetDate !== _duKey) {
     s.ui.diarioUnlock = { resetDate: _duKey, days: [], past: false, future: false, week: false };
@@ -3679,21 +3686,97 @@ function setupCanvas(cv, h = 280) {
   ctx.clearRect(0, 0, W, H);
   return { ctx, W, H };
 }
+function focoMainIndicators() { return state.indicators.filter(i => !i.pctOnly); }
 function focoSelectedSeller(sellers) {
   let sel = state.ui.focoSeller;
   if (!sel || !sellers.find(s => s.id === sel)) sel = sellers[0]?.id || null;
   state.ui.focoSeller = sel;
   return sel;
 }
+function focoSelectedRitmoInd(inds) {
+  let sel = state.ui.focoRitmoInd;
+  if (!sel || !inds.find(i => i.id === sel)) sel = inds[0]?.id || null;
+  state.ui.focoRitmoInd = sel;
+  return sel;
+}
+function focoSelectedHistInds(inds) {
+  let f = (state.ui.focoHistInds || []).filter(id => inds.some(i => i.id === id));
+  if (!f.length && inds.length) f = [inds[0].id];
+  state.ui.focoHistInds = f;
+  return f;
+}
+function monthShortLabel(m) {
+  const { y, mo } = parseMonth(m);
+  const months = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  return months[mo - 1] + "/" + String(y).slice(-2);
+}
+function monthKeyFrom(y, mo) { return `${y}-${String(mo).padStart(2, "0")}`; }
+function prevMonthKey(m) {
+  const { y, mo } = parseMonth(m);
+  return mo === 1 ? `${y - 1}-12` : monthKeyFrom(y, mo - 1);
+}
+function focoAvailableYears() {
+  const years = new Set();
+  Object.keys(state.months || {}).forEach(m => years.add(parseMonth(m).y));
+  years.add(parseMonth(currentMonth).y);
+  return [...years].sort((a, b) => b - a);
+}
+function focoMonthsInRange(year, fromMo, toMo) {
+  const from = Math.min(fromMo, toMo), to = Math.max(fromMo, toMo);
+  const out = [];
+  for (let mo = from; mo <= to; mo++) out.push(monthKeyFrom(year, mo));
+  return out;
+}
+function resolveSellerIdForMonth(sellerId, m) {
+  const seller = state.sellers.find(s => s.id === sellerId);
+  const mat = seller ? normalizeMatricula(seller.matricula) : "";
+  if (mat) {
+    const match = state.sellers.find(s => normalizeMatricula(s.matricula) === mat);
+    if (match) return match.id;
+  }
+  return sellerId;
+}
+function getSellerMonthReal(sellerId, fieldId, m) {
+  const sid = resolveSellerIdForMonth(sellerId, m);
+  const real = sellerRealForMonth(sid, fieldId, m);
+  if (real != null) return real;
+  return accum(sid, fieldId, "real", monthDays(m), m);
+}
+function sellerHistAvgBefore(sellerId, fieldId, beforeMonth) {
+  const months = Object.keys(state.months || {}).filter(m => m < beforeMonth).sort();
+  const vals = months.map(m => getSellerMonthReal(sellerId, fieldId, m)).filter(v => v != null);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+}
+function focoIdealMetaMonth(sellerId, fieldId, m = currentMonth) {
+  const histAvg = sellerHistAvgBefore(sellerId, fieldId, m);
+  const prevM = prevMonthKey(m);
+  const prevVal = getSellerMonthReal(sellerId, fieldId, prevM);
+  const cfg = cfgById(fieldId);
+  const fallback = cfg ? metaMonthFor(cfg) : 0;
+  if (histAvg == null && prevVal == null) return fallback;
+  if (histAvg == null) return Math.round(prevVal) || fallback;
+  if (prevVal == null) return Math.round(histAvg) || fallback;
+  const growth = histAvg > 0 ? prevVal / histAvg : 1;
+  const base = histAvg * 0.5 + prevVal * 0.5;
+  const ideal = growth >= 1
+    ? base * Math.min(1 + (growth - 1) * 0.5, 1.15)
+    : base * (0.9 + growth * 0.1);
+  return Math.max(Math.round(ideal), 1);
+}
+function focoIdealMetaBreakdown(sellerId, fieldId, m = currentMonth) {
+  const histAvg = sellerHistAvgBefore(sellerId, fieldId, m);
+  const prevM = prevMonthKey(m);
+  const prevVal = getSellerMonthReal(sellerId, fieldId, prevM);
+  const ideal = focoIdealMetaMonth(sellerId, fieldId, m);
+  const growth = histAvg != null && histAvg > 0 && prevVal != null ? prevVal / histAvg : null;
+  return { histAvg, prevVal, ideal, growth };
+}
 function renderFocoSellerToolbars(sellers) {
   const sel = focoSelectedSeller(sellers);
   ["focoRitmoSellerBar", "focoHistSellerBar"].forEach(barId => {
     const bar = document.getElementById(barId);
     if (!bar) return;
-    if (!sellers.length) {
-      bar.innerHTML = '<span class="muted">Cadastre consultores para ver os gráficos.</span>';
-      return;
-    }
+    if (!sellers.length) { bar.innerHTML = '<span class="muted">Cadastre consultores para ver os gráficos.</span>'; return; }
     bar.innerHTML = `<span class="hint">Consultor</span>
       <div class="matriz-filter-chips">${sellers.map(s =>
         `<button type="button" class="matriz-filter-chip${sel === s.id ? " active" : ""}" data-sid="${s.id}">${escapeHtml(s.name)}</button>`
@@ -3708,18 +3791,77 @@ function renderFocoSellerToolbars(sellers) {
     });
   });
 }
+function renderFocoIndToolbars(inds) {
+  const ritmoSel = focoSelectedRitmoInd(inds);
+  const ritmoBar = document.getElementById("focoRitmoIndBar");
+  if (ritmoBar) {
+    if (!inds.length) ritmoBar.innerHTML = '<span class="muted">Configure indicadores.</span>';
+    else {
+      ritmoBar.innerHTML = `<span class="hint">Indicador</span>
+        <div class="matriz-filter-chips">${inds.map(ind =>
+          `<button type="button" class="matriz-filter-chip foco-ind-chip${ritmoSel === ind.id ? " active" : ""}" data-iid="${ind.id}" style="${ritmoSel === ind.id ? "border-color:" + ind.color + ";color:" + ind.color : ""}">${escapeHtml(ind.name)}</button>`
+        ).join("")}</div>`;
+      ritmoBar.querySelectorAll(".foco-ind-chip").forEach(btn => {
+        btn.onclick = () => { state.ui.focoRitmoInd = btn.dataset.iid; save(); renderFocoIndToolbars(inds); drawFocoCharts(); };
+      });
+    }
+  }
+  const histSel = new Set(focoSelectedHistInds(inds));
+  const histBar = document.getElementById("focoHistIndBar");
+  if (histBar) {
+    if (!inds.length) histBar.innerHTML = '<span class="muted">Configure indicadores.</span>';
+    else {
+      histBar.innerHTML = `<span class="hint">Indicadores</span>
+        <div class="matriz-filter-chips">${inds.map(ind =>
+          `<button type="button" class="matriz-filter-chip foco-ind-chip${histSel.has(ind.id) ? " active" : ""}" data-iid="${ind.id}" style="${histSel.has(ind.id) ? "border-color:" + ind.color + ";color:" + ind.color : ""}">${escapeHtml(ind.name)}</button>`
+        ).join("")}</div>`;
+      histBar.querySelectorAll(".foco-ind-chip").forEach(btn => {
+        btn.onclick = () => {
+          const id = btn.dataset.iid;
+          let f = new Set(focoSelectedHistInds(inds));
+          if (f.has(id)) { if (f.size > 1) f.delete(id); }
+          else f.add(id);
+          state.ui.focoHistInds = [...f];
+          save();
+          renderFocoIndToolbars(inds);
+          drawFocoCharts();
+        };
+      });
+    }
+  }
+}
+function renderFocoPeriodBar() {
+  const bar = document.getElementById("focoHistPeriodBar");
+  if (!bar) return;
+  const years = focoAvailableYears();
+  const cy = parseMonth(currentMonth).y;
+  if (!years.includes(state.ui.focoHistYear)) state.ui.focoHistYear = years[0] || cy;
+  const moNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  const yearOpts = years.map(y => `<option value="${y}"${y === state.ui.focoHistYear ? " selected" : ""}>${y}</option>`).join("");
+  const fromOpts = moNames.map((n, i) => `<option value="${i + 1}"${i + 1 === state.ui.focoHistFrom ? " selected" : ""}>${n}</option>`).join("");
+  const toOpts = moNames.map((n, i) => `<option value="${i + 1}"${i + 1 === state.ui.focoHistTo ? " selected" : ""}>${n}</option>`).join("");
+  bar.innerHTML = `<span class="hint">Período</span>
+    <div class="field"><label>Ano</label><select id="focoHistYearSel">${yearOpts}</select></div>
+    <div class="field"><label>De</label><select id="focoHistFromSel">${fromOpts}</select></div>
+    <div class="field"><label>Até</label><select id="focoHistToSel">${toOpts}</select></div>`;
+  const bind = (id, key) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.onchange = () => { state.ui[key] = +el.value; save(); drawHistoricoChart(); };
+  };
+  bind("focoHistYearSel", "focoHistYear");
+  bind("focoHistFromSel", "focoHistFrom");
+  bind("focoHistToSel", "focoHistTo");
+}
 function renderFoco() {
   const sellers = orderedSellers();
+  const inds = focoMainIndicators();
   const metrics = sellers.map(s => ({ s, ...sellerMetrics(s.id) }));
   _focoLastMetrics = metrics;
   renderFocoAttnCols(metrics);
   renderFocoSellerToolbars(sellers);
-
-  const indOpts = state.indicators.filter(i => !i.pctOnly).map(i => `<option value="${i.id}">${escapeHtml(i.name)}</option>`).join("");
-  const ci = document.getElementById("chartInd");
-  const hi = document.getElementById("histChartInd");
-  if (ci) { ci.innerHTML = indOpts; if (!ci.dataset.bound) { ci.addEventListener("change", drawFocoCharts); ci.dataset.bound = "1"; } }
-  if (hi) { hi.innerHTML = indOpts; if (!hi.dataset.bound) { hi.addEventListener("change", drawFocoCharts); hi.dataset.bound = "1"; } }
+  renderFocoIndToolbars(inds);
+  renderFocoPeriodBar();
   if (!window._focoResizeBound) {
     window._focoResizeBound = 1;
     window.addEventListener("resize", () => { if (activeView === "foco") drawFocoCharts(); });
@@ -3727,16 +3869,12 @@ function renderFoco() {
   drawFocoCharts();
 }
 function drawFocoCharts() { drawRitmo(); drawHistoricoChart(); }
-function monthShortLabel(m) {
-  const { y, mo } = parseMonth(m);
-  const months = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-  return months[mo - 1] + "/" + String(y).slice(-2);
-}
 function drawRitmo() {
   const cv = document.getElementById("ritmoChart");
-  const indId = document.getElementById("chartInd")?.value;
-  const ind = state.indicators.find(i => i.id === indId);
   const leg = document.getElementById("ritmoChartLegend");
+  const inds = focoMainIndicators();
+  const indId = focoSelectedRitmoInd(inds);
+  const ind = state.indicators.find(i => i.id === indId);
   if (!ind || !cv) return;
   const sellers = orderedSellers();
   const who = focoSelectedSeller(sellers);
@@ -3747,23 +3885,24 @@ function drawRitmo() {
     if (leg) leg.innerHTML = "";
     return;
   }
-  const ids = [who];
   const n = daysInMonth(currentMonth);
   const totalWorked = sellerWorkedCount(who) || 1;
-  const metaTotal = metaMonthFor(ind);
+  const metaTotal = focoIdealMetaMonth(who, ind.id);
+  const breakdown = focoIdealMetaBreakdown(who, ind.id);
   const realCum = [];
   let run = 0;
   for (let d = 1; d <= n; d++) {
-    ids.forEach(id => { const c = getCell(id, ind.id, d); if (c.real != null) run += Number(c.real); });
+    const c = getCell(who, ind.id, d);
+    if (c.real != null) run += Number(c.real);
     realCum.push(run);
   }
   const metaLine = [];
   for (let d = 1; d <= n; d++) {
     let wc = 0;
-    ids.forEach(id => { for (let k = 1; k <= d; k++) if (sellerWorks(id, k)) wc++; });
+    for (let k = 1; k <= d; k++) if (sellerWorks(who, k)) wc++;
     metaLine.push(metaTotal * wc / totalWorked);
   }
-  const projTotal = teamProjVal(ids, ind.id);
+  const projTotal = sellerProjVal(who, ind.id);
   const c = focoChartColors();
   const projColor = projTotal >= metaTotal ? c.ok : (projTotal >= metaTotal * 0.9 ? c.warn : c.danger);
   const { ctx, W, H } = setupCanvas(cv, 280);
@@ -3784,7 +3923,7 @@ function drawRitmo() {
     ctx.globalAlpha = 1; ctx.fillText(Math.round(v), 6, y + 3);
   }
   for (let d = 1; d <= n; d += Math.ceil(n / 10)) ctx.fillText(d, X(d - 1) - 4, H - 8);
-  line(metaLine.map((v, i) => [X(i), Y(v)]), c.dim, [6, 5]);
+  line(metaLine.map((v, i) => [X(i), Y(v)]), c.warn, [6, 5], 2);
   const elapsedIdx = daysElapsedIndex();
   const realPts = realCum.map((v, i) => [X(i), Y(v)]).slice(0, Math.min(n, elapsedIdx + 1));
   line(realPts, c.accent, null, 2.5);
@@ -3794,58 +3933,68 @@ function drawRitmo() {
     ctx.fillStyle = projColor; ctx.beginPath(); ctx.arc(X(n - 1), Y(projTotal), 3.5, 0, Math.PI * 2); ctx.fill();
   }
   const seller = state.sellers.find(s => s.id === who);
-  if (leg) leg.innerHTML = `<span class="muted">${escapeHtml(seller?.name || "—")}</span><span><i style="background:${c.accent}"></i> Real acumulado</span><span><i style="background:${c.dim}"></i> Meta ideal (escala)</span><span><i style="background:${projColor}"></i> Projeção ${Math.round(projTotal)} (${pctTxt(metaTotal ? projTotal / metaTotal : null)} da meta)</span>`;
+  const growthTxt = breakdown.growth != null ? ` · tendência ${breakdown.growth >= 1 ? "+" : ""}${pctTxt(breakdown.growth - 1)}` : "";
+  if (leg) leg.innerHTML =
+    `<span class="muted">${escapeHtml(seller?.name || "—")} · ${escapeHtml(ind.name)}</span>` +
+    `<span><i style="background:${c.accent}"></i> Real acumulado</span>` +
+    `<span><i style="background:${c.warn}"></i> Meta ideal ${Math.round(metaTotal)}${breakdown.histAvg != null ? " (méd. " + Math.round(breakdown.histAvg) + (breakdown.prevVal != null ? " · ant. " + Math.round(breakdown.prevVal) : "") + ")" : ""}${growthTxt}</span>` +
+    `<span><i style="background:${projColor}"></i> Projeção ${Math.round(projTotal)} (${pctTxt(metaTotal ? projTotal / metaTotal : null)} da meta)</span>`;
 }
-function sellerMonthlyHistory(sellerId, fieldId) {
-  const seller = state.sellers.find(s => s.id === sellerId);
-  const mat = seller ? normalizeMatricula(seller.matricula) : "";
-  const months = Object.keys(state.months || {}).sort();
-  return months.map(m => {
-    let sid = sellerId;
-    if (mat) {
-      const match = state.sellers.find(s => normalizeMatricula(s.matricula) === mat);
-      if (match) sid = match.id;
-    }
-    const days = monthDays(m);
-    const real = accum(sid, fieldId, "real", days, m);
-    const cfg = cfgById(fieldId);
-    const meta = cfg ? metaMonthFor(cfg) : 0;
-    const proj = sellerProjVal(sid, fieldId, m);
-    const worked = sellerWorkedCount(sid, m) > 0;
-    if (real == null && !proj && !worked) return null;
-    const realVal = real ?? 0;
-    return { m, label: monthShortLabel(m), real: realVal, meta, proj, pct: meta > 0 ? realVal / meta : null };
-  }).filter(Boolean);
+function drawFocoCandle(ctx, x, open, close, high, low, Y, barW, upColor, downColor) {
+  const yH = Y(high), yL = Y(low), yO = Y(open), yC = Y(close);
+  const up = close >= open, color = up ? upColor : downColor;
+  ctx.strokeStyle = color; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x, yH); ctx.lineTo(x, yL); ctx.stroke();
+  const bodyTop = Math.min(yO, yC);
+  const bodyH = Math.max(Math.abs(yC - yO), 2);
+  ctx.fillStyle = color;
+  ctx.fillRect(x - barW / 2, bodyTop, barW, bodyH);
 }
 function drawHistoricoChart() {
   const cv = document.getElementById("histChart");
-  const indId = document.getElementById("histChartInd")?.value;
   const leg = document.getElementById("histChartLegend");
-  const ind = state.indicators.find(i => i.id === indId);
-  if (!cv || !ind) return;
+  if (!cv) return;
   const sellers = orderedSellers();
   const who = focoSelectedSeller(sellers);
+  const indIds = focoSelectedHistInds(focoMainIndicators());
   const c = focoChartColors();
-  const { ctx, W, H } = setupCanvas(cv, 300);
-  const pad = { l: 48, r: 14, t: 28, b: 52 };
-  if (!who) {
+  const { ctx, W, H } = setupCanvas(cv, 320);
+  const pad = { l: 48, r: 14, t: 32, b: 56 };
+  if (!who || !indIds.length) {
     ctx.fillStyle = c.dim; ctx.font = "13px sans-serif";
-    ctx.fillText("Cadastre consultores para ver o histórico.", pad.l, H / 2);
+    ctx.fillText(!who ? "Cadastre consultores para ver o histórico." : "Selecione ao menos um indicador.", pad.l, H / 2);
     if (leg) leg.innerHTML = "";
     return;
   }
-  const hist = sellerMonthlyHistory(who, ind.id);
-  if (!hist.length) {
+  const months = focoMonthsInRange(state.ui.focoHistYear, state.ui.focoHistFrom, state.ui.focoHistTo);
+  if (!months.length) {
     ctx.fillStyle = c.dim; ctx.font = "13px sans-serif";
-    ctx.fillText("Sem histórico ainda — lance check-outs ou defina escala nos meses anteriores.", pad.l, H / 2);
+    ctx.fillText("Ajuste o período (ano e meses).", pad.l, H / 2);
     if (leg) leg.innerHTML = "";
     return;
   }
-  const maxY = Math.max(...hist.map(h => Math.max(h.real, h.meta, h.proj || 0)), 1) * 1.12;
+  const series = indIds.map(indId => {
+    const ind = state.indicators.find(i => i.id === indId);
+    const prevM = prevMonthKey(months[0]);
+    let prevReal = getSellerMonthReal(who, indId, prevM);
+    const points = months.map(m => {
+      const close = getSellerMonthReal(who, indId, m) ?? 0;
+      const open = prevReal != null ? prevReal : close;
+      const ideal = focoIdealMetaMonth(who, indId, m);
+      const high = Math.max(open, close, ideal);
+      const low = Math.min(open, close);
+      prevReal = close;
+      return { m, label: monthShortLabel(m), open, close, high, low, ideal };
+    });
+    return { ind, points };
+  });
+  const allVals = series.flatMap(s => s.points.flatMap(p => [p.high, p.ideal]));
+  const maxY = Math.max(...allVals, 1) * 1.12;
   const chartW = W - pad.l - pad.r;
-  const n = hist.length;
-  const slot = chartW / n;
-  const barW = Math.min(40, Math.max(14, slot * 0.52));
+  const nMonths = months.length;
+  const nInds = series.length;
+  const monthSlot = chartW / nMonths;
+  const candleW = Math.min(18, Math.max(6, (monthSlot / nInds) * 0.65));
   const Y = v => H - pad.b - (H - pad.t - pad.b) * (v / maxY);
   ctx.strokeStyle = c.grid; ctx.fillStyle = c.dim; ctx.font = "11px sans-serif";
   for (let g = 0; g <= 4; g++) {
@@ -3853,40 +4002,36 @@ function drawHistoricoChart() {
     ctx.globalAlpha = .35; ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillText(Math.round(v), 6, y + 4);
   }
-  hist.forEach((h, i) => {
-    const cx = pad.l + slot * i + slot / 2;
-    const barTop = Y(h.real);
-    const barH = Math.max(H - pad.b - barTop, h.real > 0 ? 2 : 0);
-    const barColor = h.pct == null ? c.accent : (h.pct >= 0.79 ? c.ok : (h.pct >= 0.51 ? c.warn : c.danger));
-    ctx.fillStyle = barColor;
-    ctx.fillRect(cx - barW / 2, barTop, barW, barH);
-    if (h.meta > 0) {
-      const my = Y(h.meta);
-      ctx.strokeStyle = c.dim; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
-      ctx.beginPath(); ctx.moveTo(cx - barW / 2 - 4, my); ctx.lineTo(cx + barW / 2 + 4, my); ctx.stroke();
-      ctx.setLineDash([]);
-    }
-    if (h.real > 0) {
-      ctx.fillStyle = c.text; ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center";
-      ctx.fillText(Math.round(h.real), cx, barTop - 5);
-    }
+  months.forEach((m, mi) => {
+    const slotX = pad.l + monthSlot * mi;
     ctx.fillStyle = c.dim; ctx.font = "10px sans-serif"; ctx.textAlign = "center";
-    ctx.fillText(h.label, cx, H - pad.b + 16);
-    if (h.pct != null) {
-      ctx.fillStyle = barColor; ctx.font = "9px sans-serif";
-      ctx.fillText(pctTxt(h.pct), cx, H - pad.b + 30);
-    }
+    ctx.fillText(monthShortLabel(m), slotX + monthSlot / 2, H - pad.b + 18);
+    series.forEach((s, si) => {
+      const p = s.points[mi];
+      const cx = slotX + (monthSlot / (nInds + 1)) * (si + 1);
+      drawFocoCandle(ctx, cx, p.open, p.close, p.high, p.low, Y, candleW, s.ind.color || c.ok, c.danger);
+      if (p.ideal > 0) {
+        const iy = Y(p.ideal);
+        ctx.strokeStyle = c.dim; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(cx - candleW / 2 - 2, iy); ctx.lineTo(cx + candleW / 2 + 2, iy); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (p.close > 0) {
+        ctx.fillStyle = c.text; ctx.font = "bold 9px sans-serif"; ctx.textAlign = "center";
+        ctx.fillText(Math.round(p.close), cx, Y(p.close) - 4);
+      }
+    });
   });
   const seller = state.sellers.find(s => s.id === who);
-  const avgPct = (() => {
-    const vals = hist.filter(h => h.pct != null).map(h => h.pct);
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-  })();
+  const moShort = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const pFrom = Math.min(state.ui.focoHistFrom, state.ui.focoHistTo);
+  const pTo = Math.max(state.ui.focoHistFrom, state.ui.focoHistTo);
+  const periodLbl = `${moShort[pFrom - 1]}–${moShort[pTo - 1]}/${String(state.ui.focoHistYear).slice(-2)}`;
   if (leg) leg.innerHTML =
-    `<span><i style="background:${c.accent}"></i> Realizado no mês</span>` +
-    `<span><i style="background:transparent;border:1px dashed ${c.dim}"></i> Meta do consultor</span>` +
-    `<span class="muted">${escapeHtml(seller?.name || "—")}${seller?.matricula ? " · mat. " + escapeHtml(seller.matricula) : ""}</span>` +
-    (avgPct != null ? `<span style="color:${heatMatrizText(avgPct)}">Média ${pctTxt(avgPct)} da meta</span>` : "");
+    series.map(s => `<span><i style="background:${s.ind.color || c.accent}"></i> ${escapeHtml(s.ind.name)}</span>`).join("") +
+    `<span><i style="background:transparent;border:1px dashed ${c.dim}"></i> Meta ideal</span>` +
+    `<span class="muted">${escapeHtml(seller?.name || "—")} · ${periodLbl}</span>` +
+    `<span class="muted">verde = subiu · vermelho = caiu vs mês anterior</span>`;
 }
 function daysElapsedIndex() { return todayISO() === currentMonth ? new Date().getDate() - 1 : daysInMonth(currentMonth) - 1; }
 
