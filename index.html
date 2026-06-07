@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v10";
+  var BUILD = "v11";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -191,6 +191,18 @@
   #diarioTable td.dio-locked-day .cellinput.checkout-cell { background: color-mix(in srgb, var(--panel-2) 65%, var(--border)) !important; border-color: color-mix(in srgb, var(--border) 88%, transparent) !important; }
   .dio-lock-all { border-color: color-mix(in srgb, var(--warn) 55%, var(--border)) !important; color: var(--warn) !important; }
   .dio-lock-all:hover { border-color: var(--warn) !important; background: color-mix(in srgb, var(--warn) 12%, var(--panel-2)) !important; }
+  .dio-clear-week-wrap { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+  .dio-clear-arm {
+    cursor: pointer; border: 1px dashed var(--border); background: transparent; color: var(--text-dim);
+    border-radius: 8px; padding: 4px 8px; font-size: 14px; line-height: 1; font-family: var(--font);
+  }
+  .dio-clear-arm.on { border-color: var(--accent-2); color: var(--accent-2); background: color-mix(in srgb, var(--accent-2) 10%, var(--panel-2)); }
+  .dio-clear-week {
+    border-color: color-mix(in srgb, var(--danger) 55%, var(--border)) !important;
+    color: #ff8a94 !important;
+  }
+  .dio-clear-week:not(:disabled):hover { border-color: var(--danger) !important; background: color-mix(in srgb, var(--danger) 12%, var(--panel-2)) !important; }
+  .dio-clear-week:disabled { opacity: 0.38; cursor: not-allowed; }
   th.today, td.today { background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)) !important; }
   th.col-sun, td.col-sun { opacity: .5; }
   #diarioTable tbody tr.dgroup td { border-top: 2px solid var(--gc); }
@@ -1226,9 +1238,58 @@ function unlockDiarioBulk(mode) {
 }
 function lockDiarioAll() {
   state.ui.diarioUnlock = { resetDate: todayDateKey(), days: [], past: false, future: false, week: false };
+  diarioClearWeekArmed = false;
   save({ skipConfigPush: true });
   renderDiario();
   toast("Tudo bloqueado — só hoje editável");
+}
+let diarioClearWeekArmed = false;
+function toggleDiarioClearWeekArm() {
+  diarioClearWeekArmed = !diarioClearWeekArmed;
+  renderDiarioLockBar();
+  toast(diarioClearWeekArmed ? "Botão de limpar semana liberado" : "Limpar semana bloqueado");
+}
+function purgeDiarioDailyCell(md, sellerId, fieldId, day) {
+  const days = md.daily?.[sellerId]?.[fieldId];
+  if (!days || !days[day]) return;
+  if (Object.keys(days[day]).length) return;
+  delete days[day];
+  if (!Object.keys(days).length) {
+    delete md.daily[sellerId][fieldId];
+    if (!Object.keys(md.daily[sellerId]).length) delete md.daily[sellerId];
+  }
+}
+function clearDiarioWeekResults() {
+  if (!diarioClearWeekArmed) return;
+  const days = diarioWeekDays();
+  if (!days.length) return;
+  const weekLbl = `Sem ${diarioWeekIdx + 1} (dias ${days[0]}–${days[days.length - 1]})`;
+  const nSellers = orderedSellers().length;
+  if (!nSellers) return;
+  if (!confirm(`Limpar check-in e check-out de TODOS os ${nSellers} vendedores na ${weekLbl}?\n\nOs valores do diário serão apagados. Esta ação não tem desfazer automático.`)) return;
+  const fieldIds = [];
+  orderedIndicators().forEach(ind => {
+    if (ind.pctOnly) return;
+    if (cfgHasDiario(ind)) fieldIds.push(ind.id);
+    (ind.subs || []).filter(cfgHasDiario).forEach(s => fieldIds.push(s.id));
+  });
+  if (!fieldIds.length) { toast("Nenhum indicador com check-in/out no diário."); return; }
+  const md = monthData(currentMonth);
+  md.daily = md.daily || {};
+  orderedSellers().forEach(s => {
+    fieldIds.forEach(fid => {
+      days.forEach(d => {
+        if (!md.daily[s.id]?.[fid]?.[d]) return;
+        const cell = md.daily[s.id][fid][d];
+        ["plan", "real", "planBy", "realBy", "planAt", "realAt"].forEach(k => delete cell[k]);
+        purgeDiarioDailyCell(md, s.id, fid, d);
+      });
+    });
+  });
+  diarioClearWeekArmed = false;
+  save();
+  renderDiario();
+  toast(`${weekLbl} limpa para todos os vendedores`);
 }
 function diarioDayHeadHtml(d, dn) {
   const wd = weekday(currentMonth, d);
@@ -1252,12 +1313,20 @@ function renderDiarioLockBar() {
     <button type="button" class="ghost-btn sm dio-bulk-unlock${u.future ? " active" : ""}" data-mode="future">${u.future ? "Futuro liberado" : "Desbloquear futuro"}</button>
     <button type="button" class="ghost-btn sm dio-bulk-unlock${u.week ? " active" : ""}" data-mode="week">${u.week ? "Semana liberada" : "Desbloquear semana"}</button>
     <button type="button" class="ghost-btn sm dio-lock-all" id="dioLockAll">Bloquear tudo novamente</button>
-    <span class="hint">Valores sempre visíveis · à 00:00 tudo trava de novo</span>`;
+    <span class="hint">Valores sempre visíveis · à 00:00 tudo trava de novo</span>
+    <span class="dio-clear-week-wrap">
+      <button type="button" class="dio-clear-arm${diarioClearWeekArmed ? " on" : ""}" id="dioClearWeekArm" title="${diarioClearWeekArmed ? "Bloquear botão de limpar" : "Desbloquear para limpar a semana"}">${diarioClearWeekArmed ? "🔓" : "🔒"}</button>
+      <button type="button" class="ghost-btn sm dio-clear-week" id="dioClearWeek" ${diarioClearWeekArmed ? "" : "disabled"}>Limpar resultados da Semana</button>
+    </span>`;
   bar.querySelectorAll(".dio-bulk-unlock").forEach(btn => {
     btn.onclick = () => unlockDiarioBulk(btn.dataset.mode);
   });
   const lockAll = document.getElementById("dioLockAll");
   if (lockAll) lockAll.onclick = () => lockDiarioAll();
+  const arm = document.getElementById("dioClearWeekArm");
+  if (arm) arm.onclick = () => toggleDiarioClearWeekArm();
+  const clearBtn = document.getElementById("dioClearWeek");
+  if (clearBtn) clearBtn.onclick = () => clearDiarioWeekResults();
 }
 function autoWorkdays(m) { let c = 0; const n = daysInMonth(m); for (let d = 1; d <= n; d++) if (!isSunday(m, d)) c++; return c; }
 function countWeekdays(m){ let c=0; const n=daysInMonth(m); for(let d=1;d<=n;d++){ const w=weekday(m,d); if(w>=1&&w<=5) c++; } return c; }
@@ -1454,7 +1523,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v10";
+const APP_BUILD = "v11";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3330,7 +3399,7 @@ function renderDiario() {
   const weeks = weeksOf(currentMonth);
   const segW = document.getElementById("diarioWeeks");
   segW.innerHTML = weeks.map((w, i) => `<button data-w="${i}" class="${i===diarioWeekIdx?'active':''}">Sem ${i+1}<br><span style="font-size:9px;opacity:.7">${w[0]}-${w[w.length-1]}</span></button>`).join("");
-  segW.querySelectorAll("button").forEach(b => b.onclick = () => { diarioWeekIdx = +b.dataset.w; state.ui.diarioWeek = diarioWeekIdx; save(); renderDiario(); });
+  segW.querySelectorAll("button").forEach(b => b.onclick = () => { diarioWeekIdx = +b.dataset.w; state.ui.diarioWeek = diarioWeekIdx; diarioClearWeekArmed = false; save(); renderDiario(); });
   if (diarioWeekIdx >= weeks.length) diarioWeekIdx = 0;
   const days = weeks[diarioWeekIdx] || []; const dn = ["DOM","SEG","TER","QUA","QUI","SEX","SÁB"];
 
