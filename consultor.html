@@ -6,6 +6,30 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
+<script>
+(function () {
+  var BUILD = "v5";
+  var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
+  function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
+  function norm(b) {
+    var u = new URL(location.href);
+    if (u.searchParams.get("v") !== b) { u.searchParams.set("v", b); history.replaceState(null, "", u.toString()); }
+  }
+  function jump(b) {
+    if (sessionStorage.getItem("gc_build_fail") === b) return;
+    sessionStorage.setItem("gc_build_fail", b);
+    var u = new URL(location.href);
+    u.searchParams.set("v", b);
+    u.searchParams.set("_", String(Date.now()));
+    location.replace(u.toString());
+  }
+  fetch(FB, { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (remote) {
+    if (!remote) { norm(BUILD); return; }
+    if (num(remote) > num(BUILD)) jump(remote);
+    else { sessionStorage.removeItem("gc_build_fail"); norm(BUILD); }
+  }).catch(function () { norm(BUILD); });
+})();
+</script>
 <meta name="theme-color" content="#050506">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Meu Dia — Gestão Alta Performance</title>
@@ -388,7 +412,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v4";
+const APP_BUILD = "v5";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -1349,8 +1373,24 @@ async function tryRestore() {
     return true;
   } catch (e) { return false; }
 }
+function buildNum(v) {
+  const m = String(v || "").match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+function normalizeAppUrl(build = APP_BUILD) {
+  const u = new URL(location.href);
+  if (u.searchParams.get("v") !== build) {
+    u.searchParams.set("v", build);
+    history.replaceState(null, "", u.toString());
+  }
+}
+function redirectToAppBuild(remoteBuild) {
+  const u = new URL(location.href);
+  u.searchParams.set("v", remoteBuild);
+  u.searchParams.set("_", String(Date.now()));
+  location.replace(u.toString());
+}
 function showStaleBanner(remoteBuild) {
-  if (!remoteBuild || remoteBuild === APP_BUILD) return;
   let b = document.getElementById("appStaleBanner");
   if (!b) {
     b = document.createElement("div");
@@ -1360,17 +1400,29 @@ function showStaleBanner(remoteBuild) {
   }
   b.innerHTML = `Nova versão disponível (${remoteBuild})<button type="button">Atualizar agora</button>`;
   b.querySelector("button").onclick = () => {
-    const u = new URL(location.href);
-    u.searchParams.set("v", remoteBuild);
-    u.searchParams.set("_", String(Date.now()));
-    location.replace(u.toString());
+    sessionStorage.removeItem("gc_build_fail");
+    redirectToAppBuild(remoteBuild);
   };
+}
+function applyRemoteAppBuild(remoteBuild) {
+  if (!remoteBuild || buildNum(remoteBuild) <= buildNum(APP_BUILD)) {
+    sessionStorage.removeItem("gc_build_fail");
+    normalizeAppUrl();
+    document.getElementById("appStaleBanner")?.remove();
+    return;
+  }
+  if (sessionStorage.getItem("gc_build_fail") === remoteBuild) {
+    showStaleBanner(remoteBuild);
+    return;
+  }
+  sessionStorage.setItem("gc_build_fail", remoteBuild);
+  redirectToAppBuild(remoteBuild);
 }
 function watchAppBuild() {
   if (!fbDb) return;
   fbDb.ref("config/appBuild").on("value", snap => {
     const remote = snap.val();
-    if (remote) showStaleBanner(remote);
+    if (remote) applyRemoteAppBuild(remote);
   });
 }
 function fbInit() {

@@ -6,6 +6,30 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
+<script>
+(function () {
+  var BUILD = "v5";
+  var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
+  function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
+  function norm(b) {
+    var u = new URL(location.href);
+    if (u.searchParams.get("v") !== b) { u.searchParams.set("v", b); history.replaceState(null, "", u.toString()); }
+  }
+  function jump(b) {
+    if (sessionStorage.getItem("gc_build_fail") === b) return;
+    sessionStorage.setItem("gc_build_fail", b);
+    var u = new URL(location.href);
+    u.searchParams.set("v", b);
+    u.searchParams.set("_", String(Date.now()));
+    location.replace(u.toString());
+  }
+  fetch(FB, { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (remote) {
+    if (!remote) { norm(BUILD); return; }
+    if (num(remote) > num(BUILD)) jump(remote);
+    else { sessionStorage.removeItem("gc_build_fail"); norm(BUILD); }
+  }).catch(function () { norm(BUILD); });
+})();
+</script>
 <title>Gestão Comercial — Matriz de Oportunidades</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%234f8cff'/><text x='16' y='22' text-anchor='middle' font-size='16' fill='white' font-family='sans-serif'>G</text></svg>">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -479,6 +503,18 @@
   .auth-reveal-box { background: var(--cell); border: 2px dashed var(--accent-2); border-radius: 12px; padding: 14px; margin: 12px 0; }
   .auth-reveal-box code { display: block; font-size: 15px; font-weight: 800; word-break: break-all; color: var(--accent-2); letter-spacing: .5px; line-height: 1.5; }
   .auth-warn { background: color-mix(in srgb, var(--warn) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--border)); border-radius: 10px; padding: 10px 12px; font-size: 12px; color: var(--text); margin: 10px 0; line-height: 1.5; }
+  .app-stale-banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+    padding: 10px 14px; background: color-mix(in srgb, var(--warn) 22%, #1a1208);
+    border-bottom: 1px solid color-mix(in srgb, var(--warn) 55%, var(--border));
+    color: var(--text); font-size: 12px; font-weight: 700; text-align: center;
+    box-shadow: 0 8px 28px rgba(0,0,0,.45);
+  }
+  .app-stale-banner button {
+    margin-left: 8px; cursor: pointer; border: 1px solid color-mix(in srgb, var(--warn) 60%, var(--border));
+    background: color-mix(in srgb, var(--warn) 18%, var(--panel)); color: var(--warn);
+    border-radius: 99px; padding: 4px 10px; font-size: 11px; font-weight: 800; font-family: var(--font);
+  }
 </style>
 </head>
 <body class="auth-locked">
@@ -1418,7 +1454,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v4";
+const APP_BUILD = "v5";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -5091,6 +5127,7 @@ function fbInit(){
       if (!user) return;
       authUid = user.uid; fbReady = true; if (lojaCode) myLojaId = lojaCode; setFbBadge(false);
       publishAppBuild();
+      watchAppBuild();
       try { fbDb.ref("admins/"+authUid).on("value", s => {
         const was = isAdmin;
         isAdmin = (s.val() === true);
@@ -5281,6 +5318,58 @@ function allLojas(){
   });
   return arr;
 }
+function buildNum(v) {
+  const m = String(v || "").match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+function normalizeAppUrl(build = APP_BUILD) {
+  const u = new URL(location.href);
+  if (u.searchParams.get("v") !== build) {
+    u.searchParams.set("v", build);
+    history.replaceState(null, "", u.toString());
+  }
+}
+function redirectToAppBuild(remoteBuild) {
+  const u = new URL(location.href);
+  u.searchParams.set("v", remoteBuild);
+  u.searchParams.set("_", String(Date.now()));
+  location.replace(u.toString());
+}
+function showStaleBanner(remoteBuild) {
+  let b = document.getElementById("appStaleBanner");
+  if (!b) {
+    b = document.createElement("div");
+    b.id = "appStaleBanner";
+    b.className = "app-stale-banner";
+    document.body.prepend(b);
+  }
+  b.innerHTML = `Nova versão disponível (${remoteBuild})<button type="button">Atualizar agora</button>`;
+  b.querySelector("button").onclick = () => {
+    sessionStorage.removeItem("gc_build_fail");
+    redirectToAppBuild(remoteBuild);
+  };
+}
+function applyRemoteAppBuild(remoteBuild) {
+  if (!remoteBuild || buildNum(remoteBuild) <= buildNum(APP_BUILD)) {
+    sessionStorage.removeItem("gc_build_fail");
+    normalizeAppUrl();
+    document.getElementById("appStaleBanner")?.remove();
+    return;
+  }
+  if (sessionStorage.getItem("gc_build_fail") === remoteBuild) {
+    showStaleBanner(remoteBuild);
+    return;
+  }
+  sessionStorage.setItem("gc_build_fail", remoteBuild);
+  redirectToAppBuild(remoteBuild);
+}
+function watchAppBuild() {
+  if (!fbDb) return;
+  fbDb.ref("config/appBuild").on("value", snap => {
+    const remote = snap.val();
+    if (remote) applyRemoteAppBuild(remote);
+  });
+}
 function publishAppBuild() {
   if (!fbReady || !fbDb || typeof APP_BUILD === "undefined") return;
   try { fbDb.ref("config/appBuild").set(APP_BUILD); } catch (e) {}
@@ -5351,7 +5440,7 @@ function renderSync(){
     ).join("")}</div></div>`;
   }
   if (!div) {
-    html += `<div class="hint" style="margin-top:6px;">Versão do app: <b>${typeof APP_BUILD !== "undefined" ? APP_BUILD : "—"}</b> · Link do consultor já inclui esta versão (reenvie após atualizar).</div>`;
+    html += `<div class="hint" style="margin-top:6px;">Versão do app: <b>${typeof APP_BUILD !== "undefined" ? APP_BUILD : "—"}</b> · Links antigos do consultor (sem <code>?v=</code>) atualizam sozinhos ao abrir. Ao publicar HTML novo, abra o gestor uma vez para gravar a versão no Firebase.</div>`;
     html += `<div class="hint" style="margin-top:4px;">Qualquer aparelho que abrir e digitar <b>${escapeHtml(lojaCode||'')}</b> carrega esta mesma configuração (a última sincronizada).</div>`;
     html += `<div class="row" style="margin-top:10px;"><button class="btn sec" id="reloadCloud">↻ Baixar da nuvem agora</button><button class="btn danger" id="clearMine">🗑 Apagar e recomeçar esta loja</button></div>`;
   } else {
