@@ -1452,6 +1452,21 @@ let matrizWeekIdx = state.ui.weekIdx || 0;
 let expandedBlocks = state.ui.expanded;
 function daysForPeriod() { if (matrizPeriodo === "semana") { const w = weeksOf(currentMonth); return w[Math.min(matrizWeekIdx, w.length - 1)] || monthDays(); } return monthDays(); }
 function cfgHasDiario(cfg) { return !!(cfg && (cfg.checkin || cfg.checkout)); }
+function cfgHasMeta(cfg) {
+  if (!cfg) return false;
+  if (metaMonthFor(cfg) > 0) return true;
+  if ((Number(cfg.metaDay) || 0) > 0) return true;
+  if ((Number(cfg.metaSat) || 0) > 0) return true;
+  if ((Number(cfg.metaSun) || 0) > 0) return true;
+  return false;
+}
+function matrizShowPct(cfg) { return cfgHasMeta(cfg); }
+function matrizItemColCount(cfg, periodo) {
+  let c = 1;
+  if (matrizShowPct(cfg)) c++;
+  if (periodo === "mes") c++;
+  return c;
+}
 function indShowInSemana(ind) {
   if (matrizPeriodo !== "semana") return true;
   if (ind.pctOnly) return false;
@@ -1784,9 +1799,8 @@ function matrizColCount(ind, periodo) {
   const subs = visibleSubs(ind), rates = visibleRates(ind);
   if (ind.pctOnly) return Math.max(1, rates.length) * 2;
   const exp = expandedBlocks[ind.id] !== false;
-  const subCols = 2 + (periodo === "mes" ? 1 : 0);
-  let c = subCols;
-  if (exp) c += subs.length * subCols + rates.length * 2;
+  let c = matrizItemColCount(ind, periodo);
+  if (exp) c += subs.reduce((s, sub) => s + matrizItemColCount(sub, periodo), 0) + rates.length * 2;
   return c;
 }
 function matrizEmptyBlockCells(ind, periodo) {
@@ -1825,7 +1839,8 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
   const dailyFb = metaUsesDailyFallback(ind, periodo);
   const realCls = fromSystem ? "heat matriz-from-sys matriz-real" : "matriz-real";
   const cellOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days, lowerBetter: cfgLowerBetter(ind) };
-  html += `<td style="border-left:3px solid ${ind.color};"><span class="${realCls}"${matrizTipData(matrizTipReal(fromSystem), ind.color)}>${has ? fmt(real) : "—"}</span></td>` + matrizPctCellHtml(has ? real : null, meta, dailyFb, cellOpts);
+  html += `<td style="border-left:3px solid ${ind.color};"><span class="${realCls}"${matrizTipData(matrizTipReal(fromSystem), ind.color)}>${has ? fmt(real) : "—"}</span></td>`;
+  if (matrizShowPct(ind)) html += matrizPctCellHtml(has ? real : null, meta, dailyFb, cellOpts);
   if (periodo === "mes") {
     const proj = has && real != null ? (isTeam ? matrizProjEquipe(real) : matrizProjConsultor(ids, ind.id)) : null;
     const metaProj = matrizMetaForProj(ind, ids, isTeam);
@@ -1843,7 +1858,7 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
       const subOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days, lowerBetter: cfgLowerBetter(s) };
       const subCls = fs ? "heat matriz-from-sys matriz-real" : "matriz-real";
       html += `<td style="border-left:1px solid var(--border-soft);"><span class="${subCls}"${matrizTipData(matrizTipReal(fs), ind.color)}>${h ? fmt(sr) : "—"}</span></td>`;
-      html += matrizPctCellHtml(h ? sr : null, subMeta, subDailyFb, subOpts);
+      if (matrizShowPct(s)) html += matrizPctCellHtml(h ? sr : null, subMeta, subDailyFb, subOpts);
       if (periodo === "mes") {
         const subProj = h && sr != null ? (isTeam ? matrizProjEquipe(sr) : matrizProjConsultor(ids, s.id)) : null;
         const subMetaProj = matrizMetaForProj(s, ids, isTeam);
@@ -1875,12 +1890,12 @@ function matrizBuildHeaders(inds, opts) {
       return;
     }
     head2 += matrizSortTh(`ind:${ind.id}:real`, "Real", `border-left:3px solid ${ind.color}`);
-    head2 += matrizSortTh(`ind:${ind.id}:pct`, "%");
+    if (matrizShowPct(ind)) head2 += matrizSortTh(`ind:${ind.id}:pct`, "%");
     if (periodo === "mes") head2 += matrizSortTh(`ind:${ind.id}:proj`, "Proj.");
     if (exp) {
       subs.forEach(s => {
         head2 += matrizSortTh(`sub:${s.id}:real`, s.name, "color:var(--accent-2); border-left:1px solid var(--border-soft)");
-        head2 += matrizSortTh(`sub:${s.id}:pct`, "%", "color:var(--accent-2)");
+        if (matrizShowPct(s)) head2 += matrizSortTh(`sub:${s.id}:pct`, "%", "color:var(--accent-2)");
         if (periodo === "mes") head2 += matrizSortTh(`sub:${s.id}:proj`, "Proj.", "color:var(--accent-2)");
       });
       rates.forEach(r => { head2 += matrizSortTh(`rate:${r.id}`, r.name, "color:var(--accent)"); head2 += `<th>alvo</th>`; });
@@ -1941,7 +1956,7 @@ function arvExpandedTotalCells(lojas, localInd, days, periodo) {
     }));
     const subOpts = { sellerId: null, isTeam: true, indColor: localInd.color, periodDays: days, lowerBetter: cfgLowerBetter(subTpl) };
     html += `<td style="border-left:1px solid var(--border-soft);"><span class="matriz-real">${has ? fmt(real) : "—"}</span></td>`;
-    html += matrizPctCellHtml(has ? real : null, meta, false, subOpts);
+    if (matrizShowPct(subTpl)) html += matrizPctCellHtml(has ? real : null, meta, false, subOpts);
     if (periodo === "mes") {
       const subMetaProj = metaForMatriz(subTpl, [], days, periodo, true) || meta;
       const lbSub = cfgLowerBetter(subTpl);
@@ -1983,7 +1998,8 @@ function arvTotalBlockCells(lojas, localInd, days, periodo) {
     if (r.has && r.real != null) { const p = matrizProjEquipe(r.real); if (p != null) proj += p; }
   }));
   const cellOpts = { sellerId: null, isTeam: true, indColor: localInd.color, periodDays: days, lowerBetter: cfgLowerBetter(localInd) };
-  let html = `<td style="border-left:3px solid ${localInd.color};"><span class="matriz-real">${has ? fmt(real) : "—"}</span></td>` + matrizPctCellHtml(has ? real : null, meta, false, cellOpts);
+  let html = `<td style="border-left:3px solid ${localInd.color};"><span class="matriz-real">${has ? fmt(real) : "—"}</span></td>`;
+  if (matrizShowPct(localInd)) html += matrizPctCellHtml(has ? real : null, meta, false, cellOpts);
   if (periodo === "mes") {
     const metaProj = metaForMatriz(localInd, [], days, periodo, true) || meta;
     const lbProj = cfgLowerBetter(localInd);
