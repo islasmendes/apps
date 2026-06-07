@@ -558,32 +558,9 @@ function countSemaforo(pct) {
   if (pct >= 0.7) return "y";
   return "r";
 }
-/** Aderência consultor: % de dias encerrados na escala com check-in e check-out completos. */
-function consultantDisciplineStats(sellerId, m = todayISO()) {
-  const n = daysInMonth(m);
-  const isCurrent = todayISO() === m;
-  const today = isCurrent ? todayDay() : n + 1;
-  const fields = fieldList();
-  let scheduled = 0, closed = 0, complete = 0;
-  if (!fields.length) return { pct: null, complete: 0, closed: 0, scheduled: 0 };
-  for (let d = 1; d <= n; d++) {
-    if (!sellerWorks(sellerId, d, m)) continue;
-    scheduled++;
-    if (isCurrent && d >= today) continue;
-    closed++;
-    let req = 0, ok = 0;
-    fields.forEach(({ cfg }) => {
-      const c = getCell(sellerId, cfg.id, d, m);
-      if (cfg.checkin) { req++; if (hasCellValue(c, "plan")) ok++; }
-      if (cfg.checkout) { req++; if (hasCellValue(c, "real")) ok++; }
-    });
-    if (req > 0 && ok === req) complete++;
-  }
-  return { pct: closed ? complete / closed : null, complete, closed, scheduled };
-}
 function sellerMetrics(sellerId, m = todayISO()) {
   const days = monthDays(m);
-  let projSum = 0, projN = 0, accSum = 0, accN = 0;
+  let projSum = 0, projN = 0, aderSum = 0, aderN = 0, accSum = 0, accN = 0;
   (lojaData?.indicators || []).forEach(ind => {
     if (ind.pctOnly) return;
     const meta = sellerMetaFor(ind, sellerId, m);
@@ -591,6 +568,11 @@ function sellerMetrics(sellerId, m = todayISO()) {
     if (meta && real != null) {
       const proj = sellerProjFromReal(sellerId, ind.id, real, m);
       if (proj != null) { projSum += proj / meta; projN++; }
+    }
+    if (ind.checkin && ind.checkout) {
+      const plan = accum(sellerId, ind.id, "plan", days, m);
+      const r = accum(sellerId, ind.id, "real", days, m);
+      if (plan) { aderSum += (r || 0) / plan; aderN++; }
     }
     if (ind.checkout) {
       const acc = fieldAccuracy(sellerId, ind.id, days, m);
@@ -604,6 +586,7 @@ function sellerMetrics(sellerId, m = todayISO()) {
   });
   return {
     ritmo: projN ? projSum / projN : null,
+    ader: aderN ? aderSum / aderN : null,
     acc: accN ? accSum / accN : null
   };
 }
@@ -690,7 +673,6 @@ function renderResumo() {
   if (!seller || !lojaData) return;
   const m = todayISO(), sid = seller.id;
   const metrics = sellerMetrics(sid, m);
-  const discipline = consultantDisciplineStats(sid, m);
   const venda = findVendaIndicator();
   const vendaSt = venda ? fieldProjStats(venda, sid, m) : null;
   const vendaCallout = venda ? resumoCallout(venda, sid, m, false) : { html: '<div class="resumo-callout muted">Indicador Vendas não configurado.</div>', tone: "muted" };
@@ -757,7 +739,7 @@ function renderResumo() {
       ${vendaCallout.html}
       <div class="resumo-sema"><b class="ok">${g} verde</b><b class="warn">${y} atenção</b><b class="bad">${r} risco</b></div>
       <div class="resumo-chips">
-        <span class="resumo-chip" style="color:${heatMatrizText(discipline.pct)}" title="${discipline.closed ? discipline.complete + " de " + discipline.closed + " dias encerrados com check-in e check-out completos · " + discipline.scheduled + " dias na escala do mês" : "Ainda sem dias encerrados na escala"}">Aderência ${pctTxt(discipline.pct)}${discipline.closed ? " · " + discipline.complete + "/" + discipline.closed + " dias" : ""}</span>
+        <span class="resumo-chip" style="color:${heatMatrizText(metrics.ader)}" title="Check-out realizado ÷ check-in planejado (média dos indicadores com os dois)">Aderência ${pctTxt(metrics.ader)}</span>
         <span class="resumo-chip" style="color:${heatMatrizText(metrics.acc)}">Acurácia ${pctTxt(metrics.acc)}</span>
         <span class="resumo-chip" style="color:var(--accent-2)">${vendaRankTxt}</span>
       </div>
