@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v15";
+  var BUILD = "v16";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1523,7 +1523,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v15";
+const APP_BUILD = "v16";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3317,31 +3317,45 @@ function diarioTodayDay() { return todayISO() === currentMonth ? new Date().getD
 function weekForDay(day, m = currentMonth) {
   return weeksOf(m).find(w => w.includes(day)) || [day];
 }
-/** Sub só domingo: preenche na véspera (ex. sábado), não no domingo. */
-function diarioSundayOnlyActive(sellerId, day, m = currentMonth) {
-  if (isSunday(m, day)) return false;
-  const week = weekForDay(day, m);
-  const sunDay = week.find(d => isSunday(m, d) && sellerWorks(sellerId, d, m));
-  if (!sunDay || day >= sunDay) return false;
-  if (day !== sunDay - 1) return false;
-  return sellerWorks(sellerId, day, m);
+/** Sub "Agendamentos p/ sábado": check-in/out seg–sex; oculto no sábado. */
+function diarioIsSaturdaySub(cfg) {
+  if (!cfg || cfg.sundayOnly) return false;
+  const metaSat = Number(cfg.metaSat) || 0;
+  const metaDay = Number(cfg.metaDay) || 0;
+  const metaSun = Number(cfg.metaSun) || 0;
+  return metaSat > 0 && !cfg.checkin && cfg.checkout && metaDay <= 1 && metaSun === 0;
 }
-function diarioFieldGated(sellerId, cfg, day, m = currentMonth) {
-  if (!cfg.sundayOnly) return false;
-  return !diarioSundayOnlyActive(sellerId, day, m);
+function diarioWeekSatForSeller(week, sellerId, m) {
+  return week.find(d => isSaturday(m, d) && sellerWorks(sellerId, d, m));
+}
+function diarioWeekSunForSeller(week, sellerId, m) {
+  return week.find(d => isSunday(m, d) && sellerWorks(sellerId, d, m));
+}
+function diarioSaturdaySubActive(sellerId, day, m = currentMonth) {
+  if (!sellerWorks(sellerId, day, m)) return false;
+  const wd = weekday(m, day);
+  if (wd < 1 || wd > 5) return false;
+  const week = weekForDay(day, m);
+  return !!diarioWeekSatForSeller(week, sellerId, m);
+}
+/** Sub só domingo: check-in/out seg–sáb; oculto no domingo e se CV não trabalha domingo na semana. */
+function diarioSundaySubActive(sellerId, day, m = currentMonth) {
+  if (isSunday(m, day)) return false;
+  if (!sellerWorks(sellerId, day, m)) return false;
+  const week = weekForDay(day, m);
+  const sunDay = diarioWeekSunForSeller(week, sellerId, m);
+  if (!sunDay || day >= sunDay) return false;
+  return true;
 }
 function diarioFieldNeeds(sellerId, cfg, day, m = currentMonth) {
   if (!sellerWorks(sellerId, day, m)) return { checkin: false, checkout: false };
   if (cfg.sundayOnly) {
-    if (!diarioSundayOnlyActive(sellerId, day, m)) return { checkin: false, checkout: false };
+    if (!diarioSundaySubActive(sellerId, day, m)) return { checkin: false, checkout: false };
     return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
   }
-  const wd = weekday(m, day);
-  const metaSat = Number(cfg.metaSat) || 0;
-  const metaDay = Number(cfg.metaDay) || 0;
-  const metaSun = Number(cfg.metaSun) || 0;
-  if (metaSat > 0 && wd !== 6 && !cfg.checkin && cfg.checkout && metaDay <= 1 && metaSun === 0) {
-    return { checkin: false, checkout: false };
+  if (diarioIsSaturdaySub(cfg)) {
+    if (!diarioSaturdaySubActive(sellerId, day, m)) return { checkin: false, checkout: false };
+    return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
   }
   return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
 }
@@ -3461,7 +3475,7 @@ function renderDiario() {
 }
 function diarioRow(cfg, color, isSub) {
   const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
-  const domTag = cfg.sundayOnly ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">dom · véspera</span>` : "";
+  const domTag = cfg.sundayOnly ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">dom · seg–sáb</span>` : (diarioIsSaturdaySub(cfg) ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">sáb · seg–sex</span>` : "");
   const label = (isSub ? `<span class="tag sub">↳</span> ${cfg.name}` : `<b style="color:${color}">${cfg.name}</b>`) + domTag;
   let row = `<tr class="${isSub?'dsub':'dgroup'}" style="--gc:${color}"><td class="name" style="border-left:3px solid ${color};">${label}</td>`;
   row += `<td><span class="neon">${fmt(cfg.metaDay)}</span>${Number(cfg.metaSat)?`<br><span class="muted" style="font-size:10px">sáb ${fmt(cfg.metaSat)}</span>`:''}${Number(cfg.metaSun)?`<br><span class="muted" style="font-size:10px">dom ${fmt(cfg.metaSun)}</span>`:''}</td>`;
