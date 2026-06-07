@@ -335,6 +335,12 @@
   .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: .2s; }
   .switch input:checked + .track { background: var(--accent); }
   .switch input:checked + .track::after { left: 18px; }
+  /* Foco & Ranking */
+  .foco-charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; margin-top: 14px; }
+  .foco-chart-panel canvas { width: 100%; display: block; }
+  .foco-chart-legend { display: flex; flex-wrap: wrap; gap: 12px 18px; font-size: 11.5px; color: var(--text-dim); margin-top: 8px; }
+  .foco-chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .foco-chart-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
   /* Ranking / atenção */
   .attn-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 14px; }
   .attn-box { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
@@ -538,21 +544,36 @@
   <section class="view" id="view-foco">
     <div class="panel">
       <h2>Foco &amp; Ranking</h2>
-      <div class="sub">Quem está bem, quem precisa de atenção, e o ritmo rumo à meta.</div>
-      <div class="hint" style="margin:8px 0 4px; text-transform:uppercase; letter-spacing:.4px; font-weight:700;">Ranking — ritmo vs meta do mês</div>
+      <div class="sub">Projeção do mês, acuracidade do relato e disciplina de check-in/out — hoje e histórico.</div>
+      <details class="help foco-help" style="margin-top:8px;"><summary>O que significa cada coluna?</summary><div><b>Proj. vs meta</b> — média de (projeção de fechamento ÷ meta mensal) em cada indicador com meta. Ex.: 85% = fechando o mês em ~85% da meta, no conjunto dos KPIs.<br><b>% ritmo hoje</b> — mesmo cálculo da Matriz: realizado vs o que deveria ter até ontem na escala do CV (indicador principal de vendas).<br><b>Acurac.</b> — média da acuracidade do relato (bloco Acuracidade na Matriz).</div></details>
+      <div class="hint" style="margin:12px 0 4px; text-transform:uppercase; letter-spacing:.4px; font-weight:700;">Ranking do mês</div>
       <div class="table-wrap"><table id="rankingTable"></table></div>
-      <div class="hint" style="margin:18px 0 8px; text-transform:uppercase; letter-spacing:.4px; font-weight:700;">⚠ Atenção do dia — quem chamar pra conversar</div>
+      <div class="hint" style="margin:18px 0 8px; text-transform:uppercase; letter-spacing:.4px; font-weight:700;">⚠ Atenção — quem chamar pra conversar</div>
       <div class="attn-cols" id="attnCols"></div>
     </div>
-    <div class="panel">
-      <div class="flex-between">
-        <div><h2>Ritmo do mês — acumulado vs meta ideal</h2></div>
-        <div class="row" style="align-items:center;">
-          <div class="field"><label>Indicador</label><select id="chartInd"></select></div>
-          <div class="field"><label>Quem</label><select id="chartWho"></select></div>
+    <div class="foco-charts-grid">
+      <div class="panel foco-chart-panel">
+        <div class="flex-between">
+          <div><h2 style="margin:0;font-size:16px;">Ritmo do mês — real vs meta ideal</h2><div class="sub" style="margin-top:4px;">Curva acumulada no mês · linha tracejada = projeção de fechamento</div></div>
+          <div class="row" style="align-items:center;">
+            <div class="field"><label>Indicador</label><select id="chartInd"></select></div>
+            <div class="field"><label>Quem</label><select id="chartWho"></select></div>
+          </div>
         </div>
+        <canvas id="ritmoChart" height="280"></canvas>
+        <div class="foco-chart-legend" id="ritmoChartLegend"></div>
       </div>
-      <canvas id="ritmoChart" height="320" style="margin-top:14px;"></canvas>
+      <div class="panel foco-chart-panel">
+        <div class="flex-between">
+          <div><h2 style="margin:0;font-size:16px;">Histórico mensal — produtividade</h2><div class="sub" style="margin-top:4px;">Realizado mês a mês (matrícula do CV · todos os meses com dado)</div></div>
+          <div class="row" style="align-items:center;">
+            <div class="field"><label>Indicador</label><select id="histChartInd"></select></div>
+            <div class="field"><label>Consultor</label><select id="histChartWho"></select></div>
+          </div>
+        </div>
+        <canvas id="histChart" height="280"></canvas>
+        <div class="foco-chart-legend" id="histChartLegend"></div>
+      </div>
     </div>
   </section>
 
@@ -3524,71 +3545,241 @@ function renderAuditoriaDiscipline(sellerId) {
 }
 
 /* ============================================================ FOCO */
+function sellerPrimaryInd() {
+  const nm = ind => (ind.name || "").toLowerCase();
+  return orderedIndicators().find(i => !i.pctOnly && (i.role === "venda" || nm(i).includes("venda")))
+    || orderedIndicators().find(i => !i.pctOnly);
+}
+function sellerDisciplineGapCounts(sellerId, m = currentMonth) {
+  const disc = consultantDisciplineDetails(sellerId, m);
+  let daysIn = 0, daysOut = 0, gapsIn = 0, gapsOut = 0;
+  disc.incompleteDays.forEach(day => {
+    let hasIn = false, hasOut = false;
+    day.gaps.forEach(g => {
+      if (g.type === "in") { gapsIn++; hasIn = true; }
+      if (g.type === "out") { gapsOut++; hasOut = true; }
+    });
+    if (hasIn) daysIn++;
+    if (hasOut) daysOut++;
+  });
+  return { daysIn, daysOut, gapsIn, gapsOut, disc };
+}
 function sellerMetrics(sellerId) {
   const days = monthDays();
   let projSum = 0, projN = 0, accSum = 0, accN = 0;
   state.indicators.forEach(ind => {
     if (ind.pctOnly) return;
     const real = accum(sellerId, ind.id, "real", days), meta = metaMonthFor(ind);
-    if (meta && real != null) { projSum += (sellerProjVal(sellerId, ind.id)/meta); projN++; }
+    if (meta && real != null) { projSum += (sellerProjVal(sellerId, ind.id) / meta); projN++; }
   });
   acuracidadeFieldList().filter(f => !f.rate && acurFieldActive(sellerId, f, days)).forEach(f => {
     const acc = fieldAccuracy(sellerId, f.id, days);
     if (acc != null) { accSum += acc; accN++; }
   });
-  const disc = consultantDisciplineStats(sellerId);
-  return { ritmo: projN ? projSum/projN : null, ader: disc.pct, disc, acc: accN ? accSum/accN : null };
+  const primary = sellerPrimaryInd();
+  let pace = null;
+  if (primary) {
+    const real = matrizFieldValue(sellerId, primary.id, days, "mes");
+    const meta = metaMonthFor(primary);
+    if (meta && real != null) pace = matrizPaceRatio(real, meta, sellerId, false, days, cfgLowerBetter(primary));
+  }
+  const gaps = sellerDisciplineGapCounts(sellerId);
+  return {
+    projVsMeta: projN ? projSum / projN : null,
+    pace,
+    acc: accN ? accSum / accN : null,
+    daysIn: gaps.daysIn,
+    daysOut: gaps.daysOut,
+    gapsIn: gaps.gapsIn,
+    gapsOut: gaps.gapsOut,
+  };
+}
+function focoChartColors() {
+  const css = getComputedStyle(document.documentElement);
+  return {
+    text: css.getPropertyValue("--text").trim(),
+    dim: css.getPropertyValue("--text-faint").trim(),
+    grid: css.getPropertyValue("--border").trim(),
+    accent: css.getPropertyValue("--accent").trim(),
+    ok: css.getPropertyValue("--ok").trim(),
+    warn: css.getPropertyValue("--warn").trim(),
+    danger: css.getPropertyValue("--danger").trim(),
+    accent2: css.getPropertyValue("--accent-2").trim(),
+  };
+}
+function setupCanvas(cv, h = 280) {
+  const W = cv.clientWidth || 400;
+  const H = h;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = W * dpr;
+  cv.height = H * dpr;
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  return { ctx, W, H };
 }
 function renderFoco() {
-  const sellers = orderedSellers(); const metrics = sellers.map(s => ({ s, ...sellerMetrics(s.id) }));
-  const ranked = metrics.slice().sort((a,b) => (b.ritmo??-1) - (a.ritmo??-1)); const medals = ["🥇","🥈","🥉"];
-  let head = '<thead><tr><th class="name">#</th><th class="name">Vendedor</th><th>Ritmo</th><th>Acurac.</th><th>Aderência</th></tr></thead>';
+  const sellers = orderedSellers();
+  const metrics = sellers.map(s => ({ s, ...sellerMetrics(s.id) }));
+  const ranked = metrics.slice().sort((a, b) => (b.projVsMeta ?? -1) - (a.projVsMeta ?? -1));
+  const medals = ["🥇", "🥈", "🥉"];
+  let head = '<thead><tr><th class="name">#</th><th class="name">Vendedor</th><th title="Média: projeção de fechamento ÷ meta mensal (por indicador)">Proj. vs meta</th><th title="Ritmo de hoje vs esperado na escala (indicador principal)">% ritmo hoje</th><th title="Média acuracidade do relato (Matriz)">Acurac.</th></tr></thead>';
   let body = "<tbody>";
-  if (!ranked.length) body = '<tbody><tr><td class="empty">Cadastre vendedores para ver o ranking.</td></tr>';
-  ranked.forEach((m, i) => { body += `<tr><td class="name">${medals[i] || (i+1)}</td><td class="name">${m.s.name}</td><td style="color:${heatText(m.ritmo)}; font-weight:700;">${m.ritmo==null?'—':pctTxt(m.ritmo)}</td><td style="color:${heatText(m.acc)}; font-weight:700;">${m.acc==null?'—':pctTxt(m.acc)}</td><td style="color:${heatText(m.ader)}; font-weight:700;">${m.ader==null?'—':pctTxt(m.ader)}</td></tr>`; });
+  if (!ranked.length) body = '<tbody><tr><td class="empty" colspan="5">Cadastre vendedores para ver o ranking.</td></tr>';
+  else ranked.forEach((m, i) => {
+    body += `<tr><td class="name">${medals[i] || (i + 1)}</td><td class="name">${escapeHtml(m.s.name)}${m.s.matricula ? ' <span class="muted" style="font-size:10px">· ' + escapeHtml(m.s.matricula) + "</span>" : ""}</td>` +
+      `<td style="color:${heatMatrizText(m.projVsMeta)}; font-weight:700;">${m.projVsMeta == null ? "—" : pctTxt(m.projVsMeta)}</td>` +
+      `<td style="color:${heatMatrizPaceText(m.pace)}; font-weight:700;">${m.pace == null ? "—" : pctTxt(m.pace)}</td>` +
+      `<td style="color:${heatText(m.acc)}; font-weight:700;">${m.acc == null ? "—" : pctTxt(m.acc)}</td></tr>`;
+  });
   body += "</tbody>";
   document.getElementById("rankingTable").innerHTML = head + body;
 
-  const lowRitmo = metrics.filter(m => m.ritmo != null && m.ritmo < 0.9).sort((a,b)=>a.ritmo-b.ritmo);
-  const lowAcc = metrics.filter(m => m.acc != null && m.acc < 0.9).sort((a,b)=>a.acc-b.acc);
-  const lowAder = metrics.filter(m => m.ader != null && m.ader < 0.9).sort((a,b)=>a.ader-b.ader);
-  const box = (title, desc, arr, key) => `<div class="attn-box"><h4>${title}</h4><div class="hint" style="margin:-4px 0 8px">${desc}</div><ul>${arr.length ? arr.map(m=>`<li><span>${m.s.name}</span><b style="color:${heatText(m[key])}">${pctTxt(m[key])}</b></li>`).join("") : '<li style="color:var(--ok)">Tudo no verde ✓</li>'}</ul></div>`;
+  const lowAcc = metrics.filter(m => m.acc != null && m.acc < 0.9).sort((a, b) => a.acc - b.acc);
+  const missIn = metrics.filter(m => m.daysIn > 0).sort((a, b) => b.daysIn - a.daysIn);
+  const missOut = metrics.filter(m => m.daysOut > 0).sort((a, b) => b.daysOut - a.daysOut);
+  const boxCount = (title, desc, arr, fmt) => `<div class="attn-box"><h4>${title}</h4><div class="hint" style="margin:-4px 0 8px">${desc}</div><ul>${arr.length ? arr.map(m => `<li><span>${escapeHtml(m.s.name)}</span><b style="color:var(--warn)">${fmt(m)}</b></li>`).join("") : '<li style="color:var(--ok)">Tudo no verde ✓</li>'}</ul></div>`;
   document.getElementById("attnCols").innerHTML =
-    box("📉 Abaixo do ritmo", "vão furar a meta no ritmo atual", lowRitmo, "ritmo") +
-    box("⚠️ Relato furado", "check-out longe do sistema", lowAcc, "acc") +
-    box("🎯 Check-in/out incompletos", "dias encerrados na escala sem todos os lançamentos", lowAder, "ader");
+    boxCount("📋 Check-in incompleto", "dias encerrados na escala sem plano da manhã", missIn, m => m.daysIn + " dia" + (m.daysIn > 1 ? "s" : "")) +
+    boxCount("📤 Check-out incompleto", "dias encerrados na escala sem realizado do dia", missOut, m => m.daysOut + " dia" + (m.daysOut > 1 ? "s" : "")) +
+    boxCount("⚠️ Relato furado", "check-out longe do sistema (acuracidade)", lowAcc, m => pctTxt(m.acc));
 
-  const ci = document.getElementById("chartInd"); ci.innerHTML = state.indicators.filter(i=>!i.pctOnly).map(i => `<option value="${i.id}">${i.name}</option>`).join("");
-  const cw = document.getElementById("chartWho"); cw.innerHTML = '<option value="__team">⌀ Equipe (todos)</option>' + sellers.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
-  if (!ci.dataset.bound) { ci.addEventListener("change", drawRitmo); cw.addEventListener("change", drawRitmo); ci.dataset.bound = "1"; }
-  drawRitmo();
+  const indOpts = state.indicators.filter(i => !i.pctOnly).map(i => `<option value="${i.id}">${escapeHtml(i.name)}</option>`).join("");
+  const whoOpts = '<option value="__team">⌀ Equipe (todos)</option>' + sellers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
+  const ci = document.getElementById("chartInd");
+  const cw = document.getElementById("chartWho");
+  const hi = document.getElementById("histChartInd");
+  const hw = document.getElementById("histChartWho");
+  if (ci) { ci.innerHTML = indOpts; if (!ci.dataset.bound) { ci.addEventListener("change", drawFocoCharts); cw.addEventListener("change", drawFocoCharts); ci.dataset.bound = "1"; } }
+  if (hi) { hi.innerHTML = indOpts; if (!hi.dataset.bound) { hi.addEventListener("change", drawFocoCharts); hw.addEventListener("change", drawFocoCharts); hi.dataset.bound = "1"; } }
+  if (hw) hw.innerHTML = sellers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}${s.matricula ? " · " + escapeHtml(s.matricula) : ""}</option>`).join("");
+  if (!window._focoResizeBound) {
+    window._focoResizeBound = 1;
+    window.addEventListener("resize", () => { if (activeView === "foco") drawFocoCharts(); });
+  }
+  drawFocoCharts();
 }
+function drawFocoCharts() { drawRitmo(); drawHistoricoChart(); }
 function drawRitmo() {
-  const cv = document.getElementById("ritmoChart"); const indId = document.getElementById("chartInd").value; const who = document.getElementById("chartWho").value;
-  const ind = state.indicators.find(i => i.id === indId); if (!ind || !cv) return;
-  const sellers = orderedSellers(); const ids = who === "__team" ? sellers.map(s=>s.id) : [who];
-  const n = daysInMonth(currentMonth); const totalWorked = ids.reduce((a,id)=>a+sellerWorkedCount(id),0) || 1;
+  const cv = document.getElementById("ritmoChart");
+  const indId = document.getElementById("chartInd")?.value;
+  const who = document.getElementById("chartWho")?.value;
+  const ind = state.indicators.find(i => i.id === indId);
+  const leg = document.getElementById("ritmoChartLegend");
+  if (!ind || !cv) return;
+  const sellers = orderedSellers();
+  const ids = who === "__team" ? sellers.map(s => s.id) : [who];
+  const n = daysInMonth(currentMonth);
+  const totalWorked = ids.reduce((a, id) => a + sellerWorkedCount(id), 0) || 1;
   const metaTotal = metaMonthFor(ind) * (ids.length || 1);
-  const realCum = []; let run = 0; for (let d=1; d<=n; d++){ ids.forEach(id=>{ const c=getCell(id,ind.id,d); if(c.real!=null) run+=Number(c.real); }); realCum.push(run); }
-  const metaLine = []; for (let d=1; d<=n; d++){ let wc=0; ids.forEach(id=>{ for(let k=1;k<=d;k++) if(sellerWorks(id,k)) wc++; }); metaLine.push(metaTotal*wc/totalWorked); }
+  const realCum = [];
+  let run = 0;
+  for (let d = 1; d <= n; d++) {
+    ids.forEach(id => { const c = getCell(id, ind.id, d); if (c.real != null) run += Number(c.real); });
+    realCum.push(run);
+  }
+  const metaLine = [];
+  for (let d = 1; d <= n; d++) {
+    let wc = 0;
+    ids.forEach(id => { for (let k = 1; k <= d; k++) if (sellerWorks(id, k)) wc++; });
+    metaLine.push(metaTotal * wc / totalWorked);
+  }
   const projTotal = teamProjVal(ids, ind.id);
-  const css = getComputedStyle(document.documentElement); const text = css.getPropertyValue("--text").trim(); const dim = css.getPropertyValue("--text-faint").trim(); const grid = css.getPropertyValue("--border").trim(); const accent = css.getPropertyValue("--accent").trim();
-  const projColor = projTotal>=metaTotal? css.getPropertyValue("--ok").trim() : (projTotal>=metaTotal*0.9? css.getPropertyValue("--warn").trim() : css.getPropertyValue("--danger").trim());
-  const W = cv.clientWidth || 800, H = 320, dpr = window.devicePixelRatio||1; cv.width = W*dpr; cv.height = H*dpr; const ctx = cv.getContext("2d"); ctx.scale(dpr,dpr); ctx.clearRect(0,0,W,H);
-  const pad = { l: 46, r: 16, t: 22, b: 28 }; const maxY = Math.max(metaTotal, run, projTotal, ...metaLine, 1) * 1.1;
-  const X = i => pad.l + (W-pad.l-pad.r) * (i/Math.max(n-1,1)); const Y = v => H-pad.b - (H-pad.t-pad.b) * (v/maxY);
-  function line(pts, color, dash, w){ if(pts.length<1) return; ctx.strokeStyle=color; ctx.lineWidth=w||1.8; ctx.setLineDash(dash||[]); ctx.beginPath(); pts.forEach((p,i)=> i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.stroke(); ctx.setLineDash([]); }
-  function legend(x,y,color,label){ ctx.fillStyle=color; ctx.fillRect(x,y,10,10); ctx.fillStyle=text; ctx.fillText(label, x+15, y+9); }
-  ctx.strokeStyle = grid; ctx.fillStyle = dim; ctx.font = "11px sans-serif"; ctx.lineWidth = 1;
-  for (let g=0; g<=4; g++){ const v=maxY*g/4, y=Y(v); ctx.globalAlpha=.4; ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke(); ctx.globalAlpha=1; ctx.fillText(Math.round(v), 6, y+3); }
-  for (let d=1; d<=n; d+=Math.ceil(n/10)){ ctx.fillText(d, X(d-1)-4, H-8); }
-  line(metaLine.map((v,i)=>[X(i),Y(v)]), dim, [6,5]);
-  const elapsedIdx = daysElapsedIndex(); const realPts = realCum.map((v,i)=>[X(i),Y(v)]).slice(0, Math.min(n, elapsedIdx+1));
-  line(realPts, accent, null, 2.5);
-  if (realPts.length){ const last = realPts[realPts.length-1]; line([last,[X(n-1),Y(projTotal)]], projColor, [4,4], 2); ctx.fillStyle = projColor; ctx.beginPath(); ctx.arc(X(n-1),Y(projTotal),3.5,0,Math.PI*2); ctx.fill(); }
-  ctx.font = "12px sans-serif"; legend(pad.l, 6, accent, "Real acumulado"); legend(pad.l+130, 6, dim, "Meta ideal"); legend(pad.l+230, 6, projColor, "Projeção: "+Math.round(projTotal)+" ("+pctTxt(metaTotal?projTotal/metaTotal:null)+")");
+  const c = focoChartColors();
+  const projColor = projTotal >= metaTotal ? c.ok : (projTotal >= metaTotal * 0.9 ? c.warn : c.danger);
+  const { ctx, W, H } = setupCanvas(cv, 280);
+  const pad = { l: 46, r: 16, t: 22, b: 28 };
+  const maxY = Math.max(metaTotal, run, projTotal, ...metaLine, 1) * 1.1;
+  const X = i => pad.l + (W - pad.l - pad.r) * (i / Math.max(n - 1, 1));
+  const Y = v => H - pad.b - (H - pad.t - pad.b) * (v / maxY);
+  function line(pts, color, dash, w) {
+    if (pts.length < 1) return;
+    ctx.strokeStyle = color; ctx.lineWidth = w || 1.8; ctx.setLineDash(dash || []);
+    ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  ctx.strokeStyle = c.grid; ctx.fillStyle = c.dim; ctx.font = "11px sans-serif"; ctx.lineWidth = 1;
+  for (let g = 0; g <= 4; g++) {
+    const v = maxY * g / 4, y = Y(v);
+    ctx.globalAlpha = .4; ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    ctx.globalAlpha = 1; ctx.fillText(Math.round(v), 6, y + 3);
+  }
+  for (let d = 1; d <= n; d += Math.ceil(n / 10)) ctx.fillText(d, X(d - 1) - 4, H - 8);
+  line(metaLine.map((v, i) => [X(i), Y(v)]), c.dim, [6, 5]);
+  const elapsedIdx = daysElapsedIndex();
+  const realPts = realCum.map((v, i) => [X(i), Y(v)]).slice(0, Math.min(n, elapsedIdx + 1));
+  line(realPts, c.accent, null, 2.5);
+  if (realPts.length) {
+    const last = realPts[realPts.length - 1];
+    line([last, [X(n - 1), Y(projTotal)]], projColor, [4, 4], 2);
+    ctx.fillStyle = projColor; ctx.beginPath(); ctx.arc(X(n - 1), Y(projTotal), 3.5, 0, Math.PI * 2); ctx.fill();
+  }
+  if (leg) leg.innerHTML = `<span><i style="background:${c.accent}"></i> Real acumulado</span><span><i style="background:${c.dim}"></i> Meta ideal (escala)</span><span><i style="background:${projColor}"></i> Projeção ${Math.round(projTotal)} (${pctTxt(metaTotal ? projTotal / metaTotal : null)} da meta)</span>`;
 }
-function daysElapsedIndex(){ return todayISO()===currentMonth? new Date().getDate()-1 : daysInMonth(currentMonth)-1; }
+function sellerMonthlyHistory(sellerId, fieldId) {
+  const seller = state.sellers.find(s => s.id === sellerId);
+  const mat = seller ? normalizeMatricula(seller.matricula) : "";
+  const months = Object.keys(state.months || {}).sort();
+  return months.map(m => {
+    let sid = sellerId;
+    if (mat) {
+      const match = state.sellers.find(s => normalizeMatricula(s.matricula) === mat);
+      if (match) sid = match.id;
+    }
+    const days = monthDays(m);
+    const real = accum(sid, fieldId, "real", days, m);
+    const cfg = cfgById(fieldId);
+    const meta = cfg ? metaMonthFor(cfg) : 0;
+    const proj = sellerProjVal(sid, fieldId, m);
+    if (real == null && !proj) return null;
+    const { y, mo } = parseMonth(m);
+    const shortLbl = new Date(y, mo - 1, 1).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).replace(".", "");
+    return { m, label: shortLbl, real: real ?? 0, meta, proj };
+  }).filter(Boolean);
+}
+function drawHistoricoChart() {
+  const cv = document.getElementById("histChart");
+  const indId = document.getElementById("histChartInd")?.value;
+  const who = document.getElementById("histChartWho")?.value;
+  const leg = document.getElementById("histChartLegend");
+  const ind = state.indicators.find(i => i.id === indId);
+  if (!cv || !ind || !who) return;
+  const hist = sellerMonthlyHistory(who, ind.id);
+  const c = focoChartColors();
+  const { ctx, W, H } = setupCanvas(cv, 280);
+  const pad = { l: 44, r: 12, t: 20, b: 36 };
+  if (!hist.length) {
+    ctx.fillStyle = c.dim; ctx.font = "13px sans-serif"; ctx.fillText("Sem histórico ainda — lance check-outs nos meses anteriores.", pad.l, H / 2);
+    if (leg) leg.innerHTML = "";
+    return;
+  }
+  const maxY = Math.max(...hist.map(h => Math.max(h.real, h.meta, h.proj)), 1) * 1.15;
+  const slot = (W - pad.l - pad.r) / hist.length;
+  const barW = Math.min(28, slot * 0.55);
+  const Y = v => H - pad.b - (H - pad.t - pad.b) * (v / maxY);
+  ctx.strokeStyle = c.grid; ctx.fillStyle = c.dim; ctx.font = "11px sans-serif";
+  for (let g = 0; g <= 4; g++) {
+    const v = maxY * g / 4, y = Y(v);
+    ctx.globalAlpha = .35; ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    ctx.globalAlpha = 1; ctx.fillText(Math.round(v), 4, y + 3);
+  }
+  hist.forEach((h, i) => {
+    const cx = pad.l + slot * i + slot / 2;
+    const rh = H - pad.b - Y(h.real);
+    ctx.fillStyle = c.accent;
+    ctx.fillRect(cx - barW / 2, Y(h.real), barW, rh);
+    if (h.meta > 0) {
+      const my = Y(h.meta);
+      ctx.strokeStyle = c.dim; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(cx - barW / 2 - 2, my); ctx.lineTo(cx + barW / 2 + 2, my); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.fillStyle = c.dim; ctx.font = "10px sans-serif";
+    ctx.save(); ctx.translate(cx, H - 10); ctx.rotate(-0.45); ctx.textAlign = "right"; ctx.fillText(h.label, 0, 0); ctx.restore();
+  });
+  if (leg) leg.innerHTML = `<span><i style="background:${c.accent}"></i> Realizado no mês</span><span><i style="background:transparent;border:1px dashed ${c.dim}"></i> Meta do consultor</span><span class="muted">Matrícula · ${escapeHtml(state.sellers.find(s => s.id === who)?.matricula || "—")}</span>`;
+}
+function daysElapsedIndex() { return todayISO() === currentMonth ? new Date().getDate() - 1 : daysInMonth(currentMonth) - 1; }
 
 let escalaSellerId = null;
 function ensureSched(sellerId){ const md=monthData(); md.sched=md.sched||{}; if(!md.sched[sellerId]){ const o={}; const n=daysInMonth(currentMonth); for(let d=1;d<=n;d++) if(defaultWorks(currentMonth,d)) o[d]=1; md.sched[sellerId]=o; } return md.sched[sellerId]; }
