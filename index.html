@@ -1914,22 +1914,28 @@ function attachGridNav(table) {
     inp.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === "ArrowDown") { e.preventDefault(); moveCell(inp, 1); } else if (e.key === "ArrowUp") { e.preventDefault(); moveCell(inp, -1); } });
   });
 }
+function fechNavCells(row) { return [...row.querySelectorAll(".fechcell, .fechsel, .parecer-input[contenteditable='true']")]; }
 function moveFechCell(inp, dir) {
   const row = inp.closest("tr"); if (!row) return;
-  const cells = [...row.querySelectorAll(".fechcell, .fechsel")];
+  const cells = fechNavCells(row);
   const idx = cells.indexOf(inp); if (idx < 0) return;
   const next = cells[idx + dir];
-  if (next) { next.focus(); if (next.select) next.select(); }
+  if (next) { next.focus(); if (typeof next.select === "function") next.select(); }
+}
+function fechNavKeydown(e) {
+  const inp = e.currentTarget;
+  if (e.key === "Tab") { e.preventDefault(); moveFechCell(inp, e.shiftKey ? -1 : 1); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); moveFechCell(inp, 1); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); moveFechCell(inp, -1); }
+  else if (e.key === "Enter" || e.key === "ArrowDown") { e.preventDefault(); moveCell(inp, 1); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); moveCell(inp, -1); }
 }
 function attachFechNav(table) {
-  table.querySelectorAll(".fechcell").forEach(inp => {
-    inp.addEventListener("focus", () => inp.select());
-    inp.addEventListener("keydown", e => {
-      if (e.key === "Tab") { e.preventDefault(); moveFechCell(inp, e.shiftKey ? -1 : 1); }
-      else if (e.key === "ArrowRight") { e.preventDefault(); moveFechCell(inp, 1); }
-      else if (e.key === "ArrowLeft") { e.preventDefault(); moveFechCell(inp, -1); }
-      else if (e.key === "Enter" || e.key === "ArrowDown") { e.preventDefault(); moveCell(inp, 1); }
-      else if (e.key === "ArrowUp") { e.preventDefault(); moveCell(inp, -1); }
+  table.querySelectorAll(".fechcell, .fechsel, .parecer-input[contenteditable='true']").forEach(inp => {
+    inp.addEventListener("focus", () => { if (typeof inp.select === "function") inp.select(); });
+    inp.addEventListener("keydown", fechNavKeydown);
+    inp.addEventListener("blur", () => {
+      setTimeout(() => { if (!fechIsEditing()) flushFechSave(); }, 0);
     });
   });
 }
@@ -3650,8 +3656,56 @@ function setupTabDnD(){ const nav=document.getElementById("tabs"); let dragV=nul
 /* ============================================================ FECHAMENTO DIÁRIO */
 let fechDay = (todayISO()===currentMonth ? new Date().getDate() : 1);
 function getFech(day){ return monthData().fechamento[day] || {}; }
-function setFech(day,key,val){ const md=monthData(); md.fechamento[day]=md.fechamento[day]||{}; if(val===''||val==null||(typeof val==='number'&&isNaN(val))) delete md.fechamento[day][key]; else md.fechamento[day][key]=val; save(); renderFechDays(); }
 function fechHasData(day){ const f=monthData().fechamento[day]; return f && Object.keys(f).length>0; }
+let fechSaveTimer;
+function writeFech(day, key, val) {
+  const md = monthData();
+  md.fechamento[day] = md.fechamento[day] || {};
+  const had = fechHasData(day);
+  if (val === '' || val == null || (typeof val === 'number' && isNaN(val))) delete md.fechamento[day][key];
+  else md.fechamento[day][key] = val;
+  if (!Object.keys(md.fechamento[day]).length) delete md.fechamento[day];
+  if (had !== fechHasData(day)) renderFechDays();
+}
+function scheduleFechSave() {
+  clearTimeout(fechSaveTimer);
+  fechSaveTimer = setTimeout(() => { fechSaveTimer = null; save(); }, 450);
+}
+function flushFechSave() {
+  if (!fechSaveTimer) return;
+  clearTimeout(fechSaveTimer);
+  fechSaveTimer = null;
+  save();
+}
+function setFech(day, key, val, opts) {
+  writeFech(day, key, val);
+  if (opts?.now) save();
+  else scheduleFechSave();
+}
+function fechIsEditing() {
+  const a = document.activeElement;
+  if (!a || activeView !== "fechamento") return false;
+  if (a.classList.contains("fechcell") || a.classList.contains("fechsel")) return true;
+  if (a.classList.contains("parecer-input") && a.isContentEditable) return true;
+  return !!(a.classList.contains("loja-input") && a.closest("#fechTable"));
+}
+function onRemoteLojasSnap(snap) {
+  remoteLojas = snap.val() || {};
+  setFbBadge(true);
+  if (activeView === "rscen") renderActive();
+  else if (activeView === "fechamento") {
+    if (!fechIsEditing()) renderActive();
+    else recalcFechTotal();
+  }
+  if (activeView === "config" && typeof renderSync === "function") renderSync();
+}
+function onFechCellInput(day, inp) {
+  const v = inp.value === '' ? '' : Number(inp.value);
+  writeFech(day, inp.dataset.key, v);
+  scheduleFechSave();
+  if (typeof recalcFechPctMulti === "function") recalcFechPctMulti();
+  else recalcFechPct();
+}
 function fpct(r,m){ return m? r/m : null; }
 function fechPuxLabel(pux) { return pux === true ? "Sim" : "—"; }
 function fechPuxSelect(dis, dataDay) {
@@ -3728,11 +3782,11 @@ function renderFechamento(){
     `<td class="parecer"><div class="parecer-input" contenteditable="true" data-day="${day}">${escapeHtml(f.parecer||'')}</div></td></tr>`;
   document.getElementById("fechTable").innerHTML = head+"<tbody>"+row+`<tr class="total" id="fechTotal"></tr>`+"</tbody>";
   recalcFechTotal();
-  document.querySelectorAll("#fechTable .fechcell").forEach(inp=>inp.addEventListener("input",()=>{ const v=inp.value===''?'':Number(inp.value); setFech(+inp.dataset.day,inp.dataset.key,v); recalcFechPct(); }));
-  document.querySelectorAll("#fechTable .fechsel").forEach(s=>s.addEventListener("change",()=>{ setFech(+s.dataset.day,s.dataset.key, s.value===''?'':(s.value==='1')); recalcFechTotal(); }));
+  document.querySelectorAll("#fechTable .fechcell").forEach(inp=>inp.addEventListener("input",()=>onFechCellInput(day, inp)));
+  document.querySelectorAll("#fechTable .fechsel").forEach(s=>s.addEventListener("change",()=>{ setFech(+s.dataset.day,s.dataset.key, s.value===''?'':(s.value==='1'), {now:true}); recalcFechTotal(); }));
   document.querySelectorAll("#fechTable .parecer-input[contenteditable]").forEach(p=>p.addEventListener("input",()=>setFech(+p.dataset.day,'parecer',p.textContent)));
   const lj=document.getElementById("fechLoja"); if(lj) lj.addEventListener("change",()=>{ state.storeName=lj.value; const hdr=document.getElementById("storeName"); if(hdr) hdr.value=lj.value; save(); });
-  attachGridNav(document.getElementById("fechTable"));
+  attachFechNav(document.getElementById("fechTable"));
   renderFechDays();
 }
 function recalcFechPct(){ const f=getFech(fechDay); const set=(id,r,m)=>{ const el=document.getElementById(id); if(el){ const p=fpct(r,m); el.style.color=fechHeatText(p); el.textContent=p==null?'—':Math.round(p*100)+'%'; } }; set('pctV',f.vR,f.vM); set('pctA',f.aR,f.aM); set('pctC',f.cR,f.cM); recalcFechTotal(); }
@@ -3767,8 +3821,9 @@ function fechPull() {
   let n = 0;
   pulls.forEach(({ key, ind }) => {
     const total = fechSumCheckoutDay(ind, day);
-    if (total != null) { setFech(day, key, total); n++; }
+    if (total != null) { writeFech(day, key, total); n++; }
   });
+  if (n) save();
   renderFechamento();
   toast(n ? ("Puxado do check-out do dia (" + n + " campo" + (n > 1 ? "s" : "") + ")") : "Nada lançado no check-out desse dia ainda", !n);
 }
@@ -3794,7 +3849,7 @@ function fbInit(){
     if (typeof firebase === "undefined" || !firebase.initializeApp) { setFbBadge(false); return; }
     firebase.initializeApp(FIREBASE_CONFIG);
     fbDb = firebase.database(); fbReady = true; setFbBadge(false);
-    fbDb.ref("lojas").on("value", snap => { remoteLojas = snap.val() || {}; setFbBadge(true); if(activeView==="fechamento"||activeView==="rscen") renderActive(); });
+    fbDb.ref("lojas").on("value", onRemoteLojasSnap);
     fbDb.ref(".info/connected").on("value", s => setFbBadge(!!(s && s.val())));
     fbPush();
   }catch(e){ console.warn("Firebase init falhou:", e); setFbBadge(false); }
@@ -3853,8 +3908,8 @@ function renderFechamento(){
   const selfRow=document.getElementById("fechSelfRow");
   if(selfRow){
     if (!fechLocked) {
-      selfRow.querySelectorAll(".fechcell").forEach(inp=>inp.addEventListener("input",()=>{ const v=inp.value===''?'':Number(inp.value); setFech(day,inp.dataset.key,v); recalcFechPctMulti(); }));
-      selfRow.querySelectorAll(".fechsel").forEach(s=>s.addEventListener("change",()=>{ setFech(day,s.dataset.key, s.value===''?'':(s.value==='1')); recalcFechTotal(); }));
+      selfRow.querySelectorAll(".fechcell").forEach(inp=>inp.addEventListener("input",()=>onFechCellInput(day, inp)));
+      selfRow.querySelectorAll(".fechsel").forEach(s=>s.addEventListener("change",()=>{ setFech(day,s.dataset.key, s.value===''?'':(s.value==='1'), {now:true}); recalcFechTotal(); }));
       selfRow.querySelectorAll(".parecer-input[contenteditable]").forEach(p=>p.addEventListener("input",()=>setFech(day,'parecer',p.textContent)));
       const lj=document.getElementById("fechLoja"); if(lj) lj.addEventListener("change",()=>{ state.storeName=lj.value; const hdr=document.getElementById("storeName"); if(hdr) hdr.value=lj.value; save(); });
       attachFechNav(selfRow.closest("table"));
@@ -3948,7 +4003,7 @@ function fbInit(){
       if (!user) return;
       myLojaId = user.uid; fbReady = true; setFbBadge(false);
       try { fbDb.ref("admins/"+user.uid).on("value", s => { isAdmin = (s.val()===true); if(activeView==="config") renderSync(); }); } catch(e){}
-      fbDb.ref("lojas").on("value", snap => { remoteLojas = snap.val() || {}; setFbBadge(true); if(activeView==="fechamento"||activeView==="rscen") renderActive(); if(activeView==="config") renderSync(); },
+      fbDb.ref("lojas").on("value", onRemoteLojasSnap,
         err => { console.warn("leitura lojas negada (regras/auth):", err && err.message); setFbBadge(false); });
       fbDb.ref(".info/connected").on("value", s => setFbBadge(!!(s && s.val())));
       fbPush();
@@ -4373,7 +4428,7 @@ function fbInit(){
       }); } catch(e){}
       try { fbDb.ref("auth/adminDevices").on("value", s => { authAdminDevices = s.val() || {}; updateTrocarLojaTopTitle(); if(activeView==="config") renderSync(); }); } catch(e){}
       try { fbDb.ref("auth/master").on("value", s => { authMasterCache = s.val(); }); } catch(e){}
-      fbDb.ref("lojas").on("value", snap => { remoteLojas = snap.val() || {}; setFbBadge(true); if(activeView==="fechamento"||activeView==="rscen") renderActive(); if(activeView==="config") renderSync(); },
+      fbDb.ref("lojas").on("value", onRemoteLojasSnap,
         err => { console.warn("leitura lojas negada:", err && err.message); setFbBadge(false); });
       fbDb.ref(".info/connected").on("value", s => setFbBadge(!!(s && s.val())));
       if (!window._presenceTick) window._presenceTick = setInterval(() => { if (fbReady) setFbBadge(true); }, 60000);
