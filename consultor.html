@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v8";
+  var BUILD = "v9";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -419,7 +419,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v8";
+const APP_BUILD = "v9";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -745,6 +745,16 @@ function findVendaIndicator() {
   const inds = lojaData?.indicators || [];
   return inds.find(i => i.role === "venda") || inds.find(i => /venda/i.test(i.name || ""));
 }
+function isVendaIndicator(cfg) {
+  if (!cfg) return false;
+  if (cfg.role === "venda") return true;
+  return /venda/i.test(cfg.name || "");
+}
+/** Ranking: vendas sempre usa score % (maior melhor); demais indicadores respeitam ↓ se configurado. */
+function rankUsesLowerBetter(cfg, parentInd) {
+  if (isVendaIndicator(cfg)) return false;
+  return cfgLowerBetter(cfg, parentInd);
+}
 function fieldProjStats(cfg, sellerId, m = todayISO(), parentInd = null) {
   const days = monthDays(m);
   const lb = cfgLowerBetter(cfg, parentInd);
@@ -845,8 +855,13 @@ function rankScoresTied(a, b) {
   if (a === -Infinity || b === -Infinity) return false;
   return Math.abs(a - b) < 1e-9;
 }
-function compareTeamRankRows(a, b, lb) {
+function compareTeamRankRows(a, b, lb, isVenda) {
   if (b.score !== a.score) return b.score - a.score;
+  if (isVenda) {
+    const rA = a.score === -Infinity ? -Infinity : Math.round(a.score * 10000) / 100;
+    const rB = b.score === -Infinity ? -Infinity : Math.round(b.score * 10000) / 100;
+    if (rB !== rA) return rB - rA;
+  }
   const adA = a.adherence ?? -1, adB = b.adherence ?? -1;
   if (adB !== adA) return adB - adA;
   const accA = a.accuracy ?? -1, accB = b.accuracy ?? -1;
@@ -855,7 +870,8 @@ function compareTeamRankRows(a, b, lb) {
   return b.projAbs - a.projAbs;
 }
 function buildTeamRankRows(fieldId, cfg, m = todayISO(), parentInd = null) {
-  const lb = cfgLowerBetter(cfg, parentInd);
+  const isVenda = isVendaIndicator(cfg);
+  const lb = rankUsesLowerBetter(cfg, parentInd);
   const days = monthDays(m);
   return orderedSellers().map(s => {
     const real = matrizFieldValue(s.id, fieldId, days, "mes", m);
@@ -871,10 +887,10 @@ function buildTeamRankRows(fieldId, cfg, m = todayISO(), parentInd = null) {
       accuracy: metrics.acc,
       projAbs: proj ?? (lb ? Infinity : -Infinity)
     };
-  }).sort((a, b) => compareTeamRankRows(a, b, lb))
-    .map((r, i) => ({ ...r, pos: i + 1 }));
+  }).sort((a, b) => compareTeamRankRows(a, b, lb, isVenda))
+    .map((r, i) => ({ ...r, pos: i + 1, isVenda }));
 }
-function rankDisciplineNote(rows, sellerId, lb) {
+function rankDisciplineNote(rows, sellerId, lb, isVenda) {
   const my = rows.find(r => r.id === sellerId);
   if (!my || my.pos <= 1 || my.score === -Infinity) return null;
   const sameScoreAbove = rows.filter(r => r.pos < my.pos && rankScoresTied(r.score, my.score));
@@ -885,18 +901,22 @@ function rankDisciplineNote(rows, sellerId, lb) {
   const myAd = my.adherence ?? -1, myAcc = my.accuracy ?? -1;
   const refAd = ref.adherence ?? -1, refAcc = ref.accuracy ?? -1;
   if (myAd >= refAd && myAcc >= refAcc) return null;
+  if (isVenda) {
+    return "Você está com maior projeção de vendas, mas perdeu posição no ranking porque sua aderência e acurácia estão muito baixas — precisa, urgentemente, ajustar!";
+  }
   return "Você está com maior projeção absoluta neste indicador, mas perdeu posição porque sua aderência e acurácia estão muito baixas — precisa, urgentemente, ajustar!";
 }
 function teamRankByProjPct(fieldId, cfg, sellerId, m = todayISO(), parentInd = null) {
   const rows = buildTeamRankRows(fieldId, cfg, m, parentInd);
   const total = rows.length;
   if (!total) return { pos: 0, total: 0, note: null };
-  const lb = cfgLowerBetter(cfg, parentInd);
+  const isVenda = isVendaIndicator(cfg);
+  const lb = rankUsesLowerBetter(cfg, parentInd);
   const mine = rows.find(r => r.id === sellerId);
   return {
     pos: mine ? mine.pos : 0,
     total,
-    note: mine ? rankDisciplineNote(rows, sellerId, lb) : null
+    note: mine ? rankDisciplineNote(rows, sellerId, lb, isVenda) : null
   };
 }
 function teamRitmoRank(sellerId, m = todayISO()) {
@@ -1066,7 +1086,7 @@ function renderResumo() {
         </div>
         <div class="resumo-chip-item">
           <span class="resumo-chip" style="color:var(--accent-2)">${vendaRankTxt}</span>
-          <span class="resumo-chip-leg">% da meta · desempate: aderência, acurácia e projeção.</span>
+          <span class="resumo-chip-leg">Score % (maior melhor) · desempate: aderência, acurácia e projeção.</span>
           ${vendaRank.note ? `<span class="resumo-rank-note" style="margin-top:4px;display:block;">${vendaRank.note}</span>` : ""}
         </div>
       </div>
