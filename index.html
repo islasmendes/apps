@@ -617,7 +617,7 @@
       </div>
       <div class="daystrip" id="fechDays"></div>
       <div class="table-wrap"><table id="fechTable"></table></div>
-      <div class="hint" style="margin-top:8px;">No <b>Parecer</b>, arraste a barra para o lado para ler tudo (o resto fica fixo). Meta/Real/Prev são digitados; o % se calcula sozinho. <kbd>Tab</kbd> avança para o próximo indicador à direita. Sábado e domingo ficam bloqueados — clique no 🔓 no dia para liberar. Em <b>Puxada</b>, em branco = não fez; selecione <b>Sim</b> só quando realizada.</div>
+      <div class="hint" style="margin-top:8px;">No <b>Parecer</b>, arraste a barra para o lado para ler tudo (o resto fica fixo). Meta/Real/Prev são digitados; o % se calcula sozinho. <kbd>Tab</kbd> avança para o próximo indicador à direita. Sábado e domingo ficam bloqueados — clique no 🔓 no dia para liberar. Em <b>Puxada</b>, em branco = não fez; selecione <b>Sim</b> só quando realizada. Cores do <b>%</b>: <span style="color:var(--danger)">0–50%</span> · <span style="color:var(--warn)">51–78%</span> · <span style="color:var(--ok)">≥79%</span> (aceitável para não ir à reunião divisional).</div>
     </div>
   </section>
 
@@ -1406,6 +1406,16 @@ function rateValue(rate, sellerIds, m = currentMonth) {
 function heatBase(pct) { const css = getComputedStyle(document.documentElement); if (pct == null) return null; if (pct < 0.5) return css.getPropertyValue("--danger").trim(); if (pct < 0.9) return css.getPropertyValue("--warn").trim(); if (pct < 1.2) return css.getPropertyValue("--ok").trim(); return css.getPropertyValue("--info").trim(); }
 function heatColor(pct) { if (pct == null) return "transparent"; return "color-mix(in srgb, " + heatBase(pct) + " 26%, transparent)"; }
 function heatText(pct) { if (pct == null) return "var(--text-faint)"; return heatBase(pct); }
+/** Fechamento Diário: vermelho 0–50%, amarelo 51–78%, verde ≥79% (aceitável divisional). */
+function fechHeatBase(pct) {
+  const css = getComputedStyle(document.documentElement);
+  if (pct == null) return null;
+  if (pct <= 0.5) return css.getPropertyValue("--danger").trim();
+  if (pct < 0.79) return css.getPropertyValue("--warn").trim();
+  return css.getPropertyValue("--ok").trim();
+}
+function fechHeatColor(pct) { if (pct == null) return "transparent"; return "color-mix(in srgb, " + fechHeatBase(pct) + " 26%, transparent)"; }
+function fechHeatText(pct) { if (pct == null) return "var(--text-faint)"; return fechHeatBase(pct); }
 /** Matriz % e Proj. vs meta: verde ≥100%, amarelo ≥70% (até 30% abaixo), vermelho &lt;70%. */
 function heatVsMeta(ratio) {
   const css = getComputedStyle(document.documentElement);
@@ -3706,7 +3716,7 @@ function renderFechamento(){
     <th style="border-left:3px solid var(--accent)">Meta</th><th>Real</th><th>Prev</th><th>%</th>
     <th style="border-left:3px solid var(--accent-2)">Meta</th><th>Real</th><th>Prev</th><th>%</th>
     <th style="border-left:3px solid var(--warn)">Novas</th><th>D90</th><th>Aprov</th></tr></thead>`;
-  function pctTd(id,r,m){ const p=fpct(r,m); return `<td id="${id}" style="color:${heatText(p)};font-weight:700">${p==null?'—':Math.round(p*100)+'%'}</td>`; }
+  function pctTd(id,r,m){ const p=fpct(r,m); return `<td id="${id}" style="color:${fechHeatText(p)};font-weight:700">${p==null?'—':Math.round(p*100)+'%'}</td>`; }
   let row=`<tr><td class="name"><input class="loja-input" id="fechLoja" value="${escapeHtml(loja)}" title="Nome da loja"></td>`+
     fechNumCell(day,'vM',f.vM)+fechNumCell(day,'vR',f.vR)+fechNumCell(day,'vP',f.vP)+pctTd('pctV',f.vR,f.vM)+
     fechNumCell(day,'aM',f.aM)+fechNumCell(day,'aR',f.aR)+fechNumCell(day,'aP',f.aP)+pctTd('pctA',f.aR,f.aM)+
@@ -3725,8 +3735,8 @@ function renderFechamento(){
   attachGridNav(document.getElementById("fechTable"));
   renderFechDays();
 }
-function recalcFechPct(){ const f=getFech(fechDay); const set=(id,r,m)=>{ const el=document.getElementById(id); if(el){ const p=fpct(r,m); el.style.color=heatText(p); el.textContent=p==null?'—':Math.round(p*100)+'%'; } }; set('pctV',f.vR,f.vM); set('pctA',f.aR,f.aM); set('pctC',f.cR,f.cM); recalcFechTotal(); }
-function recalcFechTotal(){ const f=getFech(fechDay); const tr=document.getElementById("fechTotal"); if(!tr) return; const cell=(m,r,p)=>{ const pc=fpct(r,m); return `<td class="muted">${m||0}</td><td><span class="heat" style="background:${heatColor(pc)};color:${heatText(pc)}">${r||0}</span></td><td class="muted">${p||0}</td><td style="color:${heatText(pc)};font-weight:700">${pc==null?'—':Math.round(pc*100)+'%'}</td>`; };
+function recalcFechPct(){ const f=getFech(fechDay); const set=(id,r,m)=>{ const el=document.getElementById(id); if(el){ const p=fpct(r,m); el.style.color=fechHeatText(p); el.textContent=p==null?'—':Math.round(p*100)+'%'; } }; set('pctV',f.vR,f.vM); set('pctA',f.aR,f.aM); set('pctC',f.cR,f.cM); recalcFechTotal(); }
+function recalcFechTotal(){ const f=getFech(fechDay); const tr=document.getElementById("fechTotal"); if(!tr) return; const cell=(m,r,p)=>{ const pc=fpct(r,m); return `<td class="muted">${m||0}</td><td><span class="heat" style="background:${fechHeatColor(pc)};color:${fechHeatText(pc)}">${r||0}</span></td><td class="muted">${p||0}</td><td style="color:${fechHeatText(pc)};font-weight:700">${pc==null?'—':Math.round(pc*100)+'%'}</td>`; };
   tr.innerHTML=`<td class="name">⌂ Total RSCEN</td>`+cell(f.vM,f.vR,f.vP)+cell(f.aM,f.aR,f.aP)+cell(f.cM,f.cR,f.cP)+`<td>${f.fN||0}</td><td>${f.f9||0}</td><td>${f.fA||0}</td><td>${f.troca||0}</td><td class="${f.pux===true?'si':'nao'}">${fechPuxLabel(f.pux)}</td><td style="color:var(--danger);font-weight:700">${f.queda||0}</td><td class="parecer"><div class="parecer-input" style="color:var(--text-faint)">Consolidado (1 loja — multi-loja com o tempo real).</div></td>`;
 }
 function fechNormName(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/\p{M}/gu, ""); }
@@ -3823,7 +3833,7 @@ function renderFechamento(){
     <th style="border-left:3px solid var(--warn)">Novas</th><th>D90</th><th>Aprov</th></tr></thead>`;
   const ro = fechLocked ? ' readonly tabindex="-1"' : '';
   const numC=(self,key,val)=> self? `<td><input class="cellinput fechcell" data-key="${key}" value="${val??''}" placeholder="0"${ro}></td>` : `<td>${val==null||val===''?'—':val}</td>`;
-  const pctC=(blk,r,m)=>{ const p=fpct(r,m); return `<td class="pctcell" data-blk="${blk}" style="color:${heatText(p)};font-weight:700">${p==null?'—':Math.round(p*100)+'%'}</td>`; };
+  const pctC=(blk,r,m)=>{ const p=fpct(r,m); return `<td class="pctcell" data-blk="${blk}" style="color:${fechHeatText(p)};font-weight:700">${p==null?'—':Math.round(p*100)+'%'}</td>`; };
   let rows="";
   lojas.forEach(L=>{
     const f=lojaFechOf(L,day); const self=L.self;
@@ -3851,9 +3861,9 @@ function renderFechamento(){
     }
   }
 }
-function recalcFechPctMulti(){ const f=getFech(fechDay); const row=document.getElementById("fechSelfRow"); if(!row) return; const upd=(blk,r,m)=>{ const el=row.querySelector(`.pctcell[data-blk="${blk}"]`); if(el){ const p=fpct(r,m); el.style.color=heatText(p); el.textContent=p==null?'—':Math.round(p*100)+'%'; } }; upd('v',f.vR,f.vM); upd('a',f.aR,f.aM); upd('c',f.cR,f.cM); recalcFechTotal(); }
+function recalcFechPctMulti(){ const f=getFech(fechDay); const row=document.getElementById("fechSelfRow"); if(!row) return; const upd=(blk,r,m)=>{ const el=row.querySelector(`.pctcell[data-blk="${blk}"]`); if(el){ const p=fpct(r,m); el.style.color=fechHeatText(p); el.textContent=p==null?'—':Math.round(p*100)+'%'; } }; upd('v',f.vR,f.vM); upd('a',f.aR,f.aM); upd('c',f.cR,f.cM); recalcFechTotal(); }
 function recalcFechTotal(){ const tr=document.getElementById("fechTotal"); if(!tr) return; const day=fechDay; const lojas=allLojas(); const T={}; ['vM','vR','vP','aM','aR','aP','cM','cR','cP','fN','f9','fA','troca','queda'].forEach(k=>T[k]=0); let pux=0,puxN=0; lojas.forEach(L=>{ const f=lojaFechOf(L,day); ['vM','vR','vP','aM','aR','aP','cM','cR','cP','fN','f9','fA','troca','queda'].forEach(k=>T[k]+=Number(f[k]||0)); if(f.pux===true)pux++; if(f.pux!=null)puxN++; });
-  const cell=(m,r,p)=>{ const pc=fpct(r,m); return `<td class="muted">${m}</td><td><span class="heat" style="background:${heatColor(pc)};color:${heatText(pc)}">${r}</span></td><td class="muted">${p}</td><td style="color:${heatText(pc)};font-weight:700">${pc==null?'—':Math.round(pc*100)+'%'}</td>`; };
+  const cell=(m,r,p)=>{ const pc=fpct(r,m); return `<td class="muted">${m}</td><td><span class="heat" style="background:${fechHeatColor(pc)};color:${fechHeatText(pc)}">${r}</span></td><td class="muted">${p}</td><td style="color:${fechHeatText(pc)};font-weight:700">${pc==null?'—':Math.round(pc*100)+'%'}</td>`; };
   tr.innerHTML=`<td class="name">⌂ Total RSCEN</td>`+cell(T.vM,T.vR,T.vP)+cell(T.aM,T.aR,T.aP)+cell(T.cM,T.cR,T.cP)+`<td>${T.fN}</td><td>${T.f9}</td><td>${T.fA}</td><td>${T.troca}</td><td class="si">${pux}/${lojas.length}</td><td style="color:var(--danger);font-weight:700">${T.queda}</td><td class="parecer"><div class="parecer-input" style="color:var(--text-faint)">Consolidado de ${lojas.length} loja(s).</div></td>`;
 }
 
