@@ -731,7 +731,220 @@ function migrate(s) {
   });
   return s;
 }
-function save(opts) { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); } if (!opts?.skipPush && typeof fbPush === "function") fbPush(); }
+
+/* ---------- Config operacional (admin → todas as lojas + RSCEN+) ---------- */
+const CONFIG_OP_PATH = "config/operational";
+let lastAppliedConfigVersion = null;
+let lastPushedConfigHash = null;
+let configPushTimer = null;
+let configApplyTimer = null;
+let configApplying = false;
+let configListenerOn = false;
+
+function isConfigAdmin() { return !!(isAdmin || (typeof isDeviceAdmin === "function" && isDeviceAdmin())); }
+function fieldNameById(fieldId, st) {
+  if (!fieldId) return "";
+  for (const ind of st.indicators || []) {
+    if (ind.id === fieldId) return ind.name;
+    for (const s of (ind.subs || [])) if (s.id === fieldId) return s.name;
+  }
+  return "";
+}
+function resolveFieldIdByName(name, st) {
+  if (!name) return "";
+  for (const ind of st.indicators || []) {
+    if (ind.name === name) return ind.id;
+    for (const s of (ind.subs || [])) if (s.name === name) return s.id;
+  }
+  return "";
+}
+function extractOperationalConfig(st) {
+  const indicators = (st.indicators || []).map(ind => ({
+    name: ind.name,
+    abbr: ind.abbr || "",
+    color: ind.color || "#888888",
+    checkin: !!ind.checkin,
+    checkout: !!ind.checkout,
+    role: ind.role || "",
+    pctOnly: !!ind.pctOnly,
+    lowerBetter: !!ind.lowerBetter,
+    subs: (ind.subs || []).map(s => ({
+      name: s.name,
+      checkin: !!s.checkin,
+      checkout: !!s.checkout,
+      lowerBetter: !!s.lowerBetter,
+      sundayOnly: !!s.sundayOnly
+    })),
+    rates: (ind.rates || []).map(r => ({
+      name: r.name,
+      numName: fieldNameById(r.numId, st),
+      denName: fieldNameById(r.denId, st),
+      invert: !!r.invert,
+      manual: !!r.manual,
+      lowerBetter: !!r.lowerBetter
+    }))
+  }));
+  const idToName = Object.fromEntries((st.indicators || []).map(i => [i.id, i.name]));
+  const orderNames = (st.order?.indicators || (st.indicators || []).map(i => i.id))
+    .map(id => idToName[id]).filter(Boolean);
+  return { v: 1, indicators, orderNames, updatedAt: Date.now(), sourceLoja: lojaCode || null };
+}
+function configHash(tpl) {
+  return JSON.stringify({ indicators: tpl.indicators, orderNames: tpl.orderNames });
+}
+function applyOperationalConfig(st, tpl, opts) {
+  if (!tpl || !Array.isArray(tpl.indicators)) return false;
+  if (!opts?.ignoreVersion && tpl.updatedAt && lastAppliedConfigVersion === tpl.updatedAt) return false;
+  const localByName = Object.fromEntries((st.indicators || []).map(i => [i.name, i]));
+  const newIndicators = tpl.indicators.map(tInd => {
+    const local = localByName[tInd.name];
+    const ind = {
+      id: local?.id || uid(),
+      name: tInd.name,
+      abbr: tInd.abbr || "",
+      color: tInd.color,
+      checkin: tInd.checkin,
+      checkout: tInd.checkout,
+      role: tInd.role || "",
+      pctOnly: tInd.pctOnly,
+      lowerBetter: tInd.lowerBetter,
+      metaDay: local?.metaDay ?? 0,
+      metaSat: local?.metaSat ?? 0,
+      metaSun: local?.metaSun ?? 0,
+      metaMonth: local?.metaMonth ?? 0,
+      subs: [],
+      rates: []
+    };
+    const localSubByName = Object.fromEntries((local?.subs || []).map(s => [s.name, s]));
+    ind.subs = (tInd.subs || []).map(ts => {
+      const ls = localSubByName[ts.name];
+      return {
+        id: ls?.id || uid(),
+        name: ts.name,
+        checkin: ts.checkin,
+        checkout: ts.checkout,
+        lowerBetter: ts.lowerBetter,
+        sundayOnly: !!ts.sundayOnly,
+        metaDay: ls?.metaDay ?? 0,
+        metaSat: ls?.metaSat ?? 0,
+        metaSun: ls?.metaSun ?? 0,
+        metaMonth: ls?.metaMonth ?? 0
+      };
+    });
+    const localRateByName = Object.fromEntries((local?.rates || []).map(r => [r.name, r]));
+    ind.rates = (tInd.rates || []).map(tr => {
+      const lr = localRateByName[tr.name];
+      return {
+        id: lr?.id || uid(),
+        name: tr.name,
+        numId: "",
+        denId: "",
+        invert: tr.invert,
+        manual: tr.manual,
+        lowerBetter: tr.lowerBetter,
+        target: lr?.target ?? 0
+      };
+    });
+    return ind;
+  });
+  newIndicators.forEach(ind => {
+    const tInd = tpl.indicators.find(ti => ti.name === ind.name);
+    (ind.rates || []).forEach(r => {
+      const tr = (tInd?.rates || []).find(x => x.name === r.name);
+      if (tr) {
+        r.numId = resolveFieldIdByName(tr.numName, { indicators: newIndicators });
+        r.denId = resolveFieldIdByName(tr.denName, { indicators: newIndicators });
+      }
+    });
+  });
+  const before = configHash(extractOperationalConfig(st));
+  st.indicators = newIndicators;
+  st.order = st.order || {};
+  const nameToId = Object.fromEntries(newIndicators.map(i => [i.name, i.id]));
+  st.order.indicators = (tpl.orderNames || newIndicators.map(i => i.name)).map(n => nameToId[n]).filter(Boolean);
+  const after = configHash(extractOperationalConfig(st));
+  if (before === after && !opts?.ignoreVersion) return false;
+  if (!opts?.ignoreVersion) lastAppliedConfigVersion = tpl.updatedAt;
+  return true;
+}
+function syncConfigToAllLojas(tpl) {
+  if (!fbReady || !fbDb || !tpl) return;
+  Object.keys(remoteLojas).forEach(id => {
+    if (!/^VC/i.test(id)) return;
+    if (id === lojaCode && !divisionalMode()) return;
+    const r = remoteLojas[id];
+    if (!r?.data) return;
+    const localData = migrate(JSON.parse(JSON.stringify(r.data)));
+    if (!applyOperationalConfig(localData, tpl, { ignoreVersion: true })) return;
+    try {
+      fbDb.ref("lojas/" + id).update({
+        updatedAt: Date.now(),
+        "data/indicators": localData.indicators,
+        "data/order/indicators": localData.order.indicators
+      });
+    } catch (e) { console.warn("sync config loja", id, e); }
+  });
+}
+function pushConfigTemplate() {
+  if (!isConfigAdmin() || !fbReady || !fbDb || configApplying) return;
+  const tpl = extractOperationalConfig(state);
+  const hash = configHash(tpl);
+  if (hash === lastPushedConfigHash) return;
+  lastPushedConfigHash = hash;
+  lastAppliedConfigVersion = tpl.updatedAt;
+  fbDb.ref(CONFIG_OP_PATH).set(tpl).then(() => {
+    syncConfigToAllLojas(tpl);
+    if (divisionalMode()) toast("Configuração operacional sincronizada com todas as lojas");
+  }).catch(e => console.warn("config push falhou", e));
+}
+function queueConfigPush() {
+  if (!isConfigAdmin() || configApplying) return;
+  clearTimeout(configPushTimer);
+  configPushTimer = setTimeout(pushConfigTemplate, 800);
+}
+function applyTemplateFromCloud() {
+  if (!fbReady || !fbDb) return Promise.resolve(false);
+  return fbDb.ref(CONFIG_OP_PATH).once("value").then(snap => {
+    const tpl = snap.val();
+    if (!tpl) return false;
+    configApplying = true;
+    const changed = applyOperationalConfig(state, tpl);
+    configApplying = false;
+    if (changed) {
+      lastPushedConfigHash = configHash(tpl);
+      try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+      expandedBlocks = state.ui.expanded;
+    }
+    return changed;
+  }).catch(() => false);
+}
+function startConfigListener() {
+  if (!fbReady || !fbDb || configListenerOn) return;
+  configListenerOn = true;
+  fbDb.ref(CONFIG_OP_PATH).on("value", snap => {
+    const tpl = snap.val();
+    if (!tpl?.updatedAt) return;
+    if (lastAppliedConfigVersion === tpl.updatedAt) return;
+    if (isConfigAdmin() && tpl.sourceLoja === lojaCode && lastPushedConfigHash === configHash(tpl)) return;
+    clearTimeout(configApplyTimer);
+    configApplyTimer = setTimeout(() => {
+      configApplying = true;
+      const changed = applyOperationalConfig(state, tpl);
+      configApplying = false;
+      if (!changed) return;
+      lastPushedConfigHash = configHash(tpl);
+      save({ skipPush: divisionalMode(), skipConfigPush: true });
+      expandedBlocks = state.ui.expanded;
+      if (["matriz", "rscen", "kpis", "config", "diario", "resumo"].includes(activeView)) renderActive();
+    }, 300);
+  });
+}
+
+function save(opts) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); }
+  if (!opts?.skipPush && typeof fbPush === "function") fbPush();
+  if (!opts?.skipConfigPush) queueConfigPush();
+}
 
 let currentMonth = todayISO();
 function monthData(m = currentMonth) {
@@ -3356,6 +3569,7 @@ function fbInit(){
       fbDb.ref("lojas").on("value", snap => { remoteLojas = snap.val() || {}; setFbBadge(true); if(activeView==="fechamento"||activeView==="rscen") renderActive(); if(activeView==="config") renderSync(); },
         err => { console.warn("leitura lojas negada:", err && err.message); setFbBadge(false); });
       fbDb.ref(".info/connected").on("value", s => setFbBadge(!!(s && s.val())));
+      startConfigListener();
       loadAuthConfig().then(() => {
         if (authUnlocked && lojaCode) pullLoja();
         else if (!authUnlocked) startAuthFlow();
@@ -3438,11 +3652,39 @@ function fbPush(){
 }
 function pullLoja(){
   if (!fbReady || !fbDb || !lojaCode) return;
-  if (divisionalMode()){ state.storeName = "RSCEN — Divisional"; syncStore(); showView("rscen"); toast("Modo Divisional: vendo todas as lojas"); return; }
+  if (divisionalMode()){
+    state.storeName = "RSCEN — Divisional";
+    syncStore();
+    applyTemplateFromCloud().then(changed => {
+      if (changed && activeView === "rscen") renderArvore();
+      showView("rscen");
+      toast("Modo Divisional: vendo todas as lojas");
+    });
+    return;
+  }
   fbDb.ref("lojas/"+lojaCode).once("value").then(snap => {
     const v = snap.val();
-    if (v && v.data) { state = migrate(v.data); state.storeName = v.name || lojaCode; save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); startLojaDataListener(); toast("Loja "+lojaCode+" carregada da nuvem"); }
-    else { state.storeName = lojaCode; save(); fbPush(); syncStore(); renderActive(); startLojaDataListener(); toast("Nova loja "+lojaCode+" criada"); }
+    const finish = () => {
+      applyTheme(); syncStore(); expandedBlocks = state.ui.expanded;
+      renderActive(); startLojaDataListener();
+    };
+    if (v && v.data) {
+      state = migrate(v.data);
+      state.storeName = v.name || lojaCode;
+      applyTemplateFromCloud().then(() => {
+        save({ skipConfigPush: !isConfigAdmin() });
+        finish();
+        toast("Loja "+lojaCode+" carregada da nuvem");
+      });
+    } else {
+      state.storeName = lojaCode;
+      applyTemplateFromCloud().then(() => {
+        save({ skipConfigPush: !isConfigAdmin() });
+        fbPush();
+        finish();
+        toast("Nova loja "+lojaCode+" criada");
+      });
+    }
   }).catch(e => console.warn("pull falhou", e));
 }
 function submitLoja(){
@@ -3476,6 +3718,7 @@ function renderSync(){
   if (isAdmin) {
     html += `<div style="margin-top:16px;"><b style="font-size:13px;">Lojas conectadas (admin)</b>` +
       (lojas.length? lojas.map(L=>`<div class="row" style="align-items:center; margin-top:8px; border-top:1px solid var(--border-soft); padding-top:8px;"><span style="flex:1; min-width:160px;"><b>${escapeHtml(L.name)}</b> <span class="hint">${L.self?'· você':''} · ${escapeHtml(String(L.id))}</span></span>${L.self?'<span class="hint">(use Apagar acima)</span>':`<button class="btn danger sm" data-del-loja="${L.id}">Excluir loja</button>`}</div>`).join("") : '<div class="empty">Nenhuma loja.</div>') + `</div>`;
+    html += `<div class="hint" style="margin-top:10px; padding:10px 12px; background:color-mix(in srgb,var(--ok) 8%,transparent); border-radius:8px; border:1px solid color-mix(in srgb,var(--ok) 25%,transparent);">Como <b>admin</b>, alterações em <b>KPIs / indicadores</b> (criar, remover, cores, check-in/out, taxas, ordem) sincronizam automaticamente com <b>todas as lojas VC</b> e o <b>RSCEN+</b>. Metas, vendedores e lançamentos permanecem locais de cada loja.</div>`;
   } else if (!div) {
     html += `<div class="hint" style="margin-top:12px;">Só o <b>admin</b> exclui lojas. ID deste aparelho (para virar admin): <code style="font-size:10px">${escapeHtml(authUid||'—')}</code></div>`;
   }
