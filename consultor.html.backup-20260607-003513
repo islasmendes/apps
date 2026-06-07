@@ -595,63 +595,43 @@ function findVendaIndicator() {
   const inds = lojaData?.indicators || [];
   return inds.find(i => i.role === "venda") || inds.find(i => /venda/i.test(i.name || ""));
 }
-function fieldProjStats(cfg, sellerId, m = todayISO(), parentInd = null) {
+function fieldProjStats(cfg, sellerId, m = todayISO()) {
   const days = monthDays(m);
-  const lb = cfgLowerBetter(cfg, parentInd);
   const real = matrizFieldValue(sellerId, cfg.id, days, "mes", m);
   const meta = sellerMetaFor(cfg, sellerId, m);
   const proj = real != null ? sellerProjFromReal(sellerId, cfg.id, real, m) : null;
-  const perfRatio = meta && proj != null ? matrizProjPerfRatio(proj, meta, lb) : null;
+  const pct = meta && proj != null ? proj / meta : null;
   const gap = meta != null && proj != null ? Math.round(proj - meta) : null;
   const { done } = sellerWorkedSplit(sellerId, m);
   const ritmo = done > 0 && real != null ? real / done : null;
-  return { real, meta, proj, perfRatio, lb, gap, ritmo, done };
+  return { real, meta, proj, pct, gap, ritmo, done };
 }
-function resumoCallout(cfg, sellerId, m = todayISO(), mini, parentInd = null) {
-  const st = fieldProjStats(cfg, sellerId, m, parentInd);
-  const { proj, meta, perfRatio, lb } = st;
+function resumoCallout(cfg, sellerId, m = todayISO(), mini) {
+  const st = fieldProjStats(cfg, sellerId, m);
+  const { proj, meta, pct } = st;
   const nome = cfg.name || "indicador";
   if (proj == null) return { html: `<div class="resumo-callout muted${mini ? " mini" : ""}">Sem dados na matriz para projetar ${nome}.</div>`, tone: "muted" };
   if (!meta) return { html: `<div class="resumo-callout muted${mini ? " mini" : ""}">Real ${fmt(st.real)} na matriz — meta não definida.</div>`, tone: "muted" };
-  const projR = lb ? fmtPctFine(proj) : String(Math.round(proj));
-  const metaR = lb ? fmtPctFine(meta) : String(Math.round(meta));
+  const projR = Math.round(proj);
+  const metaR = Math.round(meta);
+  const falta = Math.max(0, metaR - projR);
   let tone = "ok", text = "";
-  if (lb) {
-    const band = matrizLowerBetterBand(proj, meta, matrizLowerWarnMargin(meta, false), false);
-    if (band === "ok") {
-      text = `No ritmo atual, projeta ${projR} ${nome} — teto ${metaR}. Abaixo do alvo, continue assim!`;
-      tone = "ok";
-    } else if (band === "danger") {
-      text = `Se continuar neste ritmo, ficará em ${projR} ${nome} — estoura o alvo ${metaR}. VOCÊ PRECISA MUDAR ATITUDE JÁ!`;
-      tone = "bad";
-    } else {
-      text = `Se continuar neste ritmo, projeta ${projR} ${nome} — perto do teto ${metaR}. Reduza antes de estourar!`;
-      tone = "warn";
-    }
-  } else if (perfRatio >= 1) {
-    text = `No ritmo atual, fecha com ${projR} ${nome} — meta ${metaR}. Continue assim!`;
+  if (pct >= 1) {
+    text = `No ritmo atual, fecha com ${fmt(projR)} ${nome} — meta ${fmt(metaR)}. Continue assim!`;
     tone = "ok";
-  } else if (perfRatio < 0.7) {
-    text = `Se continuar neste ritmo, entregará apenas ${projR} ${nome} — meta ${metaR}. VOCÊ PRECISA MUDAR ATITUDE JÁ!`;
+  } else if (pct < 0.7) {
+    text = `Se continuar neste ritmo, entregará apenas ${fmt(projR)} ${nome} — meta ${fmt(metaR)}. VOCÊ PRECISA MUDAR ATITUDE JÁ!`;
     tone = "bad";
   } else {
-    const falta = Math.max(0, Math.round(meta - proj));
-    text = `Se continuar neste ritmo, entregará ${projR} ${nome} — faltam ${fmt(falta)} para a meta (${metaR}). Acelere!`;
+    text = `Se continuar neste ritmo, entregará ${fmt(projR)} ${nome} — faltam ${fmt(falta)} para a meta (${fmt(metaR)}). Acelere!`;
     tone = "warn";
   }
-  return { html: `<div class="resumo-callout ${tone}${mini ? " mini" : ""}">${text}</div>`, tone, perfRatio };
+  return { html: `<div class="resumo-callout ${tone}${mini ? " mini" : ""}">${text}</div>`, tone, pct };
 }
-function countSemaforo(perfRatio, actual, target, lowerBetter, isPercent) {
-  if (lowerBetter && actual != null && target) {
-    const band = matrizLowerBetterBand(actual, target, matrizLowerWarnMargin(target, isPercent), isPercent);
-    if (band === "ok") return "g";
-    if (band === "warn") return "y";
-    if (band === "danger") return "r";
-    return null;
-  }
-  if (perfRatio == null) return null;
-  if (perfRatio >= 1) return "g";
-  if (perfRatio >= 0.7) return "y";
+function countSemaforo(pct) {
+  if (pct == null) return null;
+  if (pct >= 1) return "g";
+  if (pct >= 0.7) return "y";
   return "r";
 }
 /** Aderência consultor: % de dias encerrados na escala com check-in e check-out completos. */
@@ -704,18 +684,17 @@ function sellerMetrics(sellerId, m = todayISO()) {
   };
 }
 function teamSellerTotal() { return orderedSellers().length; }
-function teamRankByProjPct(fieldId, cfg, sellerId, m = todayISO(), parentInd = null) {
+function teamRankByProjPct(fieldId, cfg, sellerId, m = todayISO()) {
   const sellers = orderedSellers();
   const total = sellers.length;
   if (!total) return { pos: 0, total: 0 };
-  const lb = cfgLowerBetter(cfg, parentInd);
   const rows = sellers.map(s => {
     const real = matrizFieldValue(s.id, fieldId, monthDays(m), "mes", m);
     const meta = sellerMetaFor(cfg, s.id, m);
     const proj = real != null ? sellerProjFromReal(s.id, fieldId, real, m) : null;
-    const score = meta && proj != null ? matrizProjPerfRatio(proj, meta, lb) : null;
-    return { id: s.id, score: score ?? -Infinity };
-  }).sort((a, b) => b.score - a.score);
+    const pct = meta && proj != null ? proj / meta : null;
+    return { id: s.id, pct: pct ?? -Infinity };
+  }).sort((a, b) => b.pct - a.pct);
   return { pos: rows.findIndex(r => r.id === sellerId) + 1, total };
 }
 function teamRitmoRank(sellerId, m = todayISO()) {
@@ -731,54 +710,46 @@ function rateDisplayName(rate, ind) {
   if (!raw || raw === "%") return ind?.name || "Taxa";
   return raw.replace(/^%+\s*/, "");
 }
+function fmtTargetPct(target) {
+  const t = Number(target);
+  if (!t && t !== 0) return "—";
+  return (t % 1 ? fmt(t, 1) : fmt(t, 0)) + "%";
+}
 function resumoFieldRow(cfg, color, sellerId, opts, m = todayISO()) {
-  const parentInd = opts.parentInd || null;
-  const st = fieldProjStats(cfg, sellerId, m, parentInd);
-  const { real, meta, proj, perfRatio, lb, gap, ritmo } = st;
-  const heatColor = resumoHeatColor(proj, meta, perfRatio, lb, false);
-  const barW = resumoBarWidth(proj, meta, perfRatio, lb, false);
-  const pctDisp = perfRatio != null ? pctTxt(perfRatio) : "—";
-  const lbTag = lb ? " ↓" : "";
+  const st = fieldProjStats(cfg, sellerId, m);
+  const { real, meta, proj, pct, gap, ritmo } = st;
   let rankHtml = "";
   if (opts.showRank) {
-    const { pos, total } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
+    const { pos, total } = teamRankByProjPct(cfg.id, cfg, sellerId, m);
     if (pos > 0 && total > 1) rankHtml = `<div class="resumo-rank">${pos}º de ${total} na equipe</div>`;
   }
   const gapTxt = gap == null ? "" : (gap >= 0 ? `+${gap}` : String(gap));
-  const callout = opts.main ? resumoCallout(cfg, sellerId, m, true, parentInd).html : "";
+  const callout = opts.main ? resumoCallout(cfg, sellerId, m, true).html : "";
   const chev = opts.toggle ? `<span class="resumo-chev">${opts.open ? "▾" : "▸"}</span>` : "";
   const cls = `resumo-row${opts.sub ? " sub" : ""}${opts.main ? " resumo-ind-main" : ""}${opts.toggle ? " toggle" : ""}${opts.open ? " open" : ""}`;
   const attrs = opts.main && opts.indId ? ` data-ind-toggle="${opts.indId}"` : "";
-  const realDisp = lb ? fmtPctFine(real) : fmt(real);
-  const projDisp = lb ? fmtPctFine(proj) : fmt(proj);
-  const metaDisp = lb ? fmtPctFine(meta) : fmt(meta);
-  return `<div class="${cls}" style="--rc:${color};--bc:${heatColor}"${attrs}>
-    <div class="resumo-row-top"><b>${opts.sub ? "↳ " : ""}${cfg.name}${lbTag}${chev}</b><span class="pct" style="color:${heatColor}">${pctDisp}</span></div>
-    <div class="resumo-row-meta">Real ${realDisp} · Proj ${projDisp} · Meta ${metaDisp}${gapTxt ? " · " + gapTxt : ""}${ritmo != null ? " · " + fmt(ritmo, ritmo % 1 ? 1 : 0) + "/dia" : ""}${lb ? " · ↓ menor melhor" : ""}</div>
-    <div class="resumo-bar"><i style="width:${barW}%"></i></div>${rankHtml}${callout}</div>`;
+  return `<div class="${cls}" style="--rc:${color};--bc:${heatMatrizText(pct)}"${attrs}>
+    <div class="resumo-row-top"><b>${opts.sub ? "↳ " : ""}${cfg.name}${chev}</b><span class="pct" style="color:${heatMatrizText(pct)}">${pctTxt(pct)}</span></div>
+    <div class="resumo-row-meta">Real ${fmt(real)} · Proj ${fmt(proj)} · Meta ${fmt(meta)}${gapTxt ? " · " + gapTxt : ""}${ritmo != null ? " · " + fmt(ritmo, ritmo % 1 ? 1 : 0) + "/dia" : ""}</div>
+    <div class="resumo-bar"><i style="width:${Math.min(100, Math.round((pct || 0) * 100))}%"></i></div>${rankHtml}${callout}</div>`;
 }
 function resumoRateRow(rate, ind, color, sellerId, m = todayISO(), sub) {
   const val = rateValueForSeller(rate, sellerId, m);
-  const target = matrizRateTarget(rate, m);
-  const lb = rateLowerBetter(rate, ind);
-  const perfRatio = matrizRateRatio(val, target, lb);
-  const heatColor = resumoHeatColor(val, target, perfRatio, lb, true);
-  const barW = resumoBarWidth(val, target, perfRatio, lb, true);
+  const target = Number(rate.target) || 0;
+  const pct = target && val != null ? val / target : null;
   const label = rateDisplayName(rate, ind);
-  const valDisp = val == null ? "—" : (lb ? fmtPctFineUnit(val) : fmt(val, 0) + "%");
-  const tgtDisp = target ? (lb ? fmtPctFineUnit(target) : target + "%") : "—";
-  const metaExtra = lb ? " · ↓ menor melhor" : (perfRatio != null ? " · " + pctTxt(perfRatio) + " do alvo" : "");
-  return `<div class="resumo-row rate${sub ? " sub" : ""}" style="--rc:${color};--bc:${heatColor}">
-    <div class="resumo-row-top"><b>${sub ? "↳ " : ""}${label}${lb ? " ↓" : ""}</b><span class="pct" style="color:${heatColor}">${valDisp}</span></div>
-    <div class="resumo-row-meta">Alvo ${tgtDisp}${metaExtra}</div>
-    <div class="resumo-bar"><i style="width:${barW}%"></i></div></div>`;
+  const valDisp = val != null ? (val % 1 ? fmt(val, 1) : fmt(val, 0)) + "%" : "—";
+  return `<div class="resumo-row rate${sub ? " sub" : ""}" style="--rc:${color};--bc:${heatMatrizText(pct)}">
+    <div class="resumo-row-top"><b>${sub ? "↳ " : ""}${label}</b><span class="pct" style="color:${heatMatrizText(pct)}">${valDisp}</span></div>
+    <div class="resumo-row-meta">Alvo ${fmtTargetPct(target)}${pct != null ? " · " + pctTxt(pct) + " do alvo" : ""}</div>
+    <div class="resumo-bar"><i style="width:${Math.min(100, Math.round((pct || 0) * 100))}%"></i></div></div>`;
 }
 function resumoPctOnlyHead(ind, color, isOpen) {
   const rates = ind.rates || [];
   const chev = rates.length ? `<span class="resumo-chev">${isOpen ? "▾" : "▸"}</span>` : "";
   const hint = rates.length ? `${rates.length} taxa${rates.length > 1 ? "s" : ""}` : "—";
   return `<div class="resumo-row resumo-ind-main resumo-pct-only-head${rates.length ? " toggle" : ""}"${rates.length ? ` data-ind-toggle="${ind.id}"` : ""} style="--rc:${color}">
-    <div class="resumo-row-top"><b>${ind.name}${ind.lowerBetter ? " ↓" : ""}${chev}</b><span class="pct">${hint}</span></div>
+    <div class="resumo-row-top"><b>${ind.name}${chev}</b><span class="pct">${hint}</span></div>
     <div class="resumo-row-meta">${rates.length ? "Toque para ver taxas · dados da matriz" : "Sem taxas configuradas"}</div></div>`;
 }
 let resumoExpanded = {};
@@ -813,11 +784,10 @@ function renderResumo() {
       if (rates.length) {
         expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
         rates.forEach(rate => {
-          const target = matrizRateTarget(rate, m);
+          const target = Number(rate.target) || 0;
           const val = rateValueForSeller(rate, sid, m);
-          const lb = rateLowerBetter(rate, ind);
-          const pr = matrizRateRatio(val, target, lb);
-          const band = countSemaforo(pr, val, target, lb, true);
+          const pct = target && val != null ? val / target : null;
+          const band = countSemaforo(pct);
           if (band === "g") g++; else if (band === "y") y++; else if (band === "r") r++;
           expandHtml += resumoRateRow(rate, ind, color, sid, m, true);
         });
@@ -830,8 +800,7 @@ function renderResumo() {
     let mainHtml = "";
     let expandHtml = "";
     if (ind.checkout || ind.checkin) {
-      const st = fieldProjStats(ind, sid, m);
-      const band = countSemaforo(st.perfRatio, st.proj, st.meta, st.lb, false);
+      const band = countSemaforo(fieldProjStats(ind, sid, m).pct);
       if (band === "g") g++; else if (band === "y") y++; else if (band === "r") r++;
       mainHtml = resumoFieldRow(ind, color, sid, {
         sub: false, showRank: true, main: true, toggle: hasExpandable, open: isOpen, indId: ind.id
@@ -839,13 +808,12 @@ function renderResumo() {
     }
     if (hasExpandable) {
       expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
-      subs.forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false, parentInd: ind }, m); });
+      subs.forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false }, m); });
       rates.forEach(rate => {
-        const target = matrizRateTarget(rate, m);
+        const target = Number(rate.target) || 0;
         const val = rateValueForSeller(rate, sid, m);
-        const lb = rateLowerBetter(rate, ind);
-        const pr = matrizRateRatio(val, target, lb);
-        const band = countSemaforo(pr, val, target, lb, true);
+        const pct = target && val != null ? val / target : null;
+        const band = countSemaforo(pct);
         if (band === "g") g++; else if (band === "y") y++; else if (band === "r") r++;
         expandHtml += resumoRateRow(rate, ind, color, sid, m, true);
       });
@@ -855,13 +823,12 @@ function renderResumo() {
     if (body) cards.push(`<div class="resumo-card" style="--rc:${color}">${body}</div>`);
   });
   const monthLbl = new Date(m + "-02").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  const vendaPct = vendaSt?.perfRatio;
-  const vendaHeat = vendaSt ? resumoHeatColor(vendaSt.proj, vendaSt.meta, vendaSt.perfRatio, vendaSt.lb, false) : "var(--text-faint)";
+  const vendaPct = vendaSt?.pct;
   const vendaRankTxt = vendaRank.pos > 0 && vendaRank.total > 1 ? `${vendaRank.pos}º de ${vendaRank.total} em vendas` : "—";
   document.getElementById("resumoRoot").innerHTML = `
     <div class="resumo-hero">
       <div class="subline" style="margin:0 0 4px;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px;font-size:10px;">Foco Principal - VENDAS!</div>
-      <div class="big" style="color:${vendaHeat}">${pctTxt(vendaPct)}</div>
+      <div class="big" style="color:${heatMatrizText(vendaPct)}">${pctTxt(vendaPct)}</div>
       <div class="subline">Projeção · ${monthLbl} · dados da matriz</div>
       ${vendaCallout.html}
       <div class="resumo-sema"><b class="ok">${g} verde</b><b class="warn">${y} atenção</b><b class="bad">${r} risco</b></div>
