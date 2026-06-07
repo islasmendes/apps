@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v23";
+  var BUILD = "v24";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -445,7 +445,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v23";
+const APP_BUILD = "v24";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -644,10 +644,18 @@ function prevWorkedDay(sellerId, day, month) {
   }
   return null;
 }
+function normalizePlanCrossIds(cfg) {
+  if (!cfg) return cfg;
+  if (!Array.isArray(cfg.planCrossIds)) cfg.planCrossIds = cfg.planCrossId ? [cfg.planCrossId] : [];
+  if (cfg.planCrossId && !cfg.planCrossIds.includes(cfg.planCrossId)) cfg.planCrossIds.push(cfg.planCrossId);
+  cfg.planCrossIds = cfg.planCrossIds.filter(Boolean);
+  cfg.planCrossId = cfg.planCrossIds[0] || "";
+  return cfg;
+}
 function planCrossRefsAll(cfg) {
-  if (cfg.planCrossId) {
-    const r = cfgByIdLoqa(cfg.planCrossId);
-    return r ? [r] : [];
+  normalizePlanCrossIds(cfg);
+  if (cfg.planCrossIds?.length) {
+    return cfg.planCrossIds.map(id => cfgByIdLoqa(id)).filter(Boolean);
   }
   const parent = parentIndOfCfg(cfg);
   if (!parent) return [];
@@ -783,10 +791,15 @@ function normalizeLojaIndicators() {
   (lojaData?.indicators || []).forEach(ind => {
     normalizeCfgMeta(ind);
     if (ind.openQuestion == null) ind.openQuestion = false;
+    if (ind.planCrossId == null) ind.planCrossId = "";
+    if (!Array.isArray(ind.planCrossIds)) ind.planCrossIds = ind.planCrossId ? [ind.planCrossId] : [];
+    normalizePlanCrossIds(ind);
     (ind.subs || []).forEach(sub => {
       normalizeCfgMeta(sub);
       if (sub.openQuestion == null) sub.openQuestion = false;
       if (sub.planCrossId == null) sub.planCrossId = "";
+      if (!Array.isArray(sub.planCrossIds)) sub.planCrossIds = sub.planCrossId ? [sub.planCrossId] : [];
+      normalizePlanCrossIds(sub);
     });
   });
 }

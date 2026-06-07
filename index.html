@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v23";
+  var BUILD = "v24";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -366,6 +366,10 @@
   .ind-card .swatch { width: 14px; height: 14px; border-radius: 4px; flex: none; }
   .sub-list, .rate-list { margin: 10px 0 0; padding: 10px 0 0; border-top: 1px dashed var(--border); }
   .sub-row, .rate-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 0; }
+  .open-cross-pick-wrap { flex-basis: 100%; width: 100%; margin: 4px 0 8px; }
+  .open-cross-pick { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--bg) 50%, var(--panel-2)); font-size: 11px; max-height: 140px; overflow-y: auto; }
+  .open-cross-pick .cross-pick-item { display: block; margin: 3px 0; cursor: pointer; line-height: 1.35; }
+  .open-cross-pick .cross-pick-item input { margin-right: 6px; vertical-align: middle; }
   .kpi-draghandle { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 28px; color: var(--text-faint); cursor: grab; flex: none; font-size: 14px; letter-spacing: -2px; border-radius: 6px; user-select: none; touch-action: none; }
   .kpi-draghandle:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
   .ind-card.dragging, .sub-row.dragging, .rate-row.dragging { opacity: .45; }
@@ -927,8 +931,11 @@ function migrate(s) {
       if (sub.lowerBetter == null) sub.lowerBetter = false;
       if (sub.openQuestion == null) sub.openQuestion = false;
       if (sub.planCrossId == null) sub.planCrossId = "";
+      if (!Array.isArray(sub.planCrossIds)) sub.planCrossIds = sub.planCrossId ? [sub.planCrossId] : [];
     });
     if (i.openQuestion == null) i.openQuestion = false;
+    if (i.planCrossId == null) i.planCrossId = "";
+    if (!Array.isArray(i.planCrossIds)) i.planCrossIds = i.planCrossId ? [i.planCrossId] : [];
     (i.rates || []).forEach(r => { if (r.lowerBetter == null) r.lowerBetter = false; });
   });
   (s.sellers || []).forEach(seller => {
@@ -957,6 +964,47 @@ function fieldNameById(fieldId, st) {
   }
   return "";
 }
+function fieldLabelById(fieldId, st) {
+  if (!fieldId) return "";
+  for (const ind of st.indicators || []) {
+    if (ind.id === fieldId) return ind.name;
+    for (const s of (ind.subs || [])) if (s.id === fieldId) return ind.name + " › " + s.name;
+  }
+  return "";
+}
+function normalizePlanCrossIds(cfg) {
+  if (!cfg) return cfg;
+  if (!Array.isArray(cfg.planCrossIds)) cfg.planCrossIds = cfg.planCrossId ? [cfg.planCrossId] : [];
+  if (cfg.planCrossId && !cfg.planCrossIds.includes(cfg.planCrossId)) cfg.planCrossIds.push(cfg.planCrossId);
+  cfg.planCrossIds = cfg.planCrossIds.filter(Boolean);
+  cfg.planCrossId = cfg.planCrossIds[0] || "";
+  return cfg;
+}
+function allCrossableFields(excludeId) {
+  const arr = [];
+  orderedIndicators().forEach(ind => {
+    if (!ind.pctOnly && (ind.checkin || ind.checkout) && ind.id !== excludeId)
+      arr.push({ id: ind.id, label: ind.name });
+    (ind.subs || []).forEach(sub => {
+      if ((sub.checkin || sub.checkout) && sub.id !== excludeId)
+        arr.push({ id: sub.id, label: ind.name + " › " + sub.name });
+    });
+  });
+  return arr;
+}
+function openCrossPickerHtml(cfg) {
+  normalizePlanCrossIds(cfg);
+  const picked = new Set(cfg.planCrossIds || []);
+  const fields = allCrossableFields(cfg.id);
+  if (!fields.length) return "";
+  const cbs = fields.map(f =>
+    `<label class="cross-pick-item"><input type="checkbox" class="cross-pick-cb" value="${f.id}"${picked.has(f.id) ? " checked" : ""}> ${escapeHtml(f.label)}</label>`
+  ).join("");
+  return `<div class="open-cross-pick-wrap"><div class="open-cross-pick">
+    <span class="hint" style="display:block;margin-bottom:4px;font-weight:700;">Cruzar com KPI(s):</span>${cbs}
+    <span class="hint" style="display:block;margin-top:6px;font-size:10px;line-height:1.35;">Pode marcar vários. O dia da semana escolhe a prioridade (domingo → agend. domingo · sábado → sábado · demais → próx dia). Busca no último dia trabalhado; se vazio, no mesmo dia.</span>
+  </div></div>`;
+}
 function resolveFieldIdByName(name, st) {
   if (!name) return "";
   for (const ind of st.indicators || []) {
@@ -976,6 +1024,7 @@ function extractOperationalConfig(st) {
     pctOnly: !!ind.pctOnly,
     lowerBetter: !!ind.lowerBetter,
     openQuestion: !!ind.openQuestion,
+    planCrossNames: normalizePlanCrossIds(ind).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean),
     subs: (ind.subs || []).map(s => ({
       name: s.name,
       checkin: !!s.checkin,
@@ -983,7 +1032,7 @@ function extractOperationalConfig(st) {
       lowerBetter: !!s.lowerBetter,
       sundayOnly: !!s.sundayOnly,
       openQuestion: !!s.openQuestion,
-      planCrossName: fieldNameById(s.planCrossId, st) || ""
+      planCrossNames: normalizePlanCrossIds(s).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean)
     })),
     rates: (ind.rates || []).map(r => ({
       name: r.name,
@@ -1019,6 +1068,8 @@ function applyOperationalConfig(st, tpl, opts) {
       pctOnly: tInd.pctOnly,
       lowerBetter: tInd.lowerBetter,
       openQuestion: !!tInd.openQuestion,
+      planCrossId: local?.planCrossId || "",
+      planCrossIds: Array.isArray(local?.planCrossIds) ? local.planCrossIds.slice() : (local?.planCrossId ? [local.planCrossId] : []),
       metaDay: local?.metaDay ?? 0,
       metaSat: local?.metaSat ?? 0,
       metaSun: local?.metaSun ?? 0,
@@ -1038,6 +1089,7 @@ function applyOperationalConfig(st, tpl, opts) {
         sundayOnly: !!ts.sundayOnly,
         openQuestion: !!ts.openQuestion,
         planCrossId: ls?.planCrossId || "",
+        planCrossIds: Array.isArray(ls?.planCrossIds) ? ls.planCrossIds.slice() : (ls?.planCrossId ? [ls.planCrossId] : []),
         metaDay: ls?.metaDay ?? 0,
         metaSat: ls?.metaSat ?? 0,
         metaSun: ls?.metaSun ?? 0,
@@ -1069,10 +1121,20 @@ function applyOperationalConfig(st, tpl, opts) {
         r.denId = resolveFieldIdByName(tr.denName, { indicators: newIndicators });
       }
     });
+    const resolveCrossNames = names => (names || []).map(n => resolveFieldIdByName(n, { indicators: newIndicators })).filter(Boolean);
+    const tIndCross = tpl.indicators.find(ti => ti.name === ind.name);
+    if (tIndCross?.planCrossNames?.length) {
+      ind.planCrossIds = resolveCrossNames(tIndCross.planCrossNames);
+      ind.planCrossId = ind.planCrossIds[0] || "";
+    }
     (ind.subs || []).forEach(s => {
       const ts = (tInd?.subs || []).find(x => x.name === s.name);
-      if (ts?.planCrossName) {
+      if (ts?.planCrossNames?.length) {
+        s.planCrossIds = resolveCrossNames(ts.planCrossNames);
+        s.planCrossId = s.planCrossIds[0] || "";
+      } else if (ts?.planCrossName) {
         s.planCrossId = resolveFieldIdByName(ts.planCrossName, { indicators: newIndicators }) || s.planCrossId || "";
+        s.planCrossIds = s.planCrossId ? [s.planCrossId] : [];
       }
     });
   });
@@ -1552,7 +1614,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v23";
+const APP_BUILD = "v24";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3698,9 +3760,9 @@ function prevWorkedDay(sellerId, day, m = currentMonth) {
   return null;
 }
 function planCrossRefsAll(cfg) {
-  if (cfg.planCrossId) {
-    const r = cfgById(cfg.planCrossId);
-    return r ? [r] : [];
+  normalizePlanCrossIds(cfg);
+  if (cfg.planCrossIds?.length) {
+    return cfg.planCrossIds.map(id => cfgById(id)).filter(Boolean);
   }
   const parent = parentIndOfCfg(cfg);
   if (!parent) return [];
@@ -4502,16 +4564,13 @@ function renderIndicatorConfig() {
       <label class="switch"><input type="checkbox" class="ind-field" data-k="checkout" ${ind.checkout?'checked':''}><span class="track"></span>Check-out</label>
       <label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="ind-field" data-k="openQuestion" ${ind.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label>`}
       <span class="spacer" style="flex:1"></span>
-      <button class="iconbtn" data-del-ind="${ind.id}" title="Excluir">✕</button></div>${lowerBetterPanelHtml(ind)}`;
+      <button class="iconbtn" data-del-ind="${ind.id}" title="Excluir">✕</button></div>${ind.openQuestion && !ind.pctOnly ? openCrossPickerHtml(ind) : ""}${lowerBetterPanelHtml(ind)}`;
     if (!ind.pctOnly) html += metaGoalsQtyHtml(ind, ind.id);
     if (!ind.pctOnly) {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
       (ind.subs||[]).forEach(s => {
         const subLb = cfgLowerBetter(s) || cfgLowerBetter(ind);
-        const crossOpts = (ind.subs || []).filter(x => x.id !== s.id && !x.openQuestion && (x.checkin || x.checkout))
-          .map(x => `<option value="${x.id}"${s.planCrossId === x.id ? " selected" : ""}>${escapeHtml(x.name)}</option>`).join("");
-        const crossSel = s.openQuestion ? `<span class="hint" title="Check-in numérico para comparar confirmações">cruzar</span><select class="sub-field" data-sk="planCrossId" style="max-width:140px;font-size:11px"><option value="">auto</option>${crossOpts}</select>` : "";
-        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label>${crossSel}<label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`;
+        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button>${s.openQuestion ? openCrossPickerHtml(s) : ""}</div>`;
       });
       html += `</div>`;
     }
@@ -4603,7 +4662,7 @@ function bindIndicatorEvents() {
     card.querySelectorAll("[data-meta]").forEach(f => f.addEventListener("change", () => { ind[f.dataset.meta]=Number(f.value)||0; save(); refreshMetaAdherence(ind.id); }));
     card.querySelectorAll(".metaloja-inp[data-field]").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-ind]").forEach(b => b.addEventListener("click", () => { if(confirm("Excluir este indicador?")){ const id = b.dataset.delInd; state.indicators = state.indicators.filter(i=>i.id!==id); if (state.order.indicators) state.order.indicators = state.order.indicators.filter(x => x !== id); save(); renderIndicatorConfig(); } }));
-  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false, openQuestion:false, planCrossId:"" }); save(); renderIndicatorConfig(); }));
+  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false, openQuestion:false, planCrossId:"", planCrossIds:[] }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".sub-row").forEach(row => { const ind = findIndBySub(row.dataset.sub); const s = ind && ind.subs.find(x=>x.id===row.dataset.sub); if(!s) return;
     row.querySelectorAll(".sub-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => {
       const k = f.dataset.sk;
@@ -4623,6 +4682,23 @@ function bindIndicatorEvents() {
     }));
     row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-rate]").forEach(b => b.addEventListener("click", () => { const ind = findIndByRate(b.dataset.delRate); ind.rates = ind.rates.filter(r=>r.id!==b.dataset.delRate); save(); renderIndicatorConfig(); }));
+  list.querySelectorAll(".open-cross-pick").forEach(pick => {
+    const row = pick.closest("[data-sub]");
+    const card = pick.closest("[data-ind]");
+    let cfg = null;
+    if (row) {
+      const ind = findIndBySub(row.dataset.sub);
+      cfg = ind?.subs.find(s => s.id === row.dataset.sub);
+    } else if (card) cfg = state.indicators.find(i => i.id === card.dataset.ind);
+    if (!cfg) return;
+    pick.querySelectorAll(".cross-pick-cb").forEach(cb => {
+      cb.addEventListener("change", () => {
+        cfg.planCrossIds = [...pick.querySelectorAll(".cross-pick-cb:checked")].map(c => c.value);
+        cfg.planCrossId = cfg.planCrossIds[0] || "";
+        save();
+      });
+    });
+  });
   setupKpiDnD();
 }
 function reorderArrayById(arr, fromId, toId) {
