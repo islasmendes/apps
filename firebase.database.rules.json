@@ -33,6 +33,19 @@
         ".read": "auth != null",
         ".write": "auth != null"
       }
+    },
+
+    "divisionais": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "metas": {
+          "$month": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+          }
+        }
+      }
     }
   }
 }
