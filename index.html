@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestão Comercial — Matriz de Oportunidades</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%234f8cff'/><text x='16' y='22' text-anchor='middle' font-size='16' fill='white' font-family='sans-serif'>G</text></svg>">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -788,6 +789,11 @@ function migrate(s) {
   const _duKey = (() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; })();
   if (!s.ui.diarioUnlock || s.ui.diarioUnlock.resetDate !== _duKey) {
     s.ui.diarioUnlock = { resetDate: _duKey, days: [], past: false, future: false, week: false };
+  } else {
+    if (!Array.isArray(s.ui.diarioUnlock.days)) s.ui.diarioUnlock.days = [];
+    if (s.ui.diarioUnlock.past == null) s.ui.diarioUnlock.past = false;
+    if (s.ui.diarioUnlock.future == null) s.ui.diarioUnlock.future = false;
+    if (s.ui.diarioUnlock.week == null) s.ui.diarioUnlock.week = false;
   }
   if (!s.ui.fechUnlock || typeof s.ui.fechUnlock !== "object") s.ui.fechUnlock = { month: null, days: [] };
   if (!Array.isArray(s.ui.fechUnlock.days)) s.ui.fechUnlock.days = [];
@@ -963,7 +969,7 @@ function syncConfigToAllLojas(tpl) {
   });
 }
 function pushConfigTemplate() {
-  if (!isConfigAdmin() || !fbReady || !fbDb || configApplying) return;
+  if (!isConfigAdmin() || !fbReady || !fbDb || configApplying || configPushBlocked) return;
   const tpl = extractOperationalConfig(state);
   const hash = configHash(tpl);
   if (hash === lastPushedConfigHash) return;
@@ -972,10 +978,14 @@ function pushConfigTemplate() {
   fbDb.ref(CONFIG_OP_PATH).set(tpl).then(() => {
     syncConfigToAllLojas(tpl);
     if (divisionalMode()) toast("Configuração operacional sincronizada com todas as lojas");
-  }).catch(e => console.warn("config push falhou", e));
+  }).catch(e => {
+    const msg = String(e && e.message || e);
+    if (/PERMISSION_DENIED|permission_denied/i.test(msg)) configPushBlocked = true;
+    console.warn("config push falhou", e);
+  });
 }
 function queueConfigPush() {
-  if (!isConfigAdmin() || configApplying) return;
+  if (!isConfigAdmin() || configApplying || configPushBlocked) return;
   clearTimeout(configPushTimer);
   configPushTimer = setTimeout(pushConfigTemplate, 800);
 }
@@ -1042,11 +1052,18 @@ function todayDateKey() {
   const t = new Date();
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
 }
+let configPushBlocked = false;
+function normalizeDiarioUnlock(u, key) {
+  if (!u || u.resetDate !== key) return { resetDate: key, days: [], past: false, future: false, week: false };
+  if (!Array.isArray(u.days)) u.days = [];
+  if (u.past == null) u.past = false;
+  if (u.future == null) u.future = false;
+  if (u.week == null) u.week = false;
+  return u;
+}
 function ensureDiarioUnlockFresh() {
   const key = todayDateKey();
-  if (!state.ui.diarioUnlock || state.ui.diarioUnlock.resetDate !== key) {
-    state.ui.diarioUnlock = { resetDate: key, days: [], past: false, future: false, week: false };
-  }
+  state.ui.diarioUnlock = normalizeDiarioUnlock(state.ui.diarioUnlock, key);
   return state.ui.diarioUnlock;
 }
 function diarioMonthCmp() {
@@ -1085,13 +1102,13 @@ function diarioDayIndividuallyUnlocked(day) {
 function unlockDiarioDay(day) {
   const u = ensureDiarioUnlockFresh();
   if (!u.days.includes(day)) u.days.push(day);
-  save();
+  save({ skipConfigPush: true });
   renderDiario();
 }
 function lockDiarioDay(day) {
   const u = ensureDiarioUnlockFresh();
-  u.days = (u.days || []).filter(d => d !== day);
-  save();
+  u.days = u.days.filter(d => d !== day);
+  save({ skipConfigPush: true });
   renderDiario();
 }
 function unlockDiarioBulk(mode) {
@@ -1099,12 +1116,12 @@ function unlockDiarioBulk(mode) {
   if (mode === "past") u.past = !u.past;
   if (mode === "future") u.future = !u.future;
   if (mode === "week") u.week = !u.week;
-  save();
+  save({ skipConfigPush: true });
   renderDiario();
 }
 function lockDiarioAll() {
   state.ui.diarioUnlock = { resetDate: todayDateKey(), days: [], past: false, future: false, week: false };
-  save();
+  save({ skipConfigPush: true });
   renderDiario();
   toast("Tudo bloqueado — só hoje editável");
 }
