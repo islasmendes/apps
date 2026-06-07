@@ -48,6 +48,10 @@
       "operational": {
         ".read": "auth != null",
         ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+      },
+      "appBuild": {
+        ".read": "auth != null",
+        ".write": "auth != null"
       }
     },
 

@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Gestão Comercial — Matriz de Oportunidades</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%234f8cff'/><text x='16' y='22' text-anchor='middle' font-size='16' fill='white' font-family='sans-serif'>G</text></svg>">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1348,13 +1351,24 @@ function mergeDailyFromRemote(remoteMonths) {
           const lc = { ...(md.daily[sid][fid][day] || {}) };
           let cellChanged = false;
           ["plan", "real", "planBy", "realBy", "planAt", "realAt"].forEach(k => {
-            if (rc[k] !== undefined && rc[k] !== lc[k]) {
-              if (rc[k] === null || rc[k] === "") delete lc[k];
-              else lc[k] = rc[k];
+            const remoteHas = Object.prototype.hasOwnProperty.call(rc, k);
+            if (remoteHas) {
+              if (rc[k] === null || rc[k] === "") {
+                if (Object.prototype.hasOwnProperty.call(lc, k)) { delete lc[k]; cellChanged = true; }
+              } else if (rc[k] !== lc[k]) {
+                lc[k] = rc[k];
+                cellChanged = true;
+              }
+            } else if (Object.prototype.hasOwnProperty.call(lc, k)) {
+              delete lc[k];
               cellChanged = true;
             }
           });
-          if (cellChanged) { md.daily[sid][fid][day] = lc; changed = true; }
+          if (cellChanged) {
+            if (Object.keys(lc).length) md.daily[sid][fid][day] = lc;
+            else delete md.daily[sid][fid][day];
+            changed = true;
+          }
         });
       });
     });
@@ -1383,16 +1397,16 @@ function startLojaDataListener() {
     lojaMergeTimer = setTimeout(() => {
       if (mergeDailyFromRemote(snap.val())) {
         save({ skipPush: true });
-        if (activeView === "diario") renderDiario();
-        else if (activeView === "matriz") renderMatriz();
+        renderActive();
       }
     }, 450);
   });
 }
+const APP_BUILD = "2026.06.07-c1";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
-  return base + "consultor.html?loja=" + encodeURIComponent(String(loja).toUpperCase());
+  return base + "consultor.html?v=" + encodeURIComponent(APP_BUILD) + "&loja=" + encodeURIComponent(String(loja).toUpperCase());
 }
 async function setSellerPin(sellerId, pin) {
   const s = state.sellers.find(x => x.id === sellerId);
@@ -5060,6 +5074,7 @@ function fbInit(){
     auth.onAuthStateChanged(user => {
       if (!user) return;
       authUid = user.uid; fbReady = true; if (lojaCode) myLojaId = lojaCode; setFbBadge(false);
+      publishAppBuild();
       try { fbDb.ref("admins/"+authUid).on("value", s => {
         const was = isAdmin;
         isAdmin = (s.val() === true);
@@ -5250,10 +5265,14 @@ function allLojas(){
   });
   return arr;
 }
+function publishAppBuild() {
+  if (!fbReady || !fbDb || typeof APP_BUILD === "undefined") return;
+  try { fbDb.ref("config/appBuild").set(APP_BUILD); } catch (e) {}
+}
 function fbPush(){
   if (!fbReady || !fbDb || !lojaCode || divisionalMode()) return;
   clearTimeout(fbPushTimer);
-  fbPushTimer = setTimeout(()=>{ try{ fbDb.ref("lojas/"+lojaCode).set({ name: state.storeName || lojaCode, code: lojaCode, updatedAt: Date.now(), data: JSON.parse(JSON.stringify(state)) }); }catch(e){ console.warn("push falhou", e); } }, 1200);
+  fbPushTimer = setTimeout(()=>{ try{ fbDb.ref("lojas/"+lojaCode).set({ name: state.storeName || lojaCode, code: lojaCode, updatedAt: Date.now(), data: JSON.parse(JSON.stringify(state)) }); publishAppBuild(); }catch(e){ console.warn("push falhou", e); } }, 1200);
 }
 function pullDivisional() {
   if (!fbReady || !fbDb || !divisionalCode) return;
@@ -5316,7 +5335,8 @@ function renderSync(){
     ).join("")}</div></div>`;
   }
   if (!div) {
-    html += `<div class="hint" style="margin-top:6px;">Qualquer aparelho que abrir e digitar <b>${escapeHtml(lojaCode||'')}</b> carrega esta mesma configuração (a última sincronizada).</div>`;
+    html += `<div class="hint" style="margin-top:6px;">Versão do app: <b>${typeof APP_BUILD !== "undefined" ? APP_BUILD : "—"}</b> · Link do consultor já inclui esta versão (reenvie após atualizar).</div>`;
+    html += `<div class="hint" style="margin-top:4px;">Qualquer aparelho que abrir e digitar <b>${escapeHtml(lojaCode||'')}</b> carrega esta mesma configuração (a última sincronizada).</div>`;
     html += `<div class="row" style="margin-top:10px;"><button class="btn sec" id="reloadCloud">↻ Baixar da nuvem agora</button><button class="btn danger" id="clearMine">🗑 Apagar e recomeçar esta loja</button></div>`;
   } else {
     html += `<div class="hint" style="margin-top:6px;">Você está vendo o consolidado de <b>${lojas.length}</b> loja(s) ao vivo. Não cria/edita loja.</div>`;
