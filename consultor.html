@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v22";
+  var BUILD = "v23";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -325,11 +325,13 @@
     width: 100%; min-height: 72px; resize: vertical; padding: 10px; border-radius: 10px; border: 1px solid var(--border);
     background: color-mix(in srgb, var(--bg) 40%, transparent); color: var(--text); font-size: 13px; font-family: var(--font); line-height: 1.4;
   }
-  .open-justif textarea:disabled, .open-qty input:disabled { opacity: .7; cursor: not-allowed; }
+  .open-justif textarea:disabled, .open-qty input:disabled { opacity: .85; cursor: not-allowed; }
   .open-qty.hidden { display: none; }
   .open-save { width: 100%; margin-top: 8px; padding: 10px; font-size: 13px; }
   .open-qty input.below-target { color: var(--danger) !important; border-color: var(--danger) !important; font-weight: 800; }
   .open-qty input.at-target { color: var(--ok) !important; border-color: var(--ok) !important; font-weight: 800; }
+  .dio-box.open-q.locked .open-qty input:disabled.below-target { color: var(--danger) !important; border-color: var(--danger) !important; opacity: 1; -webkit-text-fill-color: var(--danger); }
+  .dio-box.open-q.locked .open-qty input:disabled.at-target { color: var(--ok) !important; border-color: var(--ok) !important; opacity: 1; -webkit-text-fill-color: var(--ok); }
   .open-cross-msg { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 12px; line-height: 1.45; font-weight: 600; }
   .open-cross-msg.bad { background: color-mix(in srgb, var(--danger) 14%, var(--panel-2)); border: 1.5px solid color-mix(in srgb, var(--danger) 55%, var(--border)); color: #ff8a94; }
   .open-cross-msg.good { background: color-mix(in srgb, var(--ok) 14%, var(--panel-2)); border: 1.5px solid color-mix(in srgb, var(--ok) 55%, var(--border)); color: var(--ok); }
@@ -443,7 +445,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v22";
+const APP_BUILD = "v23";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -566,6 +568,44 @@ function cellFilledFromDom(cfg, key, cell) {
 function cfgHasDiario(cfg) { return !!(cfg && (cfg.checkin || cfg.checkout)); }
 const OPEN_JUSTIF_MIN = 10;
 function cfgOpenQuestion(cfg) { return !!(cfg && cfg.openQuestion); }
+function openQuestionCheckoutOnly(cfg, needs) {
+  return cfgOpenQuestion(cfg) && needs.checkout && !needs.checkin;
+}
+function openQuestionCheckin(cfg, needs) {
+  return cfgOpenQuestion(cfg) && needs.checkin;
+}
+function openConfirmedQty(cell) {
+  if (cell.planYes !== true) return null;
+  const n = cell.plan;
+  return n != null && n !== "" && !isNaN(Number(n)) ? Number(n) : null;
+}
+function buildOpenQuestionBox(cfg, c, slot, day, month) {
+  const planLocked = cellLockedForConsultor(c, "plan", day, month, cfg);
+  const planMine = cellIsMine(c, "plan", cfg);
+  const yes = c.planYes === true, no = c.planYes === false;
+  const justif = c.planJustif || "";
+  const qty = c.plan != null ? c.plan : "";
+  const slotLbl = slot === "out" ? "Check-out" : "Check-in";
+  const crossHit = yes && planLocked ? crossPlanHit(seller.id, cfg, day, month) : null;
+  const crossTgt = crossHit?.value ?? null;
+  const qtyNum = openConfirmedQty(c);
+  const qtyCls = planLocked && crossTgt != null && qtyNum != null ? (qtyNum < crossTgt ? "below-target" : "at-target") : "";
+  let html = `<div class="dio-box ${slot} open-q${planLocked ? " locked" : ""}${planMine && !planLocked ? " mine" : ""}" data-open-fid="${cfg.id}">`;
+  html += `<div class="dio-lbl">${slotLbl} ${lockLabel(c, "plan", day, month, cfg)}</div>`;
+  html += `<div class="open-yn"><button type="button" class="open-yn-btn${yes ? " active yes" : ""}" data-yn="1" ${planLocked ? "disabled" : ""}>Sim</button>`;
+  html += `<button type="button" class="open-yn-btn${no ? " active no" : ""}" data-yn="0" ${planLocked ? "disabled" : ""}>Não</button></div>`;
+  html += `<div class="open-qty${yes ? "" : " hidden"}"><label>Quantas confirmações?</label>`;
+  html += `<input type="number" inputmode="numeric" data-open-qty${qtyCls ? ` class="${qtyCls}"` : ""} value="${qty}" placeholder="0" min="0" ${planLocked ? "disabled" : ""}></div>`;
+  const justLbl = no ? "Por que não fez? Qual dificuldade?" : yes ? "Complemento / detalhe" : "Justificativa";
+  html += `<div class="open-justif"><label>${justLbl} <span class="hint">mín. ${OPEN_JUSTIF_MIN} caracteres</span></label>`;
+  html += `<textarea data-open-justif rows="3" placeholder="Descreva com clareza…" ${planLocked ? "disabled" : ""}>${escText(justif)}</textarea></div>`;
+  const crossMsg = yes && planLocked && crossTgt != null && qtyNum != null
+    ? openCrossFeedbackHtml(qtyNum, crossTgt, crossHit?.ref?.name) : "";
+  html += `<div class="open-cross-msg-wrap">${crossMsg}</div>`;
+  if (!planLocked) html += `<button type="button" class="btn open-save" data-open-save>Salvar resposta</button>`;
+  html += `</div>`;
+  return html;
+}
 function isOpenPlanComplete(cell) {
   if (cell.planYes !== true && cell.planYes !== false) return false;
   const j = String(cell.planJustif || "").trim();
@@ -604,53 +644,74 @@ function prevWorkedDay(sellerId, day, month) {
   }
   return null;
 }
-function planCrossRefCandidates(cfg, day, month) {
+function planCrossRefsAll(cfg) {
   if (cfg.planCrossId) {
     const r = cfgByIdLoqa(cfg.planCrossId);
     return r ? [r] : [];
   }
   const parent = parentIndOfCfg(cfg);
   if (!parent) return [];
-  const pool = [];
-  const sibs = (parent.subs || []).filter(s => s.id !== cfg.id && !cfgOpenQuestion(s) && (s.checkin || s.checkout));
-  if (sibs.length) sibs.forEach(s => pool.push(s));
-  else if (parent.checkin && !cfgOpenQuestion(parent) && parent.id !== cfg.id) pool.push(parent);
-  if (!pool.length) return [];
+  const refs = [];
+  (parent.subs || []).forEach(s => {
+    if (s.id !== cfg.id && !cfgOpenQuestion(s) && (s.checkin || s.checkout)) refs.push(s);
+  });
+  if (parent.id !== cfg.id && !cfgOpenQuestion(parent) && (parent.checkin || parent.checkout)) {
+    if (!refs.some(r => r.id === parent.id)) refs.push(parent);
+  }
+  return refs;
+}
+function orderCrossRefs(refs, day, month) {
+  if (!refs.length) return [];
   const m = month || todayISO();
   const d = day != null ? day : todayDay();
   const wd = weekday(m, d);
+  const pool = [...refs];
   const ordered = [];
+  const pick = re => pool.find(s => re.test(normName(s.name)));
   if (wd === 0) {
-    const dom = pool.find(s => /domingo|\bdom\b/.test(normName(s.name)));
+    const dom = pick(/domingo|\bdom\b/);
     if (dom) ordered.push(dom);
   } else if (wd === 6) {
-    const sab = pool.find(s => /sabado|\bsab\b/.test(normName(s.name)));
+    const sab = pick(/sabado|\bsab\b/);
     if (sab) ordered.push(sab);
   } else {
-    const prox = pool.find(s => /prox|amanh|seguinte/.test(normName(s.name)));
+    const prox = pick(/prox|proxim|amanh|seguinte|agend/);
     if (prox) ordered.push(prox);
   }
   pool.forEach(c => { if (!ordered.includes(c)) ordered.push(c); });
   return ordered;
 }
+function planCrossRefCandidates(cfg, day, month) {
+  return orderCrossRefs(planCrossRefsAll(cfg), day, month);
+}
 function planCrossRefCfg(cfg, day, month) {
   const cands = planCrossRefCandidates(cfg, day, month);
   return cands[0] || null;
 }
+/** plan (check-in) ou real (check-out) — gestor ou consultor. */
 function crossPlanValueFromCell(c) {
+  if (!c || typeof c !== "object") return null;
   const p = c.plan;
   if (p != null && p !== "" && !isNaN(Number(p))) return Number(p);
   const r = c.real;
   if (r != null && r !== "" && !isNaN(Number(r))) return Number(r);
   return null;
 }
-/** Agendamentos declarados no último dia trabalhado anterior (respeita folgas). */
+/** Busca agendamentos: último dia trabalhado anterior e, se vazio, o próprio dia (gestor/CV). */
 function crossPlanHit(sellerId, cfg, day, month) {
-  const prev = prevWorkedDay(sellerId, day, month);
-  if (prev == null) return null;
-  for (const ref of planCrossRefCandidates(cfg, day, month)) {
-    const value = crossPlanValueFromCell(getCell(sellerId, ref.id, prev, month));
-    if (value != null) return { ref, value, prevDay: prev };
+  const m = month || todayISO();
+  const d = day != null ? day : todayDay();
+  const refs = planCrossRefCandidates(cfg, d, m);
+  if (!refs.length) return null;
+  const daysToTry = [];
+  const prev = prevWorkedDay(sellerId, d, m);
+  if (prev != null) daysToTry.push(prev);
+  if (!daysToTry.includes(d)) daysToTry.push(d);
+  for (const tryDay of daysToTry) {
+    for (const ref of refs) {
+      const value = crossPlanValueFromCell(getCell(sellerId, ref.id, tryDay, m));
+      if (value != null) return { ref, value, prevDay: tryDay };
+    }
   }
   return null;
 }
@@ -694,7 +755,7 @@ function updateOpenCrossUi(box) {
     return;
   }
   const target = crossPlanTarget(seller.id, cfg, day, month);
-  const confirmed = cell.plan != null && cell.plan !== "" ? Number(cell.plan) : null;
+  const confirmed = openConfirmedQty(cell);
   if (target == null || confirmed == null || isNaN(confirmed)) {
     wrap.innerHTML = "";
     if (qtyInp) qtyInp.classList.remove("below-target", "at-target");
@@ -1577,36 +1638,20 @@ function renderFields() {
     const realMine = cellIsMine(c, "real", cfg);
     let html = `<div class="ind-card" style="--ic:${color}"><div class="ind-head"><div><b>${sub ? "↳ " : ""}${cfg.name}</b>${metaHtml ? `<div class="ind-meta">${metaHtml}</div>` : ""}</div></div><div class="dio-grid">`;
     if (needs.checkin) {
-      if (cfgOpenQuestion(cfg)) {
-        const yes = c.planYes === true, no = c.planYes === false;
-        const justif = c.planJustif || "";
-        const qty = c.plan != null ? c.plan : "";
-        html += `<div class="dio-box in open-q${planLocked ? " locked" : ""}${planMine && !planLocked ? " mine" : ""}" data-open-fid="${cfg.id}">`;
-        html += `<div class="dio-lbl">Check-in ${lockLabel(c, "plan", day, month, cfg)}</div>`;
-        html += `<div class="open-yn"><button type="button" class="open-yn-btn${yes ? " active yes" : ""}" data-yn="1" ${planLocked ? "disabled" : ""}>Sim</button>`;
-        html += `<button type="button" class="open-yn-btn${no ? " active no" : ""}" data-yn="0" ${planLocked ? "disabled" : ""}>Não</button></div>`;
-        const crossHit = yes && planLocked ? crossPlanHit(seller.id, cfg, day, month) : null;
-        const crossTgt = crossHit?.value ?? null;
-        const qtyNum = qty !== "" && qty != null ? Number(qty) : null;
-        const qtyCls = planLocked && crossTgt != null && qtyNum != null && !isNaN(qtyNum) ? (qtyNum < crossTgt ? "below-target" : "at-target") : "";
-        html += `<div class="open-qty${yes ? "" : " hidden"}"><label>Quantas confirmações?</label>`;
-        html += `<input type="number" inputmode="numeric" data-open-qty${qtyCls ? ` class="${qtyCls}"` : ""} value="${qty}" placeholder="0" min="0" ${planLocked ? "disabled" : ""}></div>`;
-        const justLbl = no ? "Por que não fez? Qual dificuldade?" : yes ? "Complemento / detalhe" : "Justificativa";
-        html += `<div class="open-justif"><label>${justLbl} <span class="hint">mín. ${OPEN_JUSTIF_MIN} caracteres</span></label>`;
-        html += `<textarea data-open-justif rows="3" placeholder="Descreva com clareza…" ${planLocked ? "disabled" : ""}>${escText(justif)}</textarea></div>`;
-        const crossMsg = yes && planLocked && crossTgt != null && qtyNum != null && !isNaN(qtyNum)
-          ? openCrossFeedbackHtml(qtyNum, crossTgt, crossHit?.ref?.name) : "";
-        html += `<div class="open-cross-msg-wrap">${crossMsg}</div>`;
-        if (!planLocked) html += `<button type="button" class="btn open-save" data-open-save>Salvar resposta</button>`;
-        html += `</div>`;
+      if (openQuestionCheckin(cfg, needs)) {
+        html += buildOpenQuestionBox(cfg, c, "in", day, month);
       } else {
         html += `<div class="dio-box in${planLocked ? " locked" : ""}${planMine && !planLocked ? " mine" : ""}"><div class="dio-lbl">Check-in ${lockLabel(c, "plan", day, month, cfg)}</div>`;
         html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="plan" value="${c.plan ?? ""}" placeholder="—" ${planLocked ? "disabled" : ""}></div>`;
       }
     }
     if (needs.checkout) {
-      html += `<div class="dio-box out${realLocked ? " locked" : ""}${realMine && !realLocked ? " mine" : ""}"><div class="dio-lbl">Check-out ${lockLabel(c, "real", day, month, cfg)}</div>`;
-      html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="real" value="${c.real ?? ""}" placeholder="—" ${realLocked ? "disabled" : ""}></div>`;
+      if (openQuestionCheckoutOnly(cfg, needs)) {
+        html += buildOpenQuestionBox(cfg, c, "out", day, month);
+      } else {
+        html += `<div class="dio-box out${realLocked ? " locked" : ""}${realMine && !realLocked ? " mine" : ""}"><div class="dio-lbl">Check-out ${lockLabel(c, "real", day, month, cfg)}</div>`;
+        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="real" value="${c.real ?? ""}" placeholder="—" ${realLocked ? "disabled" : ""}></div>`;
+      }
     }
     html += "</div></div>";
     return html;

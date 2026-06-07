@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v22";
+  var BUILD = "v23";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1552,7 +1552,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v22";
+const APP_BUILD = "v23";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3697,38 +3697,50 @@ function prevWorkedDay(sellerId, day, m = currentMonth) {
   }
   return null;
 }
-function planCrossRefCandidates(cfg, day, m = currentMonth) {
+function planCrossRefsAll(cfg) {
   if (cfg.planCrossId) {
     const r = cfgById(cfg.planCrossId);
     return r ? [r] : [];
   }
   const parent = parentIndOfCfg(cfg);
   if (!parent) return [];
-  const pool = [];
-  const sibs = (parent.subs || []).filter(s => s.id !== cfg.id && !cfgOpenQuestion(s) && (s.checkin || s.checkout));
-  if (sibs.length) sibs.forEach(s => pool.push(s));
-  else if (parent.checkin && !cfgOpenQuestion(parent) && parent.id !== cfg.id) pool.push(parent);
-  if (!pool.length) return [];
+  const refs = [];
+  (parent.subs || []).forEach(s => {
+    if (s.id !== cfg.id && !cfgOpenQuestion(s) && (s.checkin || s.checkout)) refs.push(s);
+  });
+  if (parent.id !== cfg.id && !cfgOpenQuestion(parent) && (parent.checkin || parent.checkout)) {
+    if (!refs.some(r => r.id === parent.id)) refs.push(parent);
+  }
+  return refs;
+}
+function orderCrossRefs(refs, day, m = currentMonth) {
+  if (!refs.length) return [];
   const wd = weekday(m, day);
+  const pool = [...refs];
   const ordered = [];
+  const pick = re => pool.find(s => re.test(normNameCross(s.name)));
   if (wd === 0) {
-    const dom = pool.find(s => /domingo|\bdom\b/.test(normNameCross(s.name)));
+    const dom = pick(/domingo|\bdom\b/);
     if (dom) ordered.push(dom);
   } else if (wd === 6) {
-    const sab = pool.find(s => /sabado|\bsab\b/.test(normNameCross(s.name)));
+    const sab = pick(/sabado|\bsab\b/);
     if (sab) ordered.push(sab);
   } else {
-    const prox = pool.find(s => /prox|amanh|seguinte/.test(normNameCross(s.name)));
+    const prox = pick(/prox|proxim|amanh|seguinte|agend/);
     if (prox) ordered.push(prox);
   }
   pool.forEach(c => { if (!ordered.includes(c)) ordered.push(c); });
   return ordered;
+}
+function planCrossRefCandidates(cfg, day, m = currentMonth) {
+  return orderCrossRefs(planCrossRefsAll(cfg), day, m);
 }
 function planCrossRefCfg(cfg, day, m = currentMonth) {
   const cands = planCrossRefCandidates(cfg, day, m);
   return cands[0] || null;
 }
 function crossPlanValueFromCell(c) {
+  if (!c || typeof c !== "object") return null;
   const p = c.plan;
   if (p != null && p !== "" && !isNaN(Number(p))) return Number(p);
   const r = c.real;
@@ -3736,11 +3748,17 @@ function crossPlanValueFromCell(c) {
   return null;
 }
 function crossPlanHit(sellerId, cfg, day, m = currentMonth) {
+  const refs = planCrossRefCandidates(cfg, day, m);
+  if (!refs.length) return null;
+  const daysToTry = [];
   const prev = prevWorkedDay(sellerId, day, m);
-  if (prev == null) return null;
-  for (const ref of planCrossRefCandidates(cfg, day, m)) {
-    const value = crossPlanValueFromCell(getCell(sellerId, ref.id, prev, m));
-    if (value != null) return { ref, value, prevDay: prev };
+  if (prev != null) daysToTry.push(prev);
+  if (!daysToTry.includes(day)) daysToTry.push(day);
+  for (const tryDay of daysToTry) {
+    for (const ref of refs) {
+      const value = crossPlanValueFromCell(getCell(sellerId, ref.id, tryDay, m));
+      if (value != null) return { ref, value, prevDay: tryDay };
+    }
   }
   return null;
 }
