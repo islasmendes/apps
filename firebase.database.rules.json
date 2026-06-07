@@ -3,21 +3,44 @@
     ".read": false,
     ".write": false,
 
+    "lojas": {
+      ".read": "auth != null",
+      "$code": {
+        ".write": "auth != null && (newData.exists() || root.child('admins').child(auth.uid).val() === true)"
+      }
+    },
+
     "admins": {
+      ".read": "auth != null",
+      ".write": "root.child('admins').child(auth.uid).val() === true",
       "$uid": {
         ".read": "auth != null",
-        ".write": false
+        ".write": "root.child('admins').child(auth.uid).val() === true"
       }
     },
 
     "auth": {
       ".read": "auth != null",
-      ".write": false,
-      "divisionais": {
-        "$regional": {
+      ".write": "auth != null",
+      "master": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      },
+      "lojas": {
+        "$code": {
           ".read": "auth != null",
           ".write": "auth != null"
         }
+      },
+      "divisionais": {
+        "$code": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      },
+      "adminDevices": {
+        ".read": "auth != null",
+        ".write": "auth != null"
       }
     },
 
@@ -25,13 +48,6 @@
       "operational": {
         ".read": "auth != null",
         ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
-      }
-    },
-
-    "lojas": {
-      "$lojaId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
       }
     },
 
