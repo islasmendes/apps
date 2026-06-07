@@ -192,8 +192,19 @@
     cursor: pointer; border: 1px solid var(--border); background: var(--panel-2); color: var(--text-dim);
     width: 32px; height: 32px; border-radius: 99px; font-size: 14px; font-family: var(--font);
   }
-  .resumo-hero { border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin-bottom: 12px; background: var(--panel-2); }
-  .resumo-hero .big { font-size: 26px; font-weight: 800; line-height: 1.1; }
+  .resumo-hero {
+    border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin-bottom: 12px;
+    background: var(--panel-2); max-width: min(100%, 320px);
+  }
+  .resumo-hero-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .resumo-hero-left { flex: 1; min-width: 0; }
+  .resumo-hero .hero-label { margin: 0 0 4px; font-weight: 800; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-size: 10px; }
+  .resumo-hero .big { font-size: 30px; font-weight: 800; line-height: 1; flex-shrink: 0; text-align: right; }
+  .resumo-hero-pct.pulse-bad { animation: resumo-pct-pulse 1.35s ease-in-out infinite; }
+  @keyframes resumo-pct-pulse {
+    0%, 100% { opacity: 1; text-shadow: 0 0 10px color-mix(in srgb, var(--danger) 35%, transparent); }
+    50% { opacity: .72; text-shadow: 0 0 22px color-mix(in srgb, var(--danger) 65%, transparent); }
+  }
   .resumo-hero .subline { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
   .resumo-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .resumo-chip {
@@ -205,10 +216,13 @@
   .resumo-sema b.warn { color: var(--warn); }
   .resumo-sema b.bad { color: var(--danger); }
   .resumo-sec { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .45px; color: var(--text-faint); margin: 14px 0 8px; }
-  .resumo-card { border: 1px solid var(--border); border-radius: 14px; margin-bottom: 10px; overflow: hidden; background: var(--panel); }
+  .resumo-card {
+    border: 2px solid color-mix(in srgb, var(--rc) 58%, var(--border));
+    border-radius: 14px; margin-bottom: 10px; overflow: hidden; background: var(--panel);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--rc) 14%, transparent);
+  }
   .resumo-row {
     padding: 10px 12px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-    border-left: 3px solid var(--rc);
   }
   .resumo-row:last-child { border-bottom: none; }
   .resumo-row.sub { padding-left: 20px; opacity: .95; }
@@ -216,7 +230,8 @@
   .resumo-row-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
   .resumo-row-top b { font-size: 13px; }
   .resumo-row-top .pct { font-size: 14px; font-weight: 800; white-space: nowrap; }
-  .resumo-row-meta { font-size: 10px; color: var(--text-faint); margin-top: 3px; font-weight: 700; }
+  .resumo-row-meta { font-size: 10px; color: var(--text-faint); margin-top: 3px; font-weight: 700; line-height: 1.45; }
+  .resumo-meta-sep { color: var(--text-faint); opacity: .55; font-weight: 800; margin: 0 1px; }
   .resumo-bar { height: 5px; border-radius: 99px; background: var(--border); margin-top: 8px; overflow: hidden; }
   .resumo-bar i { display: block; height: 100%; border-radius: 99px; background: var(--bc); max-width: 100%; }
   .resumo-rank { font-size: 10px; font-weight: 800; color: var(--accent-2); margin-top: 4px; }
@@ -373,7 +388,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v3";
+const APP_BUILD = "v4";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -835,6 +850,22 @@ function rateDisplayName(rate, ind) {
   if (!raw || raw === "%") return ind?.name || "Taxa";
   return raw.replace(/^%+\s*/, "");
 }
+function resumoMetaLine(st) {
+  const { real, meta, proj, lb, gap, ritmo } = st;
+  const sep = '<span class="resumo-meta-sep">&gt;</span>';
+  const parts = [];
+  const realDisp = lb ? fmtPctFine(real) : fmt(real);
+  parts.push(`Real ${realDisp}`);
+  if (ritmo != null) parts.push(`Média de ${fmt(ritmo, ritmo % 1 ? 1 : 0)}/dia`);
+  if (meta != null) parts.push(`Meta é ${lb ? fmtPctFine(meta) : fmt(meta)}`);
+  if (proj != null) parts.push(`Projetando ${lb ? fmtPctFine(proj) : fmt(proj)}`);
+  if (gap != null) {
+    const gapTxt = gap >= 0 ? `+${gap}` : String(gap);
+    const gapColor = gap >= 0 ? "var(--ok)" : "var(--danger)";
+    parts.push(`<span style="color:${gapColor}">${gapTxt}</span>`);
+  }
+  return parts.join(" " + sep + " ");
+}
 function resumoFieldRow(cfg, color, sellerId, opts, m = todayISO()) {
   const parentInd = opts.parentInd || null;
   const st = fieldProjStats(cfg, sellerId, m, parentInd);
@@ -848,17 +879,13 @@ function resumoFieldRow(cfg, color, sellerId, opts, m = todayISO()) {
     const { pos, total } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
     if (pos > 0 && total > 1) rankHtml = `<div class="resumo-rank">${pos}º de ${total} na equipe</div>`;
   }
-  const gapTxt = gap == null ? "" : (gap >= 0 ? `+${gap}` : String(gap));
   const callout = opts.main ? resumoCallout(cfg, sellerId, m, true, parentInd).html : "";
   const chev = opts.toggle ? `<span class="resumo-chev">${opts.open ? "▾" : "▸"}</span>` : "";
   const cls = `resumo-row${opts.sub ? " sub" : ""}${opts.main ? " resumo-ind-main" : ""}${opts.toggle ? " toggle" : ""}${opts.open ? " open" : ""}`;
   const attrs = opts.main && opts.indId ? ` data-ind-toggle="${opts.indId}"` : "";
-  const realDisp = lb ? fmtPctFine(real) : fmt(real);
-  const projDisp = lb ? fmtPctFine(proj) : fmt(proj);
-  const metaDisp = lb ? fmtPctFine(meta) : fmt(meta);
   return `<div class="${cls}" style="--rc:${color};--bc:${heatColor}"${attrs}>
     <div class="resumo-row-top"><b>${opts.sub ? "↳ " : ""}${cfg.name}${lbTag}${chev}</b><span class="pct" style="color:${heatColor}">${pctDisp}</span></div>
-    <div class="resumo-row-meta">Real ${realDisp} · Proj ${projDisp} · Meta ${metaDisp}${gapTxt ? " · " + gapTxt : ""}${ritmo != null ? " · " + fmt(ritmo, ritmo % 1 ? 1 : 0) + "/dia" : ""}${lb && perfRatio != null ? " · " + resumoAtingTxt(perfRatio, true) : ""}</div>
+    <div class="resumo-row-meta">${resumoMetaLine(st)}</div>
     <div class="resumo-bar"><i style="width:${barW}%"></i></div>${rankHtml}${callout}</div>`;
 }
 function resumoAtingTxt(perfRatio, lowerBetter) {
@@ -966,14 +993,20 @@ function renderResumo() {
   const monthLbl = new Date(m + "-02").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   const vendaPct = vendaSt?.perfRatio;
   const vendaHeat = vendaSt ? resumoHeatColor(vendaSt.proj, vendaSt.meta, vendaSt.perfRatio, vendaSt.lb, false) : "var(--text-faint)";
+  const vendaPulse = vendaCallout.tone === "bad" ? " pulse-bad" : "";
+  const semaTip = "Contagem por indicador principal e taxas: verde ≥100% da meta · atenção entre 70% e 99% · risco abaixo de 70% (indicadores ↓ usam faixa verde/amarelo/vermelho pela projeção vs meta).";
   const vendaRankTxt = vendaRank.pos > 0 && vendaRank.total > 1 ? `${vendaRank.pos}º de ${vendaRank.total} em vendas` : "—";
   document.getElementById("resumoRoot").innerHTML = `
     <div class="resumo-hero">
-      <div class="subline" style="margin:0 0 4px;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px;font-size:10px;">Foco Principal - VENDAS!</div>
-      <div class="big" style="color:${vendaHeat}">${pctTxt(vendaPct)}</div>
-      <div class="subline">Projeção · ${monthLbl} · dados da matriz</div>
+      <div class="resumo-hero-head">
+        <div class="resumo-hero-left">
+          <div class="hero-label">Foco Principal - VENDAS!</div>
+          <div class="subline" style="margin-top:0;">Projeção · ${monthLbl} · dados da matriz</div>
+        </div>
+        <div class="big resumo-hero-pct${vendaPulse}" style="color:${vendaHeat}">${pctTxt(vendaPct)}</div>
+      </div>
       ${vendaCallout.html}
-      <div class="resumo-sema"><b class="ok">${g} verde</b><b class="warn">${y} atenção</b><b class="bad">${r} risco</b></div>
+      <div class="resumo-sema" title="${semaTip}"><b class="ok">${g} verde</b><b class="warn">${y} atenção</b><b class="bad">${r} risco</b></div>
       <div class="resumo-chips">
         <span class="resumo-chip" style="color:${heatMatrizText(discipline.pct)}" title="${discipline.closed ? discipline.complete + " de " + discipline.closed + " dias encerrados com check-in e check-out completos · " + discipline.scheduled + " dias na escala do mês" : "Ainda sem dias encerrados na escala"}">Aderência ${pctTxt(discipline.pct)}${discipline.closed ? " · " + discipline.complete + "/" + discipline.closed + " dias" : ""}</span>
         <span class="resumo-chip" style="color:${heatMatrizText(metrics.acc)}">Acurácia ${pctTxt(metrics.acc)}</span>
