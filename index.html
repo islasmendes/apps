@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v24";
+  var BUILD = "v25";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1614,7 +1614,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v24";
+const APP_BUILD = "v25";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3580,13 +3580,15 @@ function diarioRow(cfg, color, isSub) {
       if (cfgOpenQuestion(cfg)) {
         cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span>${openPlanDiarioHtml(cfg, c, diarioSeller, d)}</label>`;
       } else {
-        cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"${ro}></label>`;
+        const progIn = programacaoDiarioCellHint(diarioSeller, cfg, d);
+        cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"${ro}>${progIn}</label>`;
       }
     }
     if (needs.checkout) {
       const metaD = metaForDay(cfg, currentMonth, d);
       const pct = metaD ? (c.real != null ? c.real / metaD : null) : null;
-      cell += `<label class="dio-field dio-checkout"><span class="dio-lbl">Check-out${cellSourceTag(c, "real")}</span><input class="cellinput checkout-cell" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${c.real ?? ''}" placeholder="—" style="color:${c.real != null ? heatText(pct) : 'var(--text)'};"${ro}></label>`;
+      const progOut = programacaoDiarioCellHint(diarioSeller, cfg, d);
+      cell += `<label class="dio-field dio-checkout"><span class="dio-lbl">Check-out${cellSourceTag(c, "real")}</span><input class="cellinput checkout-cell" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${c.real ?? ''}" placeholder="—" style="color:${c.real != null ? heatText(pct) : 'var(--text)'};"${ro}>${progOut}</label>`;
     }
     if (!needs.checkin && !needs.checkout) cell += `<span class="muted" style="font-size:10px;opacity:.45">—</span>`;
     cell += '</div>';
@@ -3801,6 +3803,60 @@ function planCrossRefCfg(cfg, day, m = currentMonth) {
   const cands = planCrossRefCandidates(cfg, day, m);
   return cands[0] || null;
 }
+const WD_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+function programacaoKind(cfg) {
+  if (!cfg) return null;
+  if (cfg.sundayOnly) return "domingo";
+  if (diarioIsSaturdaySub(cfg)) return "sabado";
+  const n = normNameCross(cfg.name);
+  if (/domingo|\bdom\b/.test(n)) return "domingo";
+  if (/sabado|\bsab\b/.test(n)) return "sabado";
+  if (/prox|proxim|amanh|seguinte/.test(n)) return "prox";
+  return null;
+}
+function programacaoTargetDay(sellerId, ref, m, day) {
+  const kind = programacaoKind(ref);
+  const week = weekForDay(day != null ? day : (todayISO() === m ? new Date().getDate() : 1), m);
+  if (kind === "sabado") return week.find(d => isSaturday(m, d) && sellerWorks(sellerId, d, m)) ?? null;
+  if (kind === "domingo") return week.find(d => isSunday(m, d) && sellerWorks(sellerId, d, m)) ?? null;
+  return null;
+}
+function programacaoAccumSourceDays(sellerId, ref, targetDay, m) {
+  const kind = programacaoKind(ref);
+  const week = weekForDay(targetDay, m);
+  if (kind === "sabado") return week.filter(d => d < targetDay && weekday(m, d) >= 1 && weekday(m, d) <= 5);
+  if (kind === "domingo") return week.filter(d => d < targetDay);
+  return [];
+}
+function programacaoAcumulada(sellerId, ref, targetDay, m = currentMonth) {
+  const kind = programacaoKind(ref);
+  if (kind !== "sabado" && kind !== "domingo") return null;
+  const wd = weekday(m, targetDay);
+  if ((kind === "sabado" && !isSaturday(m, targetDay)) || (kind === "domingo" && !isSunday(m, targetDay))) return null;
+  let sum = 0, has = false;
+  const parts = [];
+  for (const d of programacaoAccumSourceDays(sellerId, ref, targetDay, m)) {
+    if (!sellerWorks(sellerId, d, m)) continue;
+    const needs = diarioFieldNeeds(sellerId, ref, d, m);
+    if (!needs.checkin && !needs.checkout) continue;
+    const v = crossPlanValueFromCell(getCell(sellerId, ref.id, d, m));
+    if (v == null) continue;
+    sum += v;
+    has = true;
+    parts.push({ day: d, label: WD_SHORT[weekday(m, d)], value: v });
+  }
+  return has ? { value: sum, parts, kind } : null;
+}
+function programacaoDiarioCellHint(sellerId, ref, day, m = currentMonth) {
+  const kind = programacaoKind(ref);
+  if (kind !== "sabado" && kind !== "domingo") return "";
+  const target = programacaoTargetDay(sellerId, ref, m, day);
+  if (target == null || day > target) return "";
+  const acc = programacaoAcumulada(sellerId, ref, target, m);
+  if (!acc) return "";
+  if (day === target) return `<div class="prog-sum-hint" style="font-size:9px;margin-top:3px;color:var(--accent-2)">Σ semana <b>${acc.value}</b></div>`;
+  return `<div class="prog-sum-hint" style="font-size:9px;margin-top:3px;color:var(--text-dim)">→Σ <b>${acc.value}</b></div>`;
+}
 function crossPlanValueFromCell(c) {
   if (!c || typeof c !== "object") return null;
   const p = c.plan;
@@ -3812,14 +3868,28 @@ function crossPlanValueFromCell(c) {
 function crossPlanHit(sellerId, cfg, day, m = currentMonth) {
   const refs = planCrossRefCandidates(cfg, day, m);
   if (!refs.length) return null;
+  const wd = weekday(m, day);
+  for (const ref of refs) {
+    const kind = programacaoKind(ref);
+    if (kind === "sabado" && isSaturday(m, day)) {
+      const acc = programacaoAcumulada(sellerId, ref, day, m);
+      if (acc != null) return { ref, value: acc.value, prevDay: day, accumulated: true, accumParts: acc.parts, accumKind: acc.kind };
+    }
+    if (kind === "domingo" && isSunday(m, day)) {
+      const acc = programacaoAcumulada(sellerId, ref, day, m);
+      if (acc != null) return { ref, value: acc.value, prevDay: day, accumulated: true, accumParts: acc.parts, accumKind: acc.kind };
+    }
+  }
   const daysToTry = [];
   const prev = prevWorkedDay(sellerId, day, m);
   if (prev != null) daysToTry.push(prev);
   if (!daysToTry.includes(day)) daysToTry.push(day);
   for (const tryDay of daysToTry) {
     for (const ref of refs) {
+      const kind = programacaoKind(ref);
+      if ((kind === "sabado" && isSaturday(m, day)) || (kind === "domingo" && isSunday(m, day))) continue;
       const value = crossPlanValueFromCell(getCell(sellerId, ref.id, tryDay, m));
-      if (value != null) return { ref, value, prevDay: tryDay };
+      if (value != null) return { ref, value, prevDay: tryDay, accumulated: false };
     }
   }
   return null;
@@ -3828,13 +3898,19 @@ function crossPlanTarget(sellerId, cfg, day, m = currentMonth) {
   const hit = crossPlanHit(sellerId, cfg, day, m);
   return hit ? hit.value : null;
 }
-function openCrossFeedbackHtml(confirmed, target, refName) {
+function openCrossFeedbackHtml(confirmed, target, refName, hit) {
   if (target == null || confirmed == null || isNaN(confirmed)) return "";
   const nome = escapeHtml(refName || "agendamentos");
+  const sumLbl = hit?.accumulated
+    ? (hit.accumKind === "domingo" ? "programados para este domingo" : "programados para este sábado")
+    : "que você declarou";
+  const sumDetail = hit?.accumulated && hit.accumParts?.length
+    ? ` (${hit.accumParts.map(p => `${p.label} ${p.value}`).join(" + ")} = ${target})`
+    : "";
   if (confirmed < target) {
-    return `<div class="open-cross-msg bad"><b>Que pena!</b> Você está perdendo cliente pro concorrente — importante confirmar todas as suas visitas! Seriam <b>(${target})</b> que você disse em <b>${nome}</b>. A disciplina te levará a lugares onde o talento não alcança.</div>`;
+    return `<div class="open-cross-msg bad"><b>Que pena!</b> Você está perdendo cliente pro concorrente — importante confirmar todas as suas visitas! Seriam <b>${target}</b> ${sumLbl} em <b>${nome}</b>${sumDetail}. A disciplina te levará a lugares onde o talento não alcança.</div>`;
   }
-  return `<div class="open-cross-msg good"><b>Sensacional!</b> Se você de fato fez com qualidade essas confirmações, não tem como você não ter resultado! Nada resiste ao trabalho bem feito! Continue assim.</div>`;
+  return `<div class="open-cross-msg good"><b>Sensacional!</b> Você programou <b>${target}</b> ${sumLbl}${sumDetail} e confirmou com qualidade! Nada resiste ao trabalho bem feito! Continue assim.</div>`;
 }
 function openPlanDiarioHtml(cfg, c, sellerId, day, m = currentMonth) {
   const disp = openPlanDisplay(c);
@@ -3846,7 +3922,7 @@ function openPlanDiarioHtml(cfg, c, sellerId, day, m = currentMonth) {
   if (confirmed != null && !isNaN(confirmed) && target != null) cls = confirmed < target ? "neg" : "pos";
   let html = `<div class="open-plan-cell ${cls}" title="${escapeHtml(disp)}">${escapeHtml(disp)}</div>`;
   if (confirmed != null && !isNaN(confirmed) && target != null) {
-    html += `<div class="open-cross-mini">${openCrossFeedbackHtml(confirmed, target, hit?.ref?.name)}</div>`;
+    html += `<div class="open-cross-mini">${openCrossFeedbackHtml(confirmed, target, hit?.ref?.name, hit)}</div>`;
   }
   return html;
 }
