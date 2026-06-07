@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v17";
+  var BUILD = "v18";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -370,6 +370,9 @@
   .kpi-draghandle:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
   .ind-card.dragging, .sub-row.dragging, .rate-row.dragging { opacity: .45; }
   .ind-card.drag-over, .sub-row.drag-over, .rate-row.drag-over { outline: 2px dashed var(--accent); outline-offset: -2px; border-radius: 8px; }
+  .open-plan-cell { display: block; max-width: 100%; overflow-x: auto; font-size: 10px; line-height: 1.35; padding: 4px 6px; border-radius: 7px; background: var(--dio-in-bg); border: 1.5px solid var(--dio-in-bd); white-space: nowrap; text-align: left; scrollbar-width: thin; }
+  .open-plan-cell.pos { color: var(--ok); font-weight: 700; }
+  .open-plan-cell.neg { color: var(--danger); font-weight: 700; }
   .tag { font-size: 10.5px; padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); font-weight: 700; }
   .tag.sub { background: color-mix(in srgb, var(--accent-2) 20%, transparent); color: var(--accent-2); }
   .switch { position: relative; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: 12px; color: var(--text-dim); }
@@ -918,7 +921,9 @@ function migrate(s) {
     (i.subs || []).forEach(sub => {
       if (sub.metaSun == null) sub.metaSun = 0;
       if (sub.lowerBetter == null) sub.lowerBetter = false;
+      if (sub.openQuestion == null) sub.openQuestion = false;
     });
+    if (i.openQuestion == null) i.openQuestion = false;
     (i.rates || []).forEach(r => { if (r.lowerBetter == null) r.lowerBetter = false; });
   });
   (s.sellers || []).forEach(seller => {
@@ -965,12 +970,14 @@ function extractOperationalConfig(st) {
     role: ind.role || "",
     pctOnly: !!ind.pctOnly,
     lowerBetter: !!ind.lowerBetter,
+    openQuestion: !!ind.openQuestion,
     subs: (ind.subs || []).map(s => ({
       name: s.name,
       checkin: !!s.checkin,
       checkout: !!s.checkout,
       lowerBetter: !!s.lowerBetter,
-      sundayOnly: !!s.sundayOnly
+      sundayOnly: !!s.sundayOnly,
+      openQuestion: !!s.openQuestion
     })),
     rates: (ind.rates || []).map(r => ({
       name: r.name,
@@ -1005,6 +1012,7 @@ function applyOperationalConfig(st, tpl, opts) {
       role: tInd.role || "",
       pctOnly: tInd.pctOnly,
       lowerBetter: tInd.lowerBetter,
+      openQuestion: !!tInd.openQuestion,
       metaDay: local?.metaDay ?? 0,
       metaSat: local?.metaSat ?? 0,
       metaSun: local?.metaSun ?? 0,
@@ -1022,6 +1030,7 @@ function applyOperationalConfig(st, tpl, opts) {
         checkout: ts.checkout,
         lowerBetter: ts.lowerBetter,
         sundayOnly: !!ts.sundayOnly,
+        openQuestion: !!ts.openQuestion,
         metaDay: ls?.metaDay ?? 0,
         metaSat: ls?.metaSat ?? 0,
         metaSun: ls?.metaSun ?? 0,
@@ -1285,7 +1294,7 @@ function clearDiarioWeekResults() {
       days.forEach(d => {
         if (!md.daily[s.id]?.[fid]?.[d]) return;
         const cell = md.daily[s.id][fid][d];
-        ["plan", "real", "planBy", "realBy", "planAt", "realAt"].forEach(k => delete cell[k]);
+        ["plan", "real", "planYes", "planJustif", "planBy", "realBy", "planAt", "realAt"].forEach(k => delete cell[k]);
         purgeDiarioDailyCell(md, s.id, fid, d);
       });
     });
@@ -1437,7 +1446,10 @@ function setCell(sellerId, fieldId, day, key, val, m = currentMonth) {
   save();
 }
 function cellSourceTag(cell, key) {
-  if (cell[key] == null || cell[key] === "") return "";
+  const hasVal = key === "plan" && (cell.planYes === true || cell.planYes === false)
+    ? (cell.planJustif != null && String(cell.planJustif).trim() !== "")
+    : (cell[key] != null && cell[key] !== "");
+  if (!hasVal) return "";
   const by = cell[key + "By"];
   if (by === "consultor") return ' <span class="hint" style="font-size:8px;color:var(--ok)">👤</span>';
   if (by === "gestor") return ' <span class="hint" style="font-size:8px;color:var(--accent)">👔</span>';
@@ -1446,7 +1458,7 @@ function cellSourceTag(cell, key) {
 function mergeCellFromRemote(lc, rc) {
   if (!rc || typeof rc !== "object") return false;
   let cellChanged = false;
-  ["plan", "real", "planBy", "realBy", "planAt", "realAt"].forEach(k => {
+  ["plan", "real", "planYes", "planJustif", "planBy", "realBy", "planAt", "realAt"].forEach(k => {
     const remoteHas = Object.prototype.hasOwnProperty.call(rc, k);
     if (remoteHas) {
       if (rc[k] === null || rc[k] === "") {
@@ -1527,7 +1539,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v17";
+const APP_BUILD = "v18";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3479,7 +3491,7 @@ function renderDiario() {
 }
 function diarioRow(cfg, color, isSub) {
   const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
-  const domTag = cfg.sundayOnly ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">dom · seg–sáb</span>` : (diarioIsSaturdaySub(cfg) ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">sáb · seg–sex</span>` : "");
+  const domTag = cfg.sundayOnly ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">dom · seg–sáb</span>` : (diarioIsSaturdaySub(cfg) ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">sáb · seg–sex</span>` : (cfgOpenQuestion(cfg) ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">perg. aberta</span>` : ""));
   const label = (isSub ? `<span class="tag sub">↳</span> ${cfg.name}` : `<b style="color:${color}">${cfg.name}</b>`) + domTag;
   let row = `<tr class="${isSub?'dsub':'dgroup'}" style="--gc:${color}"><td class="name" style="border-left:3px solid ${color};">${label}</td>`;
   row += `<td><span class="neon">${fmt(cfg.metaDay)}</span>${Number(cfg.metaSat)?`<br><span class="muted" style="font-size:10px">sáb ${fmt(cfg.metaSat)}</span>`:''}${Number(cfg.metaSun)?`<br><span class="muted" style="font-size:10px">dom ${fmt(cfg.metaSun)}</span>`:''}</td>`;
@@ -3489,7 +3501,15 @@ function diarioRow(cfg, color, isSub) {
     const ro = editable ? "" : ' readonly tabindex="-1"';
     const c = getCell(diarioSeller, cfg.id, d);
     let cell = '<div class="daycell">';
-    if (needs.checkin) cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"${ro}></label>`;
+    if (needs.checkin) {
+      if (cfgOpenQuestion(cfg)) {
+        const disp = openPlanDisplay(c);
+        const ynCls = c.planYes === true ? "pos" : c.planYes === false ? "neg" : "";
+        cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span><div class="open-plan-cell ${ynCls}" title="${escapeHtml(disp)}">${disp ? escapeHtml(disp) : '<span class="muted">—</span>'}</div></label>`;
+      } else {
+        cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"${ro}></label>`;
+      }
+    }
     if (needs.checkout) {
       const metaD = metaForDay(cfg, currentMonth, d);
       const pct = metaD ? (c.real != null ? c.real / metaD : null) : null;
@@ -3627,6 +3647,31 @@ function fieldDiarioLabel(entry) {
   const cfg = entry.cfg;
   return entry.parent ? "↳ " + cfg.name : cfg.name;
 }
+const OPEN_JUSTIF_MIN = 10;
+function cfgOpenQuestion(cfg) { return !!(cfg && cfg.openQuestion); }
+function isOpenPlanComplete(cell) {
+  if (cell.planYes !== true && cell.planYes !== false) return false;
+  const j = String(cell.planJustif || "").trim();
+  if (j.length < OPEN_JUSTIF_MIN) return false;
+  if (cell.planYes === true) {
+    const n = cell.plan;
+    return n != null && n !== "" && !isNaN(Number(n)) && Number(n) >= 0;
+  }
+  return true;
+}
+function hasPlanValue(cell, cfg) {
+  if (cfgOpenQuestion(cfg)) return isOpenPlanComplete(cell);
+  return hasCellValue(cell, "plan");
+}
+function openPlanDisplay(cell) {
+  if (cell.planYes !== true && cell.planYes !== false) return "";
+  const yn = cell.planYes === true ? "Sim" : "Não";
+  let s = yn;
+  if (cell.planYes === true && cell.plan != null && cell.plan !== "") s += ` (${cell.plan})`;
+  const j = String(cell.planJustif || "").trim();
+  if (j) s += ", " + j;
+  return s;
+}
 function hasCellValue(cell, key) {
   return cell[key] != null && cell[key] !== "";
 }
@@ -3657,7 +3702,7 @@ function consultantDisciplineDetails(sellerId, m = currentMonth) {
       if (!needs.checkin && !needs.checkout) return;
       const c = getCell(sellerId, cfg.id, d, m);
       const label = fieldDiarioLabel(entry);
-      if (needs.checkin && !hasCellValue(c, "plan")) gaps.push({ type: "in", field: label });
+      if (needs.checkin && !hasPlanValue(c, cfg)) gaps.push({ type: "in", field: label });
       if (needs.checkout && !hasCellValue(c, "real")) gaps.push({ type: "out", field: label });
     });
     const dayComplete = gaps.length === 0;
@@ -4338,7 +4383,8 @@ function renderIndicatorConfig() {
       <label class="switch"><input type="checkbox" class="ind-field" data-k="pctOnly" ${ind.pctOnly?'checked':''}><span class="track"></span>Só taxa (ex.: NPS)</label>
       <label class="switch switch-lower" title="Verde abaixo do alvo · amarelo perto do teto · vermelho ao estourar"><input type="checkbox" class="ind-field" data-k="lowerBetter" ${ind.lowerBetter?'checked':''}><span class="track"></span>↓ Menor melhor</label>
       ${ind.pctOnly?'':`<label class="switch"><input type="checkbox" class="ind-field" data-k="checkin" ${ind.checkin?'checked':''}><span class="track"></span>Check-in</label>
-      <label class="switch"><input type="checkbox" class="ind-field" data-k="checkout" ${ind.checkout?'checked':''}><span class="track"></span>Check-out</label>`}
+      <label class="switch"><input type="checkbox" class="ind-field" data-k="checkout" ${ind.checkout?'checked':''}><span class="track"></span>Check-out</label>
+      <label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="ind-field" data-k="openQuestion" ${ind.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label>`}
       <span class="spacer" style="flex:1"></span>
       <button class="iconbtn" data-del-ind="${ind.id}" title="Excluir">✕</button></div>${lowerBetterPanelHtml(ind)}`;
     if (!ind.pctOnly) html += metaGoalsQtyHtml(ind, ind.id);
@@ -4346,7 +4392,7 @@ function renderIndicatorConfig() {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
       (ind.subs||[]).forEach(s => {
         const subLb = cfgLowerBetter(s) || cfgLowerBetter(ind);
-        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`;
+        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`;
       });
       html += `</div>`;
     }
@@ -4438,7 +4484,7 @@ function bindIndicatorEvents() {
     card.querySelectorAll("[data-meta]").forEach(f => f.addEventListener("change", () => { ind[f.dataset.meta]=Number(f.value)||0; save(); refreshMetaAdherence(ind.id); }));
     card.querySelectorAll(".metaloja-inp[data-field]").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-ind]").forEach(b => b.addEventListener("click", () => { if(confirm("Excluir este indicador?")){ const id = b.dataset.delInd; state.indicators = state.indicators.filter(i=>i.id!==id); if (state.order.indicators) state.order.indicators = state.order.indicators.filter(x => x !== id); save(); renderIndicatorConfig(); } }));
-  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false }); save(); renderIndicatorConfig(); }));
+  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false, openQuestion:false }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".sub-row").forEach(row => { const ind = findIndBySub(row.dataset.sub); const s = ind && ind.subs.find(x=>x.id===row.dataset.sub); if(!s) return;
     row.querySelectorAll(".sub-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => {
       const k = f.dataset.sk;
