@@ -208,6 +208,13 @@
   .barwrap > i { display: block; height: 100%; border-radius: 3px; }
   .relato { font-weight: 700; }
   .relato .s { color: var(--text-dim); font-weight: 600; }
+  .relato .acur-rel { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .relato .acur-sys { font-size: 12px; min-width: 28px; padding: 2px 6px; vertical-align: middle; }
+  .relato .acur-pct { font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; margin-left: 4px; }
+  .relato .acur-sep { color: var(--text-faint); font-weight: 500; margin: 0 3px; user-select: none; }
+  .acur-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; font-size: 11.5px; color: var(--text-dim); }
+  .acur-legend i { display: inline-flex; align-items: center; gap: 5px; font-style: normal; }
+  .acur-legend .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
   /* Seller chips */
   .seller-chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .seller-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 99px; padding: 5px 6px 5px 12px; transition: .15s; }
@@ -484,7 +491,8 @@
         <div><h2>Acuracidade do Relato</h2><div class="sub">Auditoria do mês: check-in (plano) · check-out (relato) × sistema. Clique no <b>nome</b> aqui para ver a auditoria; na matriz acima, clique no nome para <b>lançar o sistema</b>.</div></div>
       </div>
       <div class="table-wrap" style="margin-top:6px;"><table id="acuracidadeTable"></table></div>
-      <div class="hint" style="margin-top:10px;">Acuracidade = quão próximo o relato ficou do sistema (inclui <b>0</b> no sistema). Aderência = realizado ÷ planejado no check-in. O lançamento do sistema saiu da aba superior — use o clique no nome na matriz.</div>
+      <div class="acur-legend" id="acurLegend"></div>
+      <div class="hint" style="margin-top:10px;">Só entram indicadores com <b>lançamento do gestor (sistema ⚙)</b> na matriz. Acuracidade = proximidade relato ÷ sistema. Aderência = realizado ÷ planejado no check-in. Passe o mouse nas células para detalhes.</div>
     </div>
   </section>
 
@@ -2455,6 +2463,54 @@ function acuracidadeFieldList() {
   });
   return fields;
 }
+function fieldHasSistema(sellerId, f, m = currentMonth) {
+  if (f.rate) return getSystemRate(sellerId, f.rateId, m) != null;
+  return getSystem(sellerId, f.id, m) != null;
+}
+function acuracidadeVisibleFields(_sellers, allFields) {
+  const list = allFields || acuracidadeFieldList().filter(f => !f.rate);
+  const scope = orderedSellers();
+  return list.filter(f => scope.some(s => fieldHasSistema(s.id, f)));
+}
+function acurTipRelato(f, rel, sys, acc) {
+  const lines = [
+    (f.sub ? "↳ " : "") + f.name,
+    "Relato (check-out): " + (rel != null ? fmt(rel) : "—"),
+    "Sistema (gestor ⚙): " + (sys != null ? fmt(sys) : "—"),
+  ];
+  if (sys != null && acc != null) {
+    lines.push("Acuracidade: " + pctTxt(acc) + (acc >= 0.95 ? " · excelente" : acc >= 0.5 ? " · atenção" : " · distante do sistema"));
+    if (sys > 0 && rel != null) {
+      const desv = Math.abs(rel - sys);
+      lines.push("Desvio: " + fmt(desv) + " (" + pctTxt(desv / sys) + " do sistema)");
+    } else if (sys === 0) lines.push("Sistema = 0 · relato " + (rel === 0 ? "bate" : "diverge"));
+  }
+  return lines.join("\n");
+}
+function acurRelatoCellHtml(sellerId, f, days) {
+  const sys = getSystem(sellerId, f.id);
+  if (sys == null) return `<td class="relato muted">—</td>`;
+  const rel = accum(sellerId, f.id, "real", days);
+  const acc = fieldAccuracy(sellerId, f.id, days);
+  const accColor = acc != null ? heatText(acc) : "var(--text-faint)";
+  const relDisp = rel != null ? fmt(rel) : "—";
+  const pctDisp = acc != null ? pctTxt(acc) : "—";
+  const tip = acurTipRelato(f, rel, sys, acc);
+  return `<td class="relato"${matrizTipData(tip, f.color)}>` +
+    `<span class="acur-rel" style="color:${accColor}">${relDisp}</span>` +
+    `<span class="acur-sep">/</span>` +
+    `<span class="heat matriz-from-sys matriz-real acur-sys">${fmt(sys)}</span>` +
+    `<span class="acur-pct" style="color:${accColor}">${pctDisp}</span></td>`;
+}
+function renderAcurLegend() {
+  const el = document.getElementById("acurLegend");
+  if (!el) return;
+  el.innerHTML =
+    `<i><span class="sw" style="background:var(--danger)"></span> Relato / % distantes do sistema</i>` +
+    `<i><span class="sw" style="background:var(--warn)"></span> Atenção (50–94%)</i>` +
+    `<i><span class="sw" style="background:var(--ok)"></span> Acurado (≥95%)</i>` +
+    `<i><span class="heat matriz-from-sys matriz-real acur-sys" style="padding:1px 5px;font-size:10px;min-width:0">24</span> Valor sistema ⚙ (gestor)</i>`;
+}
 function fieldAccuracy(sellerId, fieldId, days) {
   const sys = getSystem(sellerId, fieldId);
   if (sys == null) return null;
@@ -2466,25 +2522,34 @@ function renderAcuracidade() {
   const allSellers = orderedSellers();
   const days = monthDays();
   const sellers = matrizApplySellerOrder(matrizFilteredSellers(allSellers), days);
-  const fields = acuracidadeFieldList().filter(f => !f.rate);
+  const allFields = acuracidadeFieldList().filter(f => !f.rate);
+  const fields = acuracidadeVisibleFields(sellers, allFields);
   let head = '<thead><tr><th class="name">Vendedor</th>';
-  fields.forEach(f => head += `<th${f.sub?' style="color:var(--accent-2)"':''}>${f.sub?'↳ ':''}${f.name}<br><span class="muted" style="font-weight:600">relato·sis</span></th>`);
+  if (!fields.length) {
+    head += '<th class="muted" style="font-weight:600">—</th>';
+  } else {
+    fields.forEach(f => head += `<th${f.sub?' style="color:var(--accent-2)"':''}${matrizTipData("Coluna visível porque o gestor lançou sistema ⚙ para este indicador.\nRelato / Sistema / Acuracidade", f.color)}>${f.sub?'↳ ':''}${f.name}<br><span class="muted" style="font-weight:600">relato · sis · %</span></th>`);
+  }
   head += '<th>Acurac.</th><th>Aderência<br><span class="muted" style="font-weight:600">check-in</span></th></tr></thead>';
   let body = "<tbody>";
-  sellers.forEach(s => {
-    const m = sellerMetrics(s.id);
-    body += `<tr data-seller="${s.id}"><td class="name seller-link" title="Ver auditoria">${s.name}</td>`;
-    fields.forEach(f => {
-      const rel = accum(s.id, f.id, "real", days); const sys = getSystem(s.id, f.id);
-      const acc = fieldAccuracy(s.id, f.id, days);
-      const both = rel != null || sys != null;
-      const accMini = sys != null && acc != null ? ` <span class="muted" style="font-size:10px">${pctTxt(acc)}</span>` : "";
-      body += `<td class="relato">${both ? `${rel==null?'—':fmt(rel)} <span class="s">${sys==null?'—':fmt(sys)}</span>${accMini}` : '—'}</td>`;
+  if (!sellers.length) {
+    body += `<tr><td class="empty" colspan="${Math.max(fields.length, 1) + 3}">Nenhum vendedor no filtro.</td></tr>`;
+  } else if (!fields.length) {
+    body += `<tr><td class="empty" colspan="4">Nenhum indicador com lançamento do gestor (sistema ⚙) neste mês.<br>Clique no <b>nome</b> na matriz acima para lançar o sistema — a coluna aparece aqui automaticamente.</td></tr>`;
+  } else {
+    sellers.forEach(s => {
+      const m = sellerMetrics(s.id);
+      body += `<tr data-seller="${s.id}"><td class="name seller-link" title="Ver auditoria detalhada">${s.name}</td>`;
+      fields.forEach(f => { body += acurRelatoCellHtml(s.id, f, days); });
+      body += `<td style="color:${heatText(m.acc)}; font-weight:700;"${m.acc != null ? matrizTipData("Média de acuracidade nos indicadores com sistema ⚙\n" + pctTxt(m.acc), "var(--accent)") : ""}>${m.acc==null?'—':pctTxt(m.acc)}</td>`;
+      body += `<td style="color:${heatText(m.ader)}; font-weight:700;"${m.ader != null ? matrizTipData("Aderência check-in: realizado ÷ planejado\n" + pctTxt(m.ader), "var(--accent-2)") : ""}>${m.ader==null?'—':pctTxt(m.ader)}</td></tr>`;
     });
-    body += `<td style="color:${heatText(m.acc)}; font-weight:700;">${m.acc==null?'—':pctTxt(m.acc)}</td><td style="color:${heatText(m.ader)}; font-weight:700;">${m.ader==null?'—':pctTxt(m.ader)}</td></tr>`;
-  });
+  }
   body += "</tbody>";
-  document.getElementById("acuracidadeTable").innerHTML = head + body;
+  const tbl = document.getElementById("acuracidadeTable");
+  tbl.innerHTML = head + body;
+  renderAcurLegend();
+  bindMatrizTips(tbl);
   document.querySelectorAll("#acuracidadeTable td.name.seller-link").forEach(td => { td.onclick = () => { const sid = td.closest("tr").dataset.seller; if (sid) openAuditoriaModal(sid); }; });
 }
 
@@ -2687,7 +2752,7 @@ function renderLancamentoCards(sellerId) {
     return `<div class="sysgroup ${exp?'':'collapsed'}" data-ind="${ind.id}" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head sys-toggle" style="color:${ind.color}" data-ind="${ind.id}"><span class="block-toggle">${exp?'▾':'▸'}</span> ${ind.name}</div><div class="sysgroup-fields">` + fields + `</div></div>`;
   }).join("") || '<div class="empty">Nenhum indicador com lançamento de sistema.</div>';
   box.querySelectorAll(".sys-toggle").forEach(h => { h.onclick = () => { const id = h.dataset.ind; lancamentoExpanded[id] = lancamentoExpanded[id] === false; state.ui.lancamentoExpanded = lancamentoExpanded; save(); renderLancamentoCards(sellerId); }; });
-  box.querySelectorAll(".syscell").forEach(inp => inp.addEventListener("input", () => { setSystem(sellerId, inp.dataset.field, inp.value); if (activeView === "matriz") renderMatriz(); }));
+  box.querySelectorAll(".syscell").forEach(inp => inp.addEventListener("input", () => { setSystem(sellerId, inp.dataset.field, inp.value); if (activeView === "matriz") { renderMatriz(); renderAcuracidade(); } }));
   box.querySelectorAll(".sysratecell").forEach(inp => inp.addEventListener("input", () => { setSystemRate(sellerId, inp.dataset.rate, inp.value); if (activeView === "matriz") renderMatriz(); }));
 }
 function openLancamentoModal(sellerId) {
@@ -2707,24 +2772,34 @@ function renderAuditoriaModal(sellerId) {
   document.getElementById("auditoriaSummary").innerHTML =
     `<span class="pill" style="color:${heatText(m.acc)}">Acuracidade ${pctTxt(m.acc)}</span>` +
     `<span class="pill" style="color:${heatText(m.ader)}">Aderência ${pctTxt(m.ader)}</span>`;
-  const fields = acuracidadeFieldList();
+  const fields = acuracidadeFieldList().filter(f => !f.rate || fieldHasSistema(sellerId, f));
   let head = '<thead><tr><th class="name">Indicador</th><th>Check-in</th><th>Relato</th><th>Sistema</th><th>Acurac.</th></tr></thead>';
   let body = "<tbody>";
   fields.forEach(f => {
     if (f.rate) {
       const sys = getSystemRate(sellerId, f.rateId);
-      body += `<tr><td class="name">% ${f.name}</td><td>—</td><td>—</td><td>${sys!=null?fmt(sys,0)+'%':'—'}</td><td>—</td></tr>`;
+      if (sys == null) return;
+      body += `<tr><td class="name">% ${f.name}</td><td>—</td><td>—</td><td><span class="heat matriz-from-sys matriz-real acur-sys">${fmt(sys,0)}%</span></td><td>—</td></tr>`;
       return;
     }
+    const sys = getSystem(sellerId, f.id);
+    if (sys == null) return;
     const cfg = cfgById(f.id);
     const plan = cfg && cfg.checkin ? accum(sellerId, f.id, "plan", days) : null;
     const rel = accum(sellerId, f.id, "real", days);
-    const sys = getSystem(sellerId, f.id);
     const acc = fieldAccuracy(sellerId, f.id, days);
-    body += `<tr><td class="name">${f.sub?'↳ ':''}${f.name}</td><td>${plan==null?'—':fmt(plan)}</td><td>${rel==null?'—':fmt(rel)}</td><td>${sys==null?'—':fmt(sys)}</td><td style="color:${heatText(acc)};font-weight:700">${acc==null?'—':pctTxt(acc)}</td></tr>`;
+    const accColor = acc != null ? heatText(acc) : "var(--text-dim)";
+    const tip = acurTipRelato(f, rel, sys, acc);
+    body += `<tr${matrizTipData(tip, f.color)}><td class="name">${f.sub?'↳ ':''}${f.name}</td><td>${plan==null?'—':fmt(plan)}</td>` +
+      `<td style="color:${accColor};font-weight:700">${rel==null?'—':fmt(rel)}</td>` +
+      `<td><span class="heat matriz-from-sys matriz-real acur-sys">${fmt(sys)}</span></td>` +
+      `<td style="color:${accColor};font-weight:700">${acc==null?'—':pctTxt(acc)}</td></tr>`;
   });
+  if (!body.includes("<tr")) body += '<tr><td class="empty" colspan="5">Nenhum indicador com lançamento do gestor (sistema ⚙) para este vendedor.</td></tr>';
   body += "</tbody>";
-  document.getElementById("auditoriaTable").innerHTML = head + body;
+  const audTbl = document.getElementById("auditoriaTable");
+  audTbl.innerHTML = head + body;
+  bindMatrizTips(audTbl);
 }
 function openAuditoriaModal(sellerId) {
   const s = state.sellers.find(x => x.id === sellerId); if (!s) return;
@@ -2748,7 +2823,7 @@ function sellerMetrics(sellerId) {
     if (meta && real != null) { projSum += (sellerProjVal(sellerId, ind.id)/meta); projN++; }
     if (ind.checkin && ind.checkout) { const plan = accum(sellerId, ind.id, "plan", days); const r = accum(sellerId, ind.id, "real", days); if (plan) { aderSum += (r||0)/plan; aderN++; } }
   });
-  acuracidadeFieldList().filter(f => !f.rate).forEach(f => {
+  acuracidadeFieldList().filter(f => !f.rate && fieldHasSistema(sellerId, f)).forEach(f => {
     const acc = fieldAccuracy(sellerId, f.id, days);
     if (acc != null) { accSum += acc; accN++; }
   });
