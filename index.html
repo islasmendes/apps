@@ -170,7 +170,7 @@
   #diarioTable tbody tr.dgroup td.name { box-shadow: inset 3px 0 0 var(--gc), 0 0 12px color-mix(in srgb, var(--gc) 20%, transparent); }
   .neon { color: var(--neon); font-weight: 800; text-shadow: 0 0 8px color-mix(in srgb, var(--neon) 55%, transparent); }
   /* Matrix compact + responsive */
-  #matrizTable th, #matrizTable td, #acuracidadeTable th, #acuracidadeTable td { padding: 7px 8px; }
+  #matrizTable th, #matrizTable td, #acuracidadeTable th, #acuracidadeTable td, #arvoreAcuracidadeTable th, #arvoreAcuracidadeTable td { padding: 7px 8px; }
   .heat { border-radius: 7px; font-weight: 700; padding: 4px 7px; display: inline-block; min-width: 34px; }
   .heat.matriz-from-sys { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-2) 55%, transparent); }
   .heat.matriz-from-sys::after { content: "⚙"; font-size: 9px; margin-left: 3px; opacity: .75; vertical-align: super; }
@@ -630,6 +630,13 @@
       <div class="table-wrap" style="margin-top:10px;"><table id="arvoreTable"></table></div>
       <div class="legend" id="arvoreLegend"></div>
       <div class="hint" id="arvoreLegendHint" style="margin-top:8px; line-height:1.6;"></div>
+      <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--border-soft);">
+        <div class="flex-between" style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
+          <div><h2 style="font-size:16px; margin:0 0 4px;">Acuracidade do Relato · Divisional</h2><div class="sub">Total por loja (relato × sistema) e detalhe por vendedor — usa o mesmo filtro acima. Clique no <b>＋</b> da loja (na tabela ou aqui) para expandir.</div></div>
+        </div>
+        <div class="table-wrap" style="margin-top:10px;"><table id="arvoreAcuracidadeTable"></table></div>
+        <div class="legend" id="arvoreAcurLegend" style="margin-top:8px;"></div>
+      </div>
     </div>
   </section>
 
@@ -2650,6 +2657,239 @@ function renderAcuracidade() {
   document.querySelectorAll("#acuracidadeTable td.name.seller-link").forEach(td => { td.onclick = () => { const sid = td.closest("tr").dataset.seller; if (sid) openAuditoriaModal(sid); }; });
 }
 
+function arvScoped(loja, fn) {
+  if (loja.self) return fn();
+  return withState(loja.data, fn);
+}
+function arvResolveFieldLocal(fTpl) {
+  if (fTpl.sub) {
+    for (const ind of state.indicators) {
+      const sub = (ind.subs || []).find(s => s.name === fTpl.name);
+      if (sub) return { ...fTpl, id: sub.id, color: ind.color, sub: true };
+    }
+    return null;
+  }
+  const ind = state.indicators.find(i => i.name === fTpl.name && !i.pctOnly);
+  return ind ? { ...fTpl, id: ind.id, color: ind.color } : null;
+}
+function arvAcuracidadeVisibleFields(lojas) {
+  const allFields = acuracidadeFieldList().filter(f => !f.rate);
+  return allFields.filter(fTpl => lojas.some(L => arvScoped(L, () => {
+    const f = arvResolveFieldLocal(fTpl);
+    if (!f) return false;
+    return arvTeamSellerIds(L).some(sid => getSystem(sid, f.id) != null);
+  })));
+}
+function arvAcurAggregateCellHtml(fTpl, rel, sys, acc, tipExtra) {
+  if (sys == null) {
+    const tip = (fTpl.sub ? "↳ " : "") + fTpl.name + "\nSem lançamento sistema ⚙ na equipe/loja." + (tipExtra ? "\n" + tipExtra : "");
+    return `<td class="relato muted"${matrizTipData(tip, fTpl.color)}>—</td>`;
+  }
+  const accColor = acc != null ? heatText(acc) : "var(--text-faint)";
+  const relDisp = rel != null ? fmt(rel) : "—";
+  const pctDisp = acc != null ? pctTxt(acc) : "—";
+  const tip = acurTipRelato(fTpl, rel, sys, acc) + (tipExtra ? "\n" + tipExtra : "");
+  return `<td class="relato"${matrizTipData(tip, fTpl.color)}>` +
+    `<span class="acur-rel" style="color:${accColor}">${relDisp}</span>` +
+    `<span class="acur-sep">/</span>` +
+    `<span class="heat matriz-from-sys matriz-real acur-sys">${fmt(sys)}</span>` +
+    `<span class="acur-pct" style="color:${accColor}">${pctDisp}</span></td>`;
+}
+function arvAcurTotalsForSellers(sellerIds, fieldId, days) {
+  let sysSum = 0, sysN = 0, relSum = 0, relHas = false;
+  sellerIds.forEach(sid => {
+    const sys = getSystem(sid, fieldId);
+    if (sys != null) { sysSum += sys; sysN++; }
+    const rel = accum(sid, fieldId, "real", days);
+    if (rel != null) { relSum += rel; relHas = true; }
+  });
+  if (!sysN) return { sys: null, rel: null, acc: null };
+  const sys = sysSum;
+  const rel = relHas ? relSum : null;
+  const acc = sys > 0 ? Math.max(0, 1 - Math.abs((rel ?? 0) - sys) / sys) : ((rel ?? 0) === 0 ? 1 : 0);
+  return { sys, rel, acc };
+}
+function arvLojaAcurCellHtml(loja, fTpl, days) {
+  return arvScoped(loja, () => {
+    const f = arvResolveFieldLocal(fTpl);
+    if (!f) return `<td class="relato muted">—</td>`;
+    const ids = arvTeamSellerIds(loja);
+    const t = arvAcurTotalsForSellers(ids, f.id, days);
+    return arvAcurAggregateCellHtml(f, t.rel, t.sys, t.acc, "Total da loja " + loja.name);
+  });
+}
+function arvTotalAcurCellHtml(lojas, fTpl, days) {
+  let sysSum = 0, sysN = 0, relSum = 0, relHas = false;
+  lojas.forEach(L => {
+    arvScoped(L, () => {
+      const f = arvResolveFieldLocal(fTpl);
+      if (!f) return;
+      arvTeamSellerIds(L).forEach(sid => {
+        const sys = getSystem(sid, f.id);
+        if (sys != null) { sysSum += sys; sysN++; }
+        const rel = accum(sid, f.id, "real", days);
+        if (rel != null) { relSum += rel; relHas = true; }
+      });
+    });
+  });
+  if (!sysN) return `<td class="relato muted"${matrizTipData("Sem sistema ⚙ nas lojas do filtro", fTpl.color)}>—</td>`;
+  const sys = sysSum;
+  const rel = relHas ? relSum : null;
+  const acc = sys > 0 ? Math.max(0, 1 - Math.abs((rel ?? 0) - sys) / sys) : ((rel ?? 0) === 0 ? 1 : 0);
+  return arvAcurAggregateCellHtml(fTpl, rel, sys, acc, "Consolidado RSCEN");
+}
+function arvLojaMetrics(loja, days, fields) {
+  return arvScoped(loja, () => {
+    const ids = arvTeamSellerIds(loja);
+    let accSum = 0, accN = 0;
+    fields.forEach(fTpl => {
+      const f = arvResolveFieldLocal(fTpl);
+      if (!f || !ids.some(sid => getSystem(sid, f.id) != null)) return;
+      const t = arvAcurTotalsForSellers(ids, f.id, days);
+      if (t.acc != null) { accSum += t.acc; accN++; }
+    });
+    let complete = 0, closed = 0, scheduled = 0;
+    ids.forEach(sid => {
+      const d = consultantDisciplineDetails(sid);
+      complete += d.complete; closed += d.closed; scheduled += d.scheduled;
+    });
+    const ader = closed ? complete / closed : null;
+    return { acc: accN ? accSum / accN : null, ader, disc: { complete, closed, scheduled } };
+  });
+}
+function arvTotalMetrics(lojas, days, fields) {
+  let accSum = 0, accN = 0, complete = 0, closed = 0, scheduled = 0;
+  lojas.forEach(L => {
+    const m = arvLojaMetrics(L, days, fields);
+    if (m.acc != null) { accSum += m.acc; accN++; }
+    if (m.disc) { complete += m.disc.complete; closed += m.disc.closed; scheduled += m.disc.scheduled; }
+  });
+  const ader = closed ? complete / closed : null;
+  return { acc: accN ? accSum / accN : null, ader, disc: { complete, closed, scheduled } };
+}
+function arvAcurRelatoCellHtml(loja, sellerId, fTpl, days) {
+  return arvScoped(loja, () => {
+    const f = arvResolveFieldLocal(fTpl);
+    if (!f) return `<td class="relato muted">—</td>`;
+    return acurRelatoCellHtml(sellerId, f, days);
+  });
+}
+function arvAcurSellerMetrics(loja, sellerId, days, fields) {
+  return arvScoped(loja, () => {
+    let accSum = 0, accN = 0;
+    fields.forEach(fTpl => {
+      const f = arvResolveFieldLocal(fTpl);
+      if (!f || getSystem(sellerId, f.id) == null) return;
+      const acc = fieldAccuracy(sellerId, f.id, days);
+      if (acc != null) { accSum += acc; accN++; }
+    });
+    const disc = consultantDisciplineDetails(sellerId);
+    return { acc: accN ? accSum / accN : null, ader: disc.pct, disc };
+  });
+}
+function renderArvoreAcurLegend() {
+  const el = document.getElementById("arvoreAcurLegend");
+  if (!el) return;
+  el.innerHTML =
+    `<i><span class="sw" style="background:var(--danger)"></span> Relato / % distantes do sistema</i>` +
+    `<i><span class="sw" style="background:var(--warn)"></span> Atenção (50–94%)</i>` +
+    `<i><span class="sw" style="background:var(--ok)"></span> Acurado (≥95%)</i>` +
+    `<i><span class="heat matriz-from-sys matriz-real acur-sys" style="padding:1px 5px;font-size:10px;min-width:0">24</span> Sistema ⚙ (gestor)</i>` +
+    `<i><b>⌂ Total</b> = soma relato/sistema da loja · <b>＋ loja</b> = mesmo critério da matriz por vendedor</i>`;
+}
+function renderArvoreAcuracidade() {
+  const tbl = document.getElementById("arvoreAcuracidadeTable");
+  if (!tbl || activeView !== "rscen") return;
+  const days = monthDays();
+  const lojaFilter = state.ui.arvLojaFilter || [];
+  const hasLojaFilter = lojaFilter.length > 0;
+  let lojas = allLojas();
+  if (hasLojaFilter) {
+    const set = new Set(lojaFilter);
+    lojas = lojas.filter(L => set.has(L.id));
+  }
+  const fields = arvAcuracidadeVisibleFields(lojas);
+  const filterLbl = (state.ui.arvSellerFilter || []).length ? "(vendedor)" : hasLojaFilter ? "(loja)" : "";
+  let head = '<thead><tr><th class="name">Loja / Vendedor</th>';
+  if (!fields.length) head += '<th class="muted" style="font-weight:600">—</th>';
+  else fields.forEach(f => head += `<th${f.sub ? ' style="color:var(--accent-2)"' : ''}${matrizTipData("Relato / Sistema / Acuracidade consolidados", f.color)}>${f.sub ? '↳ ' : ''}${f.name}<br><span class="muted" style="font-weight:600">relato · sis · %</span></th>`);
+  head += '<th>Acurac.</th><th>Aderência<br><span class="muted" style="font-weight:600">escala · dias</span></th></tr></thead>';
+  let body = "<tbody>";
+  if (!lojas.length) {
+    body += `<tr><td class="empty" colspan="${Math.max(fields.length, 1) + 3}">Nenhuma loja sincronizada.</td></tr>`;
+  } else if (!fields.length) {
+    body += `<tr><td class="empty" colspan="4">Nenhum indicador com lançamento do gestor (sistema ⚙) nas lojas do filtro.</td></tr>`;
+  } else {
+    const totalM = arvTotalMetrics(lojas, days, fields);
+    body += `<tr class="total"><td class="name">⌂ Total RSCEN${filterLbl ? ' <span class="muted" style="font-weight:600">' + filterLbl + "</span>" : ""}</td>`;
+    fields.forEach(f => { body += arvTotalAcurCellHtml(lojas, f, days); });
+    body += `<td style="color:${heatText(totalM.acc)};font-weight:700;"${totalM.acc != null ? matrizTipData("Média de acuracidade consolidada\n" + pctTxt(totalM.acc), "var(--accent)") : ""}>${totalM.acc == null ? "—" : pctTxt(totalM.acc)}</td>`;
+    const tAder = totalM.ader == null ? "—" : pctTxt(totalM.ader) + (totalM.disc?.closed ? ` · ${totalM.disc.complete}/${totalM.disc.closed}` : "");
+    const tAderTip = totalM.disc ? `${totalM.disc.complete} de ${totalM.disc.closed} dias completos (todas as lojas)` : "";
+    body += `<td style="color:${heatText(totalM.ader)};font-weight:700;"${tAderTip ? matrizTipData(tAderTip, "var(--accent-2)") : ""}>${tAder}</td></tr>`;
+    lojas.forEach(L => {
+      const open = !!arvOpenLojas[L.id];
+      const lm = arvLojaMetrics(L, days, fields);
+      body += `<tr class="tree-row arv-acur-loja" data-loja="${L.id}"><td class="name"><span class="tw">${open ? "－" : "＋"}</span> <b>${escapeHtml(L.name)}</b>${L.self ? ' <span class="tag" style="background:color-mix(in srgb,var(--accent-2) 18%,transparent);color:var(--accent-2)">você</span>' : ""}</td>`;
+      fields.forEach(f => { body += arvLojaAcurCellHtml(L, f, days); });
+      body += `<td style="color:${heatText(lm.acc)};font-weight:700;"${lm.acc != null ? matrizTipData("Acuracidade média da loja\n" + pctTxt(lm.acc), "var(--accent)") : ""}>${lm.acc == null ? "—" : pctTxt(lm.acc)}</td>`;
+      const lAder = lm.ader == null ? "—" : pctTxt(lm.ader) + (lm.disc?.closed ? ` · ${lm.disc.complete}/${lm.disc.closed}` : "");
+      const lAderTip = lm.disc ? `${lm.disc.complete} de ${lm.disc.closed} dias completos na loja` : "";
+      body += `<td style="color:${heatText(lm.ader)};font-weight:700;"${lAderTip ? matrizTipData(lAderTip, "var(--accent-2)") : ""}>${lAder}</td></tr>`;
+      arvSortedSellers(L).forEach(s => {
+        const sm = arvAcurSellerMetrics(L, s.id, days, fields);
+        body += `<tr class="vend arv-acur-v arv-acur-${L.id}" data-loja="${L.id}" data-seller="${s.id}" style="display:${open ? "table-row" : "none"}"><td class="name seller-link" title="Ver auditoria">↳ ${escapeHtml(s.name)}</td>`;
+        fields.forEach(f => { body += arvAcurRelatoCellHtml(L, s.id, f, days); });
+        body += `<td style="color:${heatText(sm.acc)};font-weight:700;">${sm.acc == null ? "—" : pctTxt(sm.acc)}</td>`;
+        const sAder = sm.ader == null ? "—" : pctTxt(sm.ader) + (sm.disc?.closed ? ` · ${sm.disc.complete}/${sm.disc.closed}` : "");
+        body += `<td style="color:${heatText(sm.ader)};font-weight:700;">${sAder}</td></tr>`;
+      });
+    });
+  }
+  body += "</tbody>";
+  tbl.innerHTML = head + body;
+  renderArvoreAcurLegend();
+  bindMatrizTips(tbl);
+  tbl.querySelectorAll("tr.arv-acur-loja").forEach(tr => {
+    tr.onclick = (e) => {
+      if (e.target.closest(".seller-link")) return;
+      const id = tr.dataset.loja;
+      arvOpenLojas[id] = !arvOpenLojas[id];
+      tbl.querySelectorAll(".arv-acur-" + id).forEach(r => r.style.display = arvOpenLojas[id] ? "table-row" : "none");
+      const tw = tr.querySelector(".tw");
+      if (tw) tw.textContent = arvOpenLojas[id] ? "－" : "＋";
+      const arvTr = document.querySelector(`#arvoreTable tr.tree-row[data-loja="${id}"]`);
+      if (arvTr) {
+        arvTr.querySelectorAll(".arv-" + id).forEach(r => r.style.display = arvOpenLojas[id] ? "table-row" : "none");
+        const atw = arvTr.querySelector(".tw");
+        if (atw) atw.textContent = arvOpenLojas[id] ? "－" : "＋";
+      }
+    };
+  });
+  tbl.querySelectorAll("td.name.seller-link").forEach(td => {
+    td.onclick = (e) => {
+      e.stopPropagation();
+      const tr = td.closest("tr");
+      const sid = tr?.dataset.seller;
+      const lid = tr?.dataset.loja;
+      if (sid) openAuditoriaModal(sid, lid);
+    };
+  });
+}
+function toggleArvLojaOpen(id) {
+  arvOpenLojas[id] = !arvOpenLojas[id];
+  ["#arvoreTable", "#arvoreAcuracidadeTable"].forEach(sel => {
+    const root = document.querySelector(sel);
+    if (!root) return;
+    root.querySelectorAll(".arv-" + id + ",.arv-acur-" + id).forEach(r => r.style.display = arvOpenLojas[id] ? "table-row" : "none");
+    const tr = root.querySelector(`tr.tree-row[data-loja="${id}"]`);
+    if (tr) {
+      const tw = tr.querySelector(".tw");
+      if (tw) tw.textContent = arvOpenLojas[id] ? "－" : "＋";
+    }
+  });
+}
+
 function setupMatrixDnD() {
   let dragSeller = null, dragInd = null;
   document.querySelectorAll('[data-dragseller]').forEach(td => { const tr = td.closest('tr');
@@ -2902,13 +3142,19 @@ function renderAuditoriaModal(sellerId) {
   audTbl.innerHTML = head + body;
   bindMatrizTips(audTbl);
 }
-function openAuditoriaModal(sellerId) {
-  const s = state.sellers.find(x => x.id === sellerId); if (!s) return;
-  modalSellerId = sellerId;
-  document.getElementById("auditoriaName").textContent = s.name;
-  document.getElementById("auditoriaMonth").textContent = monthLabel(currentMonth);
-  renderAuditoriaModal(sellerId);
-  document.getElementById("auditoriaModal").classList.add("show");
+function openAuditoriaModal(sellerId, lojaId) {
+  const loja = lojaId ? allLojas().find(L => L.id === lojaId) : null;
+  const run = () => {
+    const s = state.sellers.find(x => x.id === sellerId);
+    if (!s) { toast("Vendedor não encontrado nesta loja", true); return; }
+    modalSellerId = sellerId;
+    document.getElementById("auditoriaName").textContent = s.name + (loja && !loja.self ? " · " + loja.name : "");
+    document.getElementById("auditoriaMonth").textContent = monthLabel(currentMonth);
+    renderAuditoriaModal(sellerId);
+    document.getElementById("auditoriaModal").classList.add("show");
+  };
+  if (loja && !loja.self) withState(loja.data, run);
+  else run();
 }
 function closeAuditoriaModal() {
   document.getElementById("auditoriaModal").classList.remove("show");
@@ -3644,16 +3890,15 @@ function renderArvore() {
     tbl.querySelectorAll("tr.tree-row[data-loja]").forEach(tr => {
       tr.onclick = (e) => {
         if (e.target.closest("th")) return;
-        const id = tr.dataset.loja;
-        arvOpenLojas[id] = !arvOpenLojas[id];
-        tbl.querySelectorAll(".arv-" + id).forEach(r => r.style.display = arvOpenLojas[id] ? "table-row" : "none");
-        const tw = tr.querySelector(".tw");
-        if (tw) tw.textContent = arvOpenLojas[id] ? "－" : "＋";
+        toggleArvLojaOpen(tr.dataset.loja);
       };
     });
+    renderArvoreAcuracidade();
   } catch (err) {
     console.error("renderArvore", err);
     tbl.innerHTML = '<tbody><tr><td class="empty">Erro ao montar RSCEN+. Recarregue a página.<br><span class="muted">' + escapeHtml(err.message) + "</span></td></tr></tbody>";
+    const acurTbl = document.getElementById("arvoreAcuracidadeTable");
+    if (acurTbl) acurTbl.innerHTML = "";
   }
 }
 
