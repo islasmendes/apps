@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v16";
+  var BUILD = "v17";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -420,7 +420,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v16";
+const APP_BUILD = "v17";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -561,7 +561,7 @@ function metaForConsultorDay(cfg, month, day) {
 }
 function fieldList() {
   const list = [];
-  (lojaData?.indicators || []).forEach(ind => {
+  orderedIndicators().forEach(ind => {
     if (ind.pctOnly) return;
     if (cfgHasDiario(ind)) list.push({ cfg: ind, color: ind.color, sub: false });
     (ind.subs || []).filter(cfgHasDiario).forEach(s => list.push({ cfg: s, color: ind.color, sub: true }));
@@ -931,7 +931,7 @@ function consultantDisciplineStats(sellerId, m = todayISO()) {
 function sellerMetrics(sellerId, m = todayISO()) {
   const days = monthDays(m);
   let projSum = 0, projN = 0, accSum = 0, accN = 0;
-  (lojaData?.indicators || []).forEach(ind => {
+  orderedIndicators().forEach(ind => {
     if (ind.pctOnly) return;
     const meta = sellerMetaFor(ind, sellerId, m);
     const real = matrizFieldValue(sellerId, ind.id, days, "mes", m);

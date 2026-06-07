@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v16";
+  var BUILD = "v17";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -366,6 +366,10 @@
   .ind-card .swatch { width: 14px; height: 14px; border-radius: 4px; flex: none; }
   .sub-list, .rate-list { margin: 10px 0 0; padding: 10px 0 0; border-top: 1px dashed var(--border); }
   .sub-row, .rate-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 0; }
+  .kpi-draghandle { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 28px; color: var(--text-faint); cursor: grab; flex: none; font-size: 14px; letter-spacing: -2px; border-radius: 6px; user-select: none; touch-action: none; }
+  .kpi-draghandle:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .ind-card.dragging, .sub-row.dragging, .rate-row.dragging { opacity: .45; }
+  .ind-card.drag-over, .sub-row.drag-over, .rate-row.drag-over { outline: 2px dashed var(--accent); outline-offset: -2px; border-radius: 8px; }
   .tag { font-size: 10.5px; padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); font-weight: 700; }
   .tag.sub { background: color-mix(in srgb, var(--accent-2) 20%, transparent); color: var(--accent-2); }
   .switch { position: relative; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: 12px; color: var(--text-dim); }
@@ -720,7 +724,7 @@
   <section class="view" id="view-kpis">
     <div class="panel">
       <div class="flex-between">
-        <div><h2>KPIs · Indicadores</h2><div class="sub">Principal → sub-indicadores (qtd) e taxas (%). A taxa é A÷B com campos que você escolhe.</div></div>
+        <div><h2>KPIs · Indicadores</h2><div class="sub">Principal → sub-indicadores (qtd) e taxas (%). A taxa é A÷B com campos que você escolhe. Use <b>⋮⋮</b> para arrastar e definir a ordem de leitura (reflete no app do CV, check-in e matriz).</div></div>
         <button class="btn" id="addIndicator">+ Indicador principal</button>
       </div>
       <div id="indicatorList" style="margin-top:14px;"></div>
@@ -1414,7 +1418,7 @@ function orderedIndicators() {
 }
 
 /* Campos */
-function allFields() { const arr = []; state.indicators.forEach(ind => { arr.push({ id: ind.id, name: ind.name, kind: "ind", ind }); (ind.subs || []).forEach(sub => arr.push({ id: sub.id, name: sub.name, kind: "sub", ind, sub })); }); return arr; }
+function allFields() { const arr = []; orderedIndicators().forEach(ind => { arr.push({ id: ind.id, name: ind.name, kind: "ind", ind }); (ind.subs || []).forEach(sub => arr.push({ id: sub.id, name: sub.name, kind: "sub", ind, sub })); }); return arr; }
 function cfgById(id) { for (const ind of state.indicators) { if (ind.id === id) return ind; for (const s of (ind.subs || [])) if (s.id === id) return s; } return null; }
 
 /* Dados diários */
@@ -1523,7 +1527,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v16";
+const APP_BUILD = "v17";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3867,7 +3871,7 @@ function setupCanvas(cv, h = 280) {
   ctx.clearRect(0, 0, W, H);
   return { ctx, W, H };
 }
-function focoMainIndicators() { return state.indicators.filter(i => !i.pctOnly); }
+function focoMainIndicators() { return orderedIndicators().filter(i => !i.pctOnly); }
 function focoSelectedSeller(sellers) {
   let sel = state.ui.focoSeller;
   if (!sel || !sellers.find(s => s.id === sel)) sel = sellers[0]?.id || null;
@@ -4327,6 +4331,7 @@ function renderIndicatorConfig() {
   list.innerHTML = orderedIndicators().map(ind => {
     const lbMode = indHasLowerBetterMode(ind);
     let html = `<div class="ind-card${lbMode ? " lower-better-mode" : ""}" data-ind="${ind.id}" style="border-color:${ind.color}; box-shadow:0 0 0 1px color-mix(in srgb, ${ind.color} 50%, transparent), 0 0 18px color-mix(in srgb, ${ind.color} 24%, transparent);"><div class="head">
+      <span class="kpi-draghandle" draggable="true" data-drag-kpi-ind="${ind.id}" title="Arrastar para reordenar">⋮⋮</span>
       <span class="swatch" style="background:${ind.color}"></span>
       <input type="text" value="${escapeHtml(ind.name)}" data-k="name" class="ind-field" style="font-weight:700; min-width:150px;">
       <input type="color" value="${ind.color}" data-k="color" class="ind-field" style="width:42px; height:34px; padding:2px;">
@@ -4341,13 +4346,13 @@ function renderIndicatorConfig() {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
       (ind.subs||[]).forEach(s => {
         const subLb = cfgLowerBetter(s) || cfgLowerBetter(ind);
-        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`;
+        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`;
       });
       html += `</div>`;
     }
     html += `<div class="rate-list"><div class="flex-between"><b style="font-size:12.5px;">Taxas (A ÷ B)</b><button class="btn sec sm" data-add-rate="${ind.id}">+ taxa</button></div>`;
     const opts = fields.map(f => `<option value="${f.id}">${f.kind==='sub'?'↳ ':''}${escapeHtml(f.name)}</option>`).join("");
-    (ind.rates||[]).forEach(r => { const rLb = rateLowerBetter(r, ind); html += `<div class="rate-row${rLb ? " lower-better-row" : ""}" data-rate="${r.id}"><span class="tag">%</span><input type="text" value="${escapeHtml(r.name)}" data-rk="name" class="rate-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="rate-field" data-rk="lowerBetter" ${r.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><label class="switch"><input type="checkbox" class="rate-field" data-rk="manual" ${r.manual?'checked':''}><span class="track"></span>Manual</label>${r.manual?'':`<select data-rk="numId" class="rate-field">${opts}</select><b>÷</b><select data-rk="denId" class="rate-field">${opts}</select><label class="switch"><input type="checkbox" class="rate-field" data-rk="invert" ${r.invert?'checked':''}><span class="track"></span>Inverter</label>`}<span class="hint">alvo %</span><input type="number" value="${r.target}" data-rk="target" class="rate-field" style="width:56px;" title="Meta do consultor (%)"><span class="hint">loja %</span><input type="number" class="rate-field metaloja-inp" data-field="${r.id}" value="${getMetaLoja(r.id) ?? ''}" placeholder="—" style="width:56px;" title="Meta da loja (%)"><button class="iconbtn" data-del-rate="${r.id}">✕</button></div>`; });
+    (ind.rates||[]).forEach(r => { const rLb = rateLowerBetter(r, ind); html += `<div class="rate-row${rLb ? " lower-better-row" : ""}" data-rate="${r.id}"><span class="kpi-draghandle" draggable="true" data-drag-kpi-rate="${r.id}" title="Arrastar taxa">⋮⋮</span><span class="tag">%</span><input type="text" value="${escapeHtml(r.name)}" data-rk="name" class="rate-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="rate-field" data-rk="lowerBetter" ${r.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><label class="switch"><input type="checkbox" class="rate-field" data-rk="manual" ${r.manual?'checked':''}><span class="track"></span>Manual</label>${r.manual?'':`<select data-rk="numId" class="rate-field">${opts}</select><b>÷</b><select data-rk="denId" class="rate-field">${opts}</select><label class="switch"><input type="checkbox" class="rate-field" data-rk="invert" ${r.invert?'checked':''}><span class="track"></span>Inverter</label>`}<span class="hint">alvo %</span><input type="number" value="${r.target}" data-rk="target" class="rate-field" style="width:56px;" title="Meta do consultor (%)"><span class="hint">loja %</span><input type="number" class="rate-field metaloja-inp" data-field="${r.id}" value="${getMetaLoja(r.id) ?? ''}" placeholder="—" style="width:56px;" title="Meta da loja (%)"><button class="iconbtn" data-del-rate="${r.id}">✕</button></div>`; });
     html += `</div></div>`;
     return html;
   }).join("") || '<div class="empty">Nenhum indicador.</div>';
@@ -4432,7 +4437,7 @@ function bindIndicatorEvents() {
     }));
     card.querySelectorAll("[data-meta]").forEach(f => f.addEventListener("change", () => { ind[f.dataset.meta]=Number(f.value)||0; save(); refreshMetaAdherence(ind.id); }));
     card.querySelectorAll(".metaloja-inp[data-field]").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
-  list.querySelectorAll("[data-del-ind]").forEach(b => b.addEventListener("click", () => { if(confirm("Excluir este indicador?")){ state.indicators = state.indicators.filter(i=>i.id!==b.dataset.delInd); save(); renderIndicatorConfig(); } }));
+  list.querySelectorAll("[data-del-ind]").forEach(b => b.addEventListener("click", () => { if(confirm("Excluir este indicador?")){ const id = b.dataset.delInd; state.indicators = state.indicators.filter(i=>i.id!==id); if (state.order.indicators) state.order.indicators = state.order.indicators.filter(x => x !== id); save(); renderIndicatorConfig(); } }));
   list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".sub-row").forEach(row => { const ind = findIndBySub(row.dataset.sub); const s = ind && ind.subs.find(x=>x.id===row.dataset.sub); if(!s) return;
     row.querySelectorAll(".sub-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => {
@@ -4453,6 +4458,120 @@ function bindIndicatorEvents() {
     }));
     row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-rate]").forEach(b => b.addEventListener("click", () => { const ind = findIndByRate(b.dataset.delRate); ind.rates = ind.rates.filter(r=>r.id!==b.dataset.delRate); save(); renderIndicatorConfig(); }));
+  setupKpiDnD();
+}
+function reorderArrayById(arr, fromId, toId) {
+  const ids = arr.map(x => x.id);
+  const fi = ids.indexOf(fromId), ti = ids.indexOf(toId);
+  if (fi < 0 || ti < 0 || fi === ti) return false;
+  arr.splice(ti, 0, arr.splice(fi, 1)[0]);
+  return true;
+}
+function reorderKpiIndicators(fromId, toId) {
+  if (!fromId || !toId || fromId === toId) return;
+  const ids = orderedIndicators().map(x => x.id);
+  const fi = ids.indexOf(fromId), ti = ids.indexOf(toId);
+  if (fi < 0 || ti < 0) return;
+  ids.splice(ti, 0, ids.splice(fi, 1)[0]);
+  state.order.indicators = ids;
+  save();
+  queueConfigPush();
+  renderIndicatorConfig();
+}
+function reorderKpiSubs(indId, fromId, toId) {
+  const ind = state.indicators.find(i => i.id === indId);
+  if (!ind || !reorderArrayById(ind.subs || [], fromId, toId)) return;
+  save();
+  queueConfigPush();
+  renderIndicatorConfig();
+}
+function reorderKpiRates(indId, fromId, toId) {
+  const ind = state.indicators.find(i => i.id === indId);
+  if (!ind || !reorderArrayById(ind.rates || [], fromId, toId)) return;
+  save();
+  queueConfigPush();
+  renderIndicatorConfig();
+}
+function setupKpiDnD() {
+  const list = document.getElementById("indicatorList");
+  if (!list) return;
+  let dragInd = null, dragSub = null, dragRate = null, dragSubInd = null, dragRateInd = null;
+  list.querySelectorAll("[data-drag-kpi-ind]").forEach(h => {
+    const card = h.closest(".ind-card");
+    h.addEventListener("dragstart", e => {
+      dragInd = h.dataset.dragKpiInd;
+      card.classList.add("dragging");
+      if (e.dataTransfer) { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragInd); }
+      e.stopPropagation();
+    });
+    h.addEventListener("dragend", () => { card.classList.remove("dragging"); dragInd = null; });
+  });
+  list.querySelectorAll(".ind-card").forEach(card => {
+    card.addEventListener("dragover", e => { if (!dragInd) return; e.preventDefault(); card.classList.add("drag-over"); });
+    card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+    card.addEventListener("drop", e => {
+      e.preventDefault();
+      card.classList.remove("drag-over");
+      const t = card.dataset.ind;
+      if (dragInd && t && dragInd !== t) reorderKpiIndicators(dragInd, t);
+    });
+  });
+  list.querySelectorAll("[data-drag-kpi-sub]").forEach(h => {
+    const row = h.closest(".sub-row");
+    h.addEventListener("dragstart", e => {
+      dragSub = h.dataset.dragKpiSub;
+      dragSubInd = findIndBySub(dragSub)?.id || null;
+      row.classList.add("dragging");
+      if (e.dataTransfer) { e.dataTransfer.effectAllowed = "move"; }
+      e.stopPropagation();
+    });
+    h.addEventListener("dragend", () => { row.classList.remove("dragging"); dragSub = null; dragSubInd = null; });
+  });
+  list.querySelectorAll(".sub-row").forEach(row => {
+    row.addEventListener("dragover", e => {
+      if (!dragSub || !dragSubInd) return;
+      const ind = findIndBySub(row.dataset.sub);
+      if (!ind || ind.id !== dragSubInd) return;
+      e.preventDefault();
+      row.classList.add("drag-over");
+    });
+    row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+    row.addEventListener("drop", e => {
+      e.preventDefault();
+      row.classList.remove("drag-over");
+      const t = row.dataset.sub;
+      const ind = findIndBySub(t);
+      if (dragSub && t && dragSub !== t && ind && ind.id === dragSubInd) reorderKpiSubs(ind.id, dragSub, t);
+    });
+  });
+  list.querySelectorAll("[data-drag-kpi-rate]").forEach(h => {
+    const row = h.closest(".rate-row");
+    h.addEventListener("dragstart", e => {
+      dragRate = h.dataset.dragKpiRate;
+      dragRateInd = findIndByRate(dragRate)?.id || null;
+      row.classList.add("dragging");
+      if (e.dataTransfer) { e.dataTransfer.effectAllowed = "move"; }
+      e.stopPropagation();
+    });
+    h.addEventListener("dragend", () => { row.classList.remove("dragging"); dragRate = null; dragRateInd = null; });
+  });
+  list.querySelectorAll(".rate-row").forEach(row => {
+    row.addEventListener("dragover", e => {
+      if (!dragRate || !dragRateInd) return;
+      const ind = findIndByRate(row.dataset.rate);
+      if (!ind || ind.id !== dragRateInd) return;
+      e.preventDefault();
+      row.classList.add("drag-over");
+    });
+    row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+    row.addEventListener("drop", e => {
+      e.preventDefault();
+      row.classList.remove("drag-over");
+      const t = row.dataset.rate;
+      const ind = findIndByRate(t);
+      if (dragRate && t && dragRate !== t && ind && ind.id === dragRateInd) reorderKpiRates(ind.id, dragRate, t);
+    });
+  });
 }
 
 /* ============================================================ EXPORT */
@@ -5729,7 +5848,15 @@ function init() {
   document.getElementById("autoWorkdays").onclick = () => { const md = monthData(); delete md.diasUteis; delete md.sabados; save(); renderConfig(); updateWorkdaysBadge(); toast("Recalculado automático"); };
   document.getElementById("addSeller").onclick = () => { const i = document.getElementById("newSeller"); const v = i.value.trim(); if(!v) return; const sid = uid(); state.sellers.push({ id: sid, name: v }); i.value=""; save(); renderConfig(); openEscala(sid); toast("Vendedor adicionado"); };
   document.getElementById("newSeller").addEventListener("keydown", e => { if(e.key==="Enter") document.getElementById("addSeller").click(); });
-  document.getElementById("addIndicator").onclick = () => { state.indicators.push({ id:uid(), name:"Novo indicador", abbr:"NOVO", color:nextIndicatorColor(), checkin:true, checkout:true, role:"", pctOnly:false, lowerBetter:false, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, subs:[], rates:[] }); save(); renderIndicatorConfig(); toast("Indicador adicionado"); };
+  document.getElementById("addIndicator").onclick = () => {
+    const id = uid();
+    state.indicators.push({ id, name:"Novo indicador", abbr:"NOVO", color:nextIndicatorColor(), checkin:true, checkout:true, role:"", pctOnly:false, lowerBetter:false, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, subs:[], rates:[] });
+    if (!state.order.indicators) state.order.indicators = orderedIndicators().map(i => i.id).filter(x => x !== id);
+    state.order.indicators.push(id);
+    save();
+    renderIndicatorConfig();
+    toast("Indicador adicionado");
+  };
   document.getElementById("exportJson").onclick = exportJson;
   document.getElementById("importJsonBtn").onclick = () => document.getElementById("importJson").click();
   document.getElementById("importJson").addEventListener("change", e => { if(e.target.files[0]) importJson(e.target.files[0]); });
