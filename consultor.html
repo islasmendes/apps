@@ -40,7 +40,7 @@
     box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 40%, transparent);
   }
   .top-titles { flex: 1; min-width: 0; }
-  .top-titles .t1 { font-weight: 800; font-size: 13.5px; letter-spacing: .15px; line-height: 1.25; }
+  .top-titles .t1 { font-weight: 800; font-size: 12px; letter-spacing: .12px; line-height: 1.25; }
   .top-titles .t1-sep { color: var(--text-faint); font-weight: 600; margin: 0 2px; }
   .live-pill {
     display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 800;
@@ -97,37 +97,57 @@
   .btn:disabled { opacity: .5; cursor: not-allowed; }
   .btn.ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); margin-top: 10px; }
   .err { color: var(--danger); font-size: 12px; min-height: 18px; margin-top: 6px; }
-  .hero { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
-  .progress-ring { flex: none; width: 64px; height: 64px; }
+  .hero { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .progress-ring { flex: none; width: 56px; height: 56px; transition: filter .3s; }
   .progress-ring circle { fill: none; stroke-width: 5; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
   .progress-ring .track { stroke: var(--border); }
-  .progress-ring .fill { stroke: url(#grad); transition: stroke-dashoffset .5s ease; }
-  .hero-mid { flex: 1; min-width: 0; }
-  .hero-mid h1 { margin: 0; font-size: 20px; font-weight: 800; line-height: 1.15; }
-  .hero-sub {
-    margin: 4px 0 0; font-size: 12px; color: var(--text-dim); font-weight: 600;
-    display: flex; flex-wrap: wrap; align-items: center; gap: 5px; line-height: 1.3;
+  .progress-ring .fill { stroke: url(#grad); transition: stroke-dashoffset .45s ease, stroke .35s ease; }
+  .progress-ring.complete .fill { stroke: var(--ok); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--ok) 55%, transparent)); }
+  .progress-ring.checkout-pending { animation: ring-pulse 1.6s ease-in-out infinite; }
+  .progress-ring.complete .prog-center { fill: var(--ok); font-size: 20px; }
+  @keyframes ring-pulse {
+    0%, 100% { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--warn) 25%, transparent)); }
+    50% { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--warn) 55%, transparent)); }
   }
-  .hero-sub .hero-loja { color: var(--accent-2); font-weight: 800; letter-spacing: .2px; }
-  .hero-sub .hero-mat { color: var(--text-faint); font-size: 11px; font-weight: 700; }
-  .progress-ring .prog-center { fill: var(--text); font-size: 12px; font-weight: 800; font-family: var(--font); }
-  .hero-side { flex: none; margin-left: auto; display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-width: 72px; }
-  .hero-side .urgency-pill, .hero-side .btn-resumo { min-width: 72px; }
-  .btn-resumo {
-    cursor: pointer; display: inline-flex; flex-direction: column; align-items: center; gap: 1px;
+  .progress-ring .prog-center { fill: var(--text); font-size: 11px; font-weight: 800; font-family: var(--font); }
+  .hero-mid { flex: 1; min-width: 0; }
+  .hero-mid h1 { margin: 0; font-size: 18px; font-weight: 800; line-height: 1.15; }
+  .hero-mid .hero-mat { margin: 3px 0 0; font-size: 11px; color: var(--text-faint); font-weight: 700; line-height: 1.2; }
+  .hero-mid .hero-loja { margin: 2px 0 0; font-size: 12px; color: var(--accent-2); font-weight: 800; letter-spacing: .2px; line-height: 1.2; }
+  .hero-pills {
+    flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
+    width: 132px; min-width: 132px;
+  }
+  .hero-pill, .hero-pills .urgency-pill, .hero-pills .btn-resumo {
+    display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
     font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .3px;
-    padding: 5px 10px; border-radius: 99px; font-family: var(--font); text-align: center;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-2) 22%, var(--panel)), var(--panel-2));
-    border: 1px solid color-mix(in srgb, var(--accent-2) 58%, var(--border));
+    padding: 4px 6px; border-radius: 99px; min-width: 0; min-height: 42px;
+    font-family: var(--font); text-align: center;
+  }
+  .hero-pill .pill-lbl, .hero-pills .urgency-pill #urgencyLbl, .hero-pills .btn-resumo .resumo-lbl {
+    font-size: 7px; letter-spacing: .45px; opacity: .92; line-height: 1.1;
+  }
+  .hero-pill .pill-txt, .hero-pills .urgency-pill #urgencyTxt, .hero-pills .btn-resumo .resumo-txt {
+    font-size: 11px; line-height: 1.1;
+  }
+  .hero-pill.date-pill {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-2) 18%, var(--panel)), var(--panel-2));
+    border: 1px solid color-mix(in srgb, var(--accent-2) 50%, var(--border));
     color: var(--accent-2);
-    box-shadow: 0 0 14px color-mix(in srgb, var(--accent-2) 22%, transparent);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--accent-2) 16%, transparent);
+  }
+  .hero-pills .urgency-pill { min-width: 0; width: 100%; }
+  .hero-pills .btn-resumo {
+    cursor: pointer; grid-column: span 2;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 20%, var(--panel)), var(--panel-2));
+    border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--border));
+    color: var(--accent);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 16%, transparent);
     transition: transform .12s, box-shadow .12s;
   }
-  .btn-resumo .resumo-lbl { font-size: 8px; letter-spacing: .5px; opacity: .92; }
-  .btn-resumo .resumo-txt { font-size: 12px; line-height: 1.1; }
-  .btn-resumo:active {
+  .hero-pills .btn-resumo:active {
     transform: scale(.98);
-    box-shadow: 0 0 20px color-mix(in srgb, var(--accent-2) 35%, transparent);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 30%, transparent);
   }
   .resumo-overlay {
     position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.62); backdrop-filter: blur(6px);
@@ -191,11 +211,6 @@
   .resumo-expand { display: none; }
   .resumo-expand.open { display: block; }
   .resumo-pct-only-head .pct { font-size: 12px; color: var(--text-dim); font-weight: 700; }
-  .date-chip {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
-    padding: 6px 11px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--border);
-    color: var(--accent-2); margin-bottom: 14px;
-  }
   .ind-card {
     border: 1px solid var(--border); border-radius: 16px; padding: 14px; margin-bottom: 12px;
     background: var(--panel); position: relative; overflow: hidden;
@@ -277,12 +292,14 @@
         </svg>
         <div class="hero-mid">
           <h1 id="helloName">—</h1>
-          <div class="hero-sub">
-            <span class="hero-loja" id="helloStore">—</span>
-            <span class="hero-mat" id="helloMat"></span>
-          </div>
+          <div class="hero-mat" id="helloMat"></div>
+          <div class="hero-loja" id="helloStore">—</div>
         </div>
-        <div class="hero-side">
+        <div class="hero-pills">
+          <div class="hero-pill date-pill" id="datePill">
+            <span class="pill-lbl" id="datePillLbl">HOJE</span>
+            <span class="pill-txt" id="datePillTxt">—</span>
+          </div>
           <div class="urgency-pill" id="urgencyPill"><span id="urgencyLbl">CHECK-OUT</span><span id="urgencyTxt">—:—:—</span></div>
           <button type="button" class="btn-resumo" id="btnResumo" aria-label="Abrir resumo do mês">
             <span class="resumo-lbl">RESUMO</span>
@@ -290,7 +307,6 @@
           </button>
         </div>
       </div>
-      <div class="date-chip" id="dateChip">—</div>
       <div id="fieldsRoot"></div>
       <button class="btn ghost" id="btnLogout">Sair</button>
     </div>
@@ -397,6 +413,30 @@ function clearSession() { localStorage.removeItem(SESSION_KEY); }
 function getCell(sellerId, fieldId, day, month) {
   const d = lojaData?.months?.[month]?.daily;
   return (d?.[sellerId]?.[fieldId]?.[day]) || {};
+}
+function setLocalCell(sellerId, fieldId, day, month, key, val) {
+  if (!lojaData.months) lojaData.months = {};
+  if (!lojaData.months[month]) lojaData.months[month] = { daily: {} };
+  const md = lojaData.months[month];
+  if (!md.daily) md.daily = {};
+  if (!md.daily[sellerId]) md.daily[sellerId] = {};
+  if (!md.daily[sellerId][fieldId]) md.daily[sellerId][fieldId] = {};
+  if (!md.daily[sellerId][fieldId][day]) md.daily[sellerId][fieldId][day] = {};
+  const cell = md.daily[sellerId][fieldId][day];
+  if (val == null) {
+    delete cell[key];
+    delete cell[key + "By"];
+    delete cell[key + "At"];
+  } else {
+    cell[key] = val;
+    cell[key + "By"] = "consultor";
+    cell[key + "At"] = Date.now();
+  }
+}
+function cellFilledFromDom(cfg, key, cell) {
+  const inp = document.querySelector(`input[data-fid="${cfg.id}"][data-key="${key}"]`);
+  if (inp) return inp.value.trim() !== "";
+  return hasCellValue(cell, key);
 }
 function cfgHasDiario(cfg) { return !!(cfg && (cfg.checkin || cfg.checkout)); }
 function metaForDay(cfg, month, day) {
@@ -1008,30 +1048,57 @@ function stopTickLoop() {
 }
 function countProgress() {
   const month = todayISO(), day = todayDay();
-  let total = 0, done = 0;
+  let total = 0, done = 0, cinT = 0, cinD = 0, coutT = 0, coutD = 0;
   fieldList().forEach(({ cfg }) => {
     const c = getCell(seller.id, cfg.id, day, month);
-    if (cfg.checkin) { total++; if (hasCellValue(c, "plan")) done++; }
-    if (cfg.checkout) { total++; if (hasCellValue(c, "real")) done++; }
+    if (cfg.checkin) {
+      total++; cinT++;
+      if (cellFilledFromDom(cfg, "plan", c)) { done++; cinD++; }
+    }
+    if (cfg.checkout) {
+      total++; coutT++;
+      if (cellFilledFromDom(cfg, "real", c)) { done++; coutD++; }
+    }
   });
-  return { total, done };
+  return { total, done, cinT, cinD, coutT, coutD };
 }
 function updateProgress() {
-  const { total, done } = countProgress();
+  if (!seller) return;
+  const { total, done, cinT, cinD, coutT, coutD } = countProgress();
+  const ring = document.querySelector(".progress-ring");
   const arc = document.getElementById("progArc");
   const circ = 163.36;
   const pct = total ? done / total : 0;
-  arc.style.strokeDashoffset = String(circ * (1 - pct));
+  const complete = total > 0 && done >= total;
+  const checkoutPending = cinT > 0 && cinD >= cinT && coutD < coutT;
+  if (ring) {
+    ring.classList.remove("complete", "checkout-pending");
+    if (complete) ring.classList.add("complete");
+    else if (checkoutPending) ring.classList.add("checkout-pending");
+  }
+  if (arc) {
+    arc.style.strokeDashoffset = String(circ * (1 - pct));
+    if (!complete) arc.style.stroke = "url(#grad)";
+  }
   const center = document.getElementById("progCenter");
-  if (center) center.textContent = total ? `${done}/${total}` : "—";
+  if (center) {
+    if (complete) center.textContent = "✓";
+    else if (checkoutPending) center.textContent = "⏳";
+    else center.textContent = total ? `${done}/${total}` : "—";
+  }
   document.getElementById("helloName").textContent = seller.name;
   const sn = (lojaData.storeName || lojaCode || "").trim();
   const lojaLbl = sn && sn.toUpperCase() !== lojaCode ? sn : lojaCode;
   document.getElementById("helloStore").textContent = lojaLbl;
   const matEl = document.getElementById("helloMat");
-  if (matEl) matEl.textContent = seller.matricula ? `· mat. ${seller.matricula}` : "";
+  if (matEl) matEl.textContent = seller.matricula ? `Mat. ${seller.matricula}` : "";
   const dt = new Date();
-  document.getElementById("dateChip").textContent = dt.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
+  const wd = dt.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
+  const dayMo = dt.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
+  const lbl = document.getElementById("datePillLbl");
+  const txt = document.getElementById("datePillTxt");
+  if (lbl) lbl.textContent = wd.toUpperCase();
+  if (txt) txt.textContent = dayMo;
 }
 function renderFields() {
   const root = document.getElementById("fieldsRoot");
@@ -1061,6 +1128,7 @@ function renderFields() {
     return html;
   }).join("");
   root.querySelectorAll("input[data-fid]").forEach(inp => {
+    inp.addEventListener("input", () => updateProgress());
     inp.addEventListener("change", () => saveField(inp));
     inp.addEventListener("keydown", e => { if (e.key === "Enter") { inp.blur(); } });
   });
@@ -1072,19 +1140,37 @@ async function saveField(inp) {
   const fieldId = inp.dataset.fid, key = inp.dataset.key;
   const month = todayISO(), day = todayDay();
   const val = inp.value.trim();
-  if (val === "") return;
-  const num = Number(val);
-  if (isNaN(num)) { toast("Valor inválido", true); return; }
   const path = `lojas/${lojaCode}/data/months/${month}/daily/${seller.id}/${fieldId}/${day}`;
   const ref = fbDb.ref(path);
   try {
+    const snap = await ref.once("value");
+    const cell = snap.val() || {};
+    if (val === "") {
+      if (cell[key + "By"] === "gestor" && hasCellValue(cell, key)) {
+        toast("Preenchido pelo gestor — não pode apagar", true);
+        inp.value = cell[key] ?? "";
+        updateProgress();
+        return;
+      }
+      if (!hasCellValue(cell, key)) {
+        updateProgress();
+        return;
+      }
+      await ref.update({ [key]: null, [key + "By"]: null, [key + "At"]: null });
+      setLocalCell(seller.id, fieldId, day, month, key, null);
+      await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
+      toast("Campo limpo");
+      updateProgress();
+      renderFields();
+      return;
+    }
+    const num = Number(val);
+    if (isNaN(num)) { toast("Valor inválido", true); return; }
     if (key === "real" && !checkoutWindowOpen()) {
       toast("Check-out libera em breve — veja o cronômetro", true);
       renderFields();
       return;
     }
-    const snap = await ref.once("value");
-    const cell = snap.val() || {};
     if (cellLockedForConsultor(cell, key, day, month) && hasCellValue(cell, key)) {
       let msg = "Dia encerrado";
       if (cell[key + "By"] === "gestor") msg = "Preenchido pelo gestor — não pode alterar";
@@ -1095,6 +1181,7 @@ async function saveField(inp) {
       return;
     }
     await ref.update({ [key]: num, [key + "By"]: "consultor", [key + "At"]: Date.now() });
+    setLocalCell(seller.id, fieldId, day, month, key, num);
     await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
     toast("Salvo · sincronizado");
     renderFields();
