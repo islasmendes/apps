@@ -3743,16 +3743,54 @@ function unlockAuth() {
   document.getElementById("authGate").classList.remove("show");
   pendingAuthPassword = "";
 }
-function saveAuthSession(loja) {
-  localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ loja, exp: Date.now() + 30 * 24 * 60 * 60 * 1000, device: getDeviceId() }));
+function isDivisionalCode(code) {
+  return /^RSCEN[A-Z0-9]*$/i.test(String(code || "").trim());
+}
+function isLojaCode(code) {
+  const c = String(code || "").trim().toUpperCase();
+  return /^VC[A-Z0-9]+$/.test(c) && c.length >= 3;
+}
+function isRealLojaRemoteId(id, r) {
+  const idU = String(id || "").trim().toUpperCase();
+  if (/^RSCEN/.test(idU)) return false;
+  const c = String(r?.code || "").trim().toUpperCase();
+  if (/^RSCEN/.test(c)) return false;
+  const n = String(r?.name || "").trim().toUpperCase();
+  if (/^RSCEN/.test(n) && !/^VC/.test(n)) return false;
+  return !!(r && r.data) && (/^VC[A-Z0-9]+$/.test(c) || /^VC[A-Z0-9]+$/.test(idU) || /^VC/.test(n));
+}
+function saveAuthSession(entry) {
+  const code = typeof entry === "string" ? entry : (entry?.code || entry?.loja);
+  const type = typeof entry === "object" && entry?.type
+    ? entry.type
+    : (isDivisionalCode(code) ? "divisional" : "loja");
+  localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
+    type, code, loja: type === "loja" ? code : undefined,
+    exp: Date.now() + 30 * 24 * 60 * 60 * 1000, device: getDeviceId()
+  }));
+}
+function applyAuthContext(type, code) {
+  if (type === "divisional" || isDivisionalCode(code)) {
+    divisionalCode = String(code || "RSCEN").toUpperCase();
+    lojaCode = null;
+    myLojaId = null;
+    localStorage.setItem("gc_divisional_code", divisionalCode);
+    localStorage.removeItem("gc_loja_code");
+  } else {
+    divisionalCode = null;
+    lojaCode = code;
+    myLojaId = code;
+    localStorage.setItem("gc_loja_code", lojaCode);
+    localStorage.removeItem("gc_divisional_code");
+  }
 }
 function tryRestoreAuthSession() {
   try {
     const s = JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || "null");
-    if (!s || !s.loja || s.exp < Date.now() || s.device !== getDeviceId()) return false;
-    lojaCode = s.loja;
-    localStorage.setItem("gc_loja_code", lojaCode);
-    myLojaId = lojaCode;
+    const code = s?.code || s?.loja;
+    if (!s || !code || s.exp < Date.now() || s.device !== getDeviceId()) return false;
+    const type = s.type || (isDivisionalCode(code) ? "divisional" : "loja");
+    applyAuthContext(type, code);
     unlockAuth();
     return true;
   } catch (e) { return false; }
@@ -3776,11 +3814,28 @@ async function loadAuthConfig() {
   authReady = true;
 }
 async function fetchLojaAuth(code) {
-  if (!fbReady || !fbDb) return null;
+  if (!fbReady || !fbDb || isDivisionalCode(code)) return null;
   try {
     const snap = await fbDb.ref("auth/lojas/" + code).once("value");
     return snap.val();
   } catch (e) { return null; }
+}
+async function fetchDivisionalAuth(code) {
+  if (!fbReady || !fbDb) return null;
+  try {
+    const snap = await fbDb.ref("auth/divisionais/" + code).once("value");
+    let v = snap.val();
+    if (v) return v;
+    const leg = await fbDb.ref("auth/lojas/" + code).once("value");
+    v = leg.val();
+    if (v && isDivisionalCode(code)) {
+      try { await fbDb.ref("auth/divisionais/" + code).set(v); } catch (e) { /* migra quando permitido */ }
+    }
+    return v;
+  } catch (e) { return null; }
+}
+async function fetchAuthForCode(code) {
+  return isDivisionalCode(code) ? fetchDivisionalAuth(code) : fetchLojaAuth(code);
 }
 async function saveMasterPassword(password) {
   const rec = await pbkdf2Record(password, null);
@@ -3793,8 +3848,21 @@ async function saveLojaPassword(code, password) {
   const rec = await pbkdf2Record(password, null);
   rec.createdAt = Date.now();
   rec.by = getDeviceId();
+  rec.kind = "loja";
   await fbDb.ref("auth/lojas/" + code).set(rec);
   return rec;
+}
+async function saveDivisionalPassword(code, password) {
+  const rec = await pbkdf2Record(password, null);
+  rec.createdAt = Date.now();
+  rec.by = getDeviceId();
+  rec.kind = "divisional";
+  rec.regional = code;
+  await fbDb.ref("auth/divisionais/" + code).set(rec);
+  return rec;
+}
+async function savePasswordForCode(code, password) {
+  return isDivisionalCode(code) ? saveDivisionalPassword(code, password) : saveLojaPassword(code, password);
 }
 async function startAuthFlow() {
   document.body.classList.add("auth-locked");
@@ -3848,16 +3916,18 @@ async function submitAuthLoja() {
   const pass = pendingAuthPassword;
   if (!pass) { showAuthStep("senha"); return; }
   err.textContent = "Verificando…";
-  const lojaAuth = await fetchLojaAuth(code);
+  const entryAuth = await fetchAuthForCode(code);
   const masterOk = authMasterCache ? await verifyPass(pass, authMasterCache) : false;
-  const lojaOk = lojaAuth ? await verifyPass(pass, lojaAuth) : false;
+  const entryOk = entryAuth ? await verifyPass(pass, entryAuth) : false;
   err.textContent = "";
-  if (lojaAuth) {
-    if (!lojaOk) {
+  if (entryAuth) {
+    if (!entryOk) {
       await authDelayFail();
       err.textContent = masterOk
-        ? "Esta loja já tem senha individual. Use a senha da loja — a mestra só serve na 1ª configuração."
-        : "Senha individual incorreta para " + code + ".";
+        ? (okDiv
+          ? "O Divisional já tem senha individual. Use a senha do RSCEN — a mestra só serve na 1ª configuração."
+          : "Esta loja já tem senha individual. Use a senha da loja — a mestra só serve na 1ª configuração.")
+        : (okDiv ? "Senha individual incorreta para o Divisional (" + code + ")." : "Senha individual incorreta para " + code + ".");
       return;
     }
     finishAuthEnter(code);
@@ -3865,45 +3935,66 @@ async function submitAuthLoja() {
   }
   if (!masterOk) {
     await authDelayFail();
-    err.textContent = "Loja ainda não configurada. Use a senha mestra para criar o acesso.";
+    err.textContent = okDiv
+      ? "Divisional ainda não configurado. Use a senha mestra para criar o acesso regional."
+      : "Loja ainda não configurada. Use a senha mestra para criar o acesso.";
     return;
   }
-  if (masterOk && !lojaAuth && okCode) {
-    if (!fbReady || !fbDb) { err.textContent = "Sem nuvem para registrar a senha da loja."; return; }
+  if (masterOk && !entryAuth && okCode) {
+    if (!fbReady || !fbDb) { err.textContent = "Sem nuvem para registrar a senha."; return; }
     const newPass = generateSecurePassword(24);
     try {
-      await saveLojaPassword(code, newPass);
+      await savePasswordForCode(code, newPass);
       pendingRevealLoja = code;
       pendingRevealPassword = newPass;
-      document.getElementById("authRevealLojaName").textContent = code;
+      document.getElementById("authRevealLojaName").textContent = okDiv ? (code + " (Divisional)") : code;
       document.getElementById("authRevealPass").textContent = newPass;
       showAuthStep("reveal");
-    } catch (e) { err.textContent = "Erro ao gerar senha da loja. Verifique permissões."; }
+    } catch (e) { err.textContent = "Erro ao gerar senha. Verifique permissões."; }
     return;
   }
   err.textContent = "Não foi possível autenticar.";
 }
-function finishAuthEnter(code) {
-  lojaCode = code;
-  localStorage.setItem("gc_loja_code", code);
-  myLojaId = code;
-  saveAuthSession(code);
+function finishAuthEnterDivisional(code) {
+  applyAuthContext("divisional", code);
+  saveAuthSession({ type: "divisional", code });
+  unlockAuth();
+  resetLojaDataListener();
+  state.storeName = "RSCEN — Divisional";
+  const hdr = document.getElementById("storeName");
+  if (hdr) hdr.value = state.storeName;
+  if (fbReady) pullDivisional();
+  else {
+    save(); syncStore();
+    updateDivisionalNav();
+    showView(DIVISIONAL_VIEWS.includes(activeView) ? activeView : "rscen");
+  }
+}
+function finishAuthEnterLoja(code) {
+  applyAuthContext("loja", code);
+  saveAuthSession({ type: "loja", code });
   unlockAuth();
   if (fbReady) { pullLoja(); startLojaDataListener(); }
   else {
-    state.storeName = divisionalMode() ? "RSCEN — Divisional" : code;
+    state.storeName = code;
     save(); syncStore();
     updateDivisionalNav();
-    if (divisionalMode()) showView(DIVISIONAL_VIEWS.includes(activeView) ? activeView : "rscen");
-    else renderActive();
+    renderActive();
   }
+  const hdr = document.getElementById("storeName");
+  if (hdr) hdr.value = code;
+}
+function finishAuthEnter(code) {
+  if (isDivisionalCode(code)) finishAuthEnterDivisional(code);
+  else finishAuthEnterLoja(code);
 }
 function submitAuthReveal() {
   if (!pendingRevealLoja) return;
+  const div = isDivisionalCode(pendingRevealLoja);
   finishAuthEnter(pendingRevealLoja);
   pendingRevealLoja = "";
   pendingRevealPassword = "";
-  toast("Loja configurada — guarde a senha individual");
+  toast(div ? "Divisional configurado — guarde a senha individual do RSCEN" : "Loja configurada — guarde a senha individual");
 }
 function bindAuthEvents() {
   const gate = document.getElementById("authGate");
@@ -3950,15 +4041,16 @@ function showAuthRevealModal(code, newPass, onDone) {
   };
 }
 async function regenerateLojaPassword(code, opts) {
-  const lojaAuth = await fetchLojaAuth(code);
-  if (!lojaAuth) throw new Error("Esta loja ainda não tem senha individual.");
+  const entryAuth = await fetchAuthForCode(code);
+  const label = isDivisionalCode(code) ? "Divisional" : "loja";
+  if (!entryAuth) throw new Error("Este " + label + " ainda não tem senha individual.");
   if (opts && opts.requireCurrent) {
-    if (!(await verifyPass(opts.currentPass, lojaAuth))) throw new Error("Senha atual incorreta.");
+    if (!(await verifyPass(opts.currentPass, entryAuth))) throw new Error("Senha atual incorreta.");
   } else if (!isDeviceAdmin()) {
     throw new Error("Sem permissão de administrador.");
   }
   const newPass = generateSecurePassword(24);
-  await saveLojaPassword(code, newPass);
+  await savePasswordForCode(code, newPass);
   return newPass;
 }
 async function adminRegenerateLojaPassword(code) {
@@ -3969,7 +4061,20 @@ async function gestorResetLojaPassword(code, currentPass) {
 }
 
 /* ============================================================ FASE 2.2 — LOJA POR CÓDIGO (sem login) */
-let lojaCode = localStorage.getItem("gc_loja_code") || null;
+function migrateContextFromStorage() {
+  let lc = localStorage.getItem("gc_loja_code");
+  let dc = localStorage.getItem("gc_divisional_code");
+  if (lc && isDivisionalCode(lc)) {
+    if (!dc) dc = lc.toUpperCase();
+    localStorage.setItem("gc_divisional_code", dc);
+    localStorage.removeItem("gc_loja_code");
+    lc = null;
+  }
+  return { lojaCode: lc, divisionalCode: dc };
+}
+const _storageCtx = migrateContextFromStorage();
+let lojaCode = _storageCtx.lojaCode;
+let divisionalCode = _storageCtx.divisionalCode;
 let authUid = null;
 
 function fbInit(){
@@ -3996,7 +4101,8 @@ function fbInit(){
       if (!window._presenceTick) window._presenceTick = setInterval(() => { if (fbReady) setFbBadge(true); }, 60000);
       startConfigListener();
       loadAuthConfig().then(() => {
-        if (authUnlocked && lojaCode) pullLoja();
+        if (authUnlocked && divisionalCode) pullDivisional();
+        else if (authUnlocked && lojaCode) pullLoja();
         else if (!authUnlocked) startAuthFlow();
       });
     });
@@ -4009,9 +4115,9 @@ function updateTrocarLojaTopTitle() {
   if (b) b.title = isAdminSwitcher() ? "Trocar de loja (admin — sem senha)" : "Trocar de loja";
 }
 function lojaCodeFromRemote(id, r) {
+  if (!isRealLojaRemoteId(id, r)) return "";
   const c = String(r?.code || "").trim().toUpperCase();
   if (/^VC[A-Z0-9]+$/.test(c)) return c;
-  if (/^RSCEN[A-Z0-9]*$/.test(c)) return c;
   const idU = String(id || "").trim().toUpperCase();
   if (/^VC[A-Z0-9]+$/.test(idU)) return idU;
   const n = String(r?.name || "").trim().toUpperCase();
@@ -4020,16 +4126,22 @@ function lojaCodeFromRemote(id, r) {
 }
 function adminLojaOptions() {
   const list = [], seen = new Set();
-  const add = (code, label) => {
+  const add = (code, label, opts) => {
     const c = String(code || "").trim().toUpperCase();
     if (!c || seen.has(c)) return;
-    const ok = (/^VC[A-Z0-9]+$/.test(c) && c.length >= 3) || /^RSCEN[A-Z0-9]*$/.test(c);
+    const ok = isLojaCode(c) || isDivisionalCode(c);
     if (!ok) return;
     seen.add(c);
-    list.push({ code: c, label: label || c, active: c === String(lojaCode || "").toUpperCase() });
+    const active = opts?.active != null ? opts.active
+      : (isDivisionalCode(c) ? divisionalMode() && c === divisionalCode : !divisionalMode() && c === String(lojaCode || "").toUpperCase());
+    list.push({ code: c, label: label || c, active });
   };
   add("RSCEN", "RSCEN+ Divisional");
-  Object.entries(remoteLojas || {}).forEach(([id, r]) => add(lojaCodeFromRemote(id, r), r?.name || lojaCodeFromRemote(id, r)));
+  Object.entries(remoteLojas || {}).forEach(([id, r]) => {
+    if (!isRealLojaRemoteId(id, r)) return;
+    const code = lojaCodeFromRemote(id, r);
+    if (code) add(code, r?.name || code);
+  });
   if (lojaCode) add(lojaCode, state.storeName || lojaCode);
   list.sort((a, b) => {
     if (a.code.startsWith("RSCEN")) return -1;
@@ -4067,36 +4179,43 @@ function switchToLoja(code) {
   const err = document.getElementById("lojaErr");
   if (err) err.textContent = "";
   const c = String(code || "").trim().toUpperCase().replace(/\s+/g, "");
-  const okLoja = /^VC[A-Z0-9]+$/.test(c) && c.length >= 3;
-  const okDiv = /^RSCEN[A-Z0-9]*$/.test(c);
+  const okLoja = isLojaCode(c);
+  const okDiv = isDivisionalCode(c);
   if (!okLoja && !okDiv) {
     if (err) err.textContent = "Use VC… (ex.: VCANT) ou RSCEN para o Divisional.";
     return false;
   }
-  if (c === String(lojaCode || "").toUpperCase()) {
+  if (okDiv && divisionalMode() && c === divisionalCode) {
+    document.getElementById("lojaModal")?.classList.remove("show");
+    toast("Já está no Divisional");
+    return true;
+  }
+  if (okLoja && !divisionalMode() && c === String(lojaCode || "").toUpperCase()) {
     document.getElementById("lojaModal")?.classList.remove("show");
     toast("Já está nesta loja");
     return true;
   }
   if (fbReady && lojaCode && !divisionalMode()) save({ skipConfigPush: true });
-  lojaCode = c;
-  localStorage.setItem("gc_loja_code", c);
-  myLojaId = c;
-  if (authUnlocked) saveAuthSession(c);
-  resetLojaDataListener();
   document.getElementById("lojaModal")?.classList.remove("show");
+  if (okDiv) {
+    finishAuthEnterDivisional(c);
+    toast("Modo Divisional ativo");
+    return true;
+  }
+  applyAuthContext("loja", c);
+  if (authUnlocked) saveAuthSession({ type: "loja", code: c });
+  resetLojaDataListener();
   if (fbReady) pullLoja();
   else {
-    state.storeName = okDiv ? "RSCEN — Divisional" : c;
+    state.storeName = c;
     save();
     syncStore();
     updateDivisionalNav();
-    if (okDiv) showView(DIVISIONAL_VIEWS.includes(activeView) ? activeView : "rscen");
-    else renderActive();
+    renderActive();
   }
   const hdr = document.getElementById("storeName");
-  if (hdr && !okDiv) hdr.value = c;
-  toast(okDiv ? "Modo Divisional ativo" : "Loja: " + c);
+  if (hdr) hdr.value = c;
+  toast("Loja: " + c);
   return true;
 }
 function askLoja() {
@@ -4106,7 +4225,7 @@ function askLoja() {
   const inp = document.getElementById("lojaCodeInput");
   const err = document.getElementById("lojaErr");
   if (err) err.textContent = "";
-  if (inp) inp.value = lojaCode || "VC";
+  if (inp) inp.value = divisionalMode() ? (divisionalCode || "RSCEN") : (lojaCode || "VC");
   renderAdminLojaPicker();
   m.classList.add("show");
   updateTrocarLojaTopTitle();
@@ -4130,22 +4249,31 @@ function trocarLoja() {
   }
   if (!confirm("Trocar de loja? Será necessário autenticar novamente.")) return;
   localStorage.removeItem("gc_loja_code");
+  localStorage.removeItem("gc_divisional_code");
   clearAuthSession();
   lojaCode = null;
+  divisionalCode = null;
   authUnlocked = false;
   document.body.classList.add("auth-locked");
   startAuthFlow();
 }
 
 /* ============================================================ FASE 2.3 — MODO DIVISIONAL (RSCEN) + trocar no topo */
-function divisionalMode(){ return !!(lojaCode && String(lojaCode).toUpperCase().indexOf("RSCEN")===0); }
+function divisionalMode(){ return !!divisionalCode; }
 function updateDivisionalNav() {
   document.body.classList.toggle("divisional-mode", divisionalMode());
 }
 function allLojas(){
   const arr = [];
-  if (!divisionalMode()) arr.push({ id: myLojaId, name: state.storeName || "Minha loja", data: state, self: true });
-  Object.keys(remoteLojas).forEach(id => { if (id===myLojaId && !divisionalMode()) return; const r = remoteLojas[id]; if (r && r.data) arr.push({ id, name: r.name || "Loja", data: r.data, self: false }); });
+  if (!divisionalMode() && lojaCode) {
+    arr.push({ id: myLojaId || lojaCode, name: state.storeName || "Minha loja", data: state, self: true });
+  }
+  Object.keys(remoteLojas).forEach(id => {
+    const r = remoteLojas[id];
+    if (!isRealLojaRemoteId(id, r)) return;
+    if (id === myLojaId && !divisionalMode()) return;
+    arr.push({ id, name: r.name || lojaCodeFromRemote(id, r) || "Loja", data: r.data, self: false });
+  });
   return arr;
 }
 function fbPush(){
@@ -4153,19 +4281,23 @@ function fbPush(){
   clearTimeout(fbPushTimer);
   fbPushTimer = setTimeout(()=>{ try{ fbDb.ref("lojas/"+lojaCode).set({ name: state.storeName || lojaCode, code: lojaCode, updatedAt: Date.now(), data: JSON.parse(JSON.stringify(state)) }); }catch(e){ console.warn("push falhou", e); } }, 1200);
 }
+function pullDivisional() {
+  if (!fbReady || !fbDb || !divisionalCode) return;
+  state.storeName = "RSCEN — Divisional";
+  const hdr = document.getElementById("storeName");
+  if (hdr) hdr.value = state.storeName;
+  syncStore();
+  updateDivisionalNav();
+  applyTemplateFromCloud().then(changed => {
+    if (changed && activeView === "rscen") renderArvore();
+    showView(DIVISIONAL_VIEWS.includes(activeView) ? activeView : "rscen");
+    toast("Modo Divisional: vendo todas as lojas");
+  });
+}
 function pullLoja(){
-  if (!fbReady || !fbDb || !lojaCode) return;
-  if (divisionalMode()){
-    state.storeName = "RSCEN — Divisional";
-    syncStore();
-    updateDivisionalNav();
-    applyTemplateFromCloud().then(changed => {
-      if (changed && activeView === "rscen") renderArvore();
-      showView("rscen");
-      toast("Modo Divisional: vendo todas as lojas");
-    });
-    return;
-  }
+  if (!fbReady || !fbDb) return;
+  if (divisionalMode()) { pullDivisional(); return; }
+  if (!lojaCode) return;
   fbDb.ref("lojas/"+lojaCode).once("value").then(snap => {
     const v = snap.val();
     const finish = () => {
@@ -4200,7 +4332,7 @@ function renderSync(){
     ? '<span class="tag" style="background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)">ADMIN Firebase</span>'
     : (isDeviceAdmin() ? '<span class="tag" style="background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)">ADMIN aparelho</span>' : (div ? '' : '<span class="tag">gestor</span>'));
   const trocaLbl = isAdminSwitcher() ? "Trocar loja" : "Trocar";
-  html += `<div class="sub">Tempo real: <b style="color:${fbReady?'var(--ok)':'var(--text-faint)'}">${fbReady?'ligado':'desligado (só local)'}</b> · ${div? '<b style="color:var(--accent-2)">Modo Divisional ('+escapeHtml(lojaCode)+')</b> — vê todas as lojas' : 'Sua loja: <code style="background:var(--cell);border:1px solid var(--border);padding:2px 8px;border-radius:6px;font-weight:800">'+escapeHtml(lojaCode||state.storeName||'—')+'</code>'} <button class="btn sec sm" id="trocarLoja">${trocaLbl}</button> ${adminTag}</div>`;
+  html += `<div class="sub">Tempo real: <b style="color:${fbReady?'var(--ok)':'var(--text-faint)'}">${fbReady?'ligado':'desligado (só local)'}</b> · ${div? '<b style="color:var(--accent-2)">Modo Divisional ('+escapeHtml(divisionalCode||'RSCEN')+')</b> — visão consolidada (não é loja)' : 'Sua loja: <code style="background:var(--cell);border:1px solid var(--border);padding:2px 8px;border-radius:6px;font-weight:800">'+escapeHtml(lojaCode||state.storeName||'—')+'</code>'} <button class="btn sec sm" id="trocarLoja">${trocaLbl}</button> ${adminTag}</div>`;
   if (isAdminSwitcher() && authUnlocked) {
     const opts = adminLojaOptions();
     html += `<div style="margin-top:10px;"><span class="hint">Trocar rápido <b>(sem senha)</b>:</span><div class="matriz-filter-chips admin-loja-chips" style="margin-top:6px;">${opts.map(o =>
@@ -4245,15 +4377,19 @@ function renderSync(){
     </div>`;
     if (lojaCode) {
       html += `<div class="row" style="margin-top:10px;"><button class="btn danger sm" id="authRegenLoja">↻ Gerar nova senha individual de ${escapeHtml(lojaCode)}</button></div>`;
+    } else if (divisionalCode) {
+      html += `<div class="row" style="margin-top:10px;"><button class="btn danger sm" id="authRegenLoja">↻ Gerar nova senha individual do Divisional (${escapeHtml(divisionalCode)})</button></div>`;
     }
     html += `<div class="hint" style="margin-top:8px;">Cadastre o ID do aparelho em <code>/auth/adminDevices</code> no Firebase para liberar funções de admin.</div>`;
   } else {
     html += `<div class="hint" style="margin-top:8px;">Admin: cadastre o ID acima em <code>/auth/adminDevices</code> no Firebase.</div>`;
   }
-  if (lojaCode && authUnlocked) {
+  if ((lojaCode || divisionalCode) && authUnlocked) {
+    const ctxCode = lojaCode || divisionalCode;
+    const ctxLbl = divisionalMode() ? "Divisional · " + ctxCode : ctxCode;
     html += `<div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--border-soft);">
-      <b style="font-size:12px;">Senha de acesso · ${escapeHtml(lojaCode)}</b>
-      <div class="hint" style="margin-top:4px;">Redefina a senha individual desta loja (a anterior deixa de funcionar em todos os aparelhos).</div>
+      <b style="font-size:12px;">Senha de acesso · ${escapeHtml(ctxLbl)}</b>
+      <div class="hint" style="margin-top:4px;">Redefina a senha individual ${divisionalMode() ? "do regional" : "desta loja"} (a anterior deixa de funcionar em todos os aparelhos).</div>
       <div class="row" style="margin-top:8px; align-items:flex-end; flex-wrap:wrap;">
         <div class="field"><label>Senha atual da loja</label><input type="password" id="authGestorCur" autocomplete="current-password"></div>
         <button class="btn sec sm" id="authGestorReset">↻ Redefinir senha da loja</button>
@@ -4279,21 +4415,25 @@ function renderSync(){
   };
   const reg=document.getElementById("authRegenLoja");
   if(reg) reg.onclick=async()=>{
-    if(!confirm("Gerar NOVA senha individual para "+lojaCode+"? A anterior deixa de funcionar.")) return;
+    const ctxCode = lojaCode || divisionalCode;
+    if(!ctxCode) return;
+    if(!confirm("Gerar NOVA senha individual para "+ctxCode+"? A anterior deixa de funcionar.")) return;
     try{
-      const np = await adminRegenerateLojaPassword(lojaCode);
-      showAuthRevealModal(lojaCode, np, () => toast("Nova senha ativa — compartilhe com a equipe"));
+      const np = await adminRegenerateLojaPassword(ctxCode);
+      showAuthRevealModal(ctxCode, np, () => toast("Nova senha ativa — compartilhe com a equipe"));
     }catch(e){ toast(e.message||"Erro", true); }
   };
   const gr=document.getElementById("authGestorReset");
   if(gr) gr.onclick=async()=>{
+    const ctxCode = lojaCode || divisionalCode;
+    if(!ctxCode) return;
     const cur = (document.getElementById("authGestorCur").value || "").trim();
-    if(!cur) { toast("Digite a senha atual da loja", true); return; }
-    if(!confirm("Gerar nova senha para "+lojaCode+"? A anterior deixa de funcionar em todos os aparelhos.")) return;
+    if(!cur) { toast("Digite a senha atual", true); return; }
+    if(!confirm("Gerar nova senha para "+ctxCode+"? A anterior deixa de funcionar em todos os aparelhos.")) return;
     try{
-      const np = await gestorResetLojaPassword(lojaCode, cur);
+      const np = await gestorResetLojaPassword(ctxCode, cur);
       document.getElementById("authGestorCur").value = "";
-      showAuthRevealModal(lojaCode, np, () => toast("Nova senha ativa — copie e compartilhe com a equipe"));
+      showAuthRevealModal(ctxCode, np, () => toast("Nova senha ativa — copie e compartilhe com a equipe"));
     }catch(e){ toast(e.message||"Erro", true); }
   };
 }

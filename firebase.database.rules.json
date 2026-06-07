@@ -12,7 +12,13 @@
 
     "auth": {
       ".read": "auth != null",
-      ".write": false
+      ".write": false,
+      "divisionais": {
+        "$regional": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
     },
 
     "config": {
