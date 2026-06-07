@@ -44,12 +44,42 @@
   .store-title:focus { border-bottom-color: var(--accent); }
   .spacer { flex: 1; }
   .header-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .header-stat-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 0; background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px; padding: 5px 10px; font-size: 11px; color: var(--text-dim); font-weight: 600; max-width: min(100%, 520px); }
+  .header-stat-bar .hs-item { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+  .header-stat-bar .hs-k { text-transform: uppercase; letter-spacing: .35px; font-size: 10px; color: var(--text-faint); }
+  .header-stat-bar .hs-v { color: var(--text); font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .header-stat-bar .hs-sep { color: var(--border); margin: 0 7px; font-weight: 400; user-select: none; }
+  .header-presence { display: flex; align-items: center; gap: 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px; padding: 5px 11px; font-size: 11px; font-weight: 700; }
+  .header-presence .hp { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; text-transform: uppercase; letter-spacing: .35px; font-size: 10px; color: var(--text-faint); }
+  .header-presence .hp b { font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .header-presence .hp i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .header-presence .hp.on i { background: var(--ok); box-shadow: 0 0 8px color-mix(in srgb, var(--ok) 55%, transparent); }
+  .header-presence .hp.on { color: color-mix(in srgb, var(--ok) 70%, var(--text-dim)); }
+  .header-presence .hp.off i { background: var(--text-faint); opacity: .65; }
+  .header-presence .hp-sep { color: var(--border); font-weight: 400; user-select: none; }
+  .header-presence.is-local .hp-local { color: var(--text-faint); font-size: 11px; letter-spacing: .3px; }
+  .month-picker-wrap { position: relative; }
+  .month-picker-btn { cursor: pointer; display: inline-flex; align-items: center; gap: 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px; padding: 6px 12px; font-family: var(--font); color: var(--text); font-size: 13px; font-weight: 600; transition: .15s; min-width: 168px; }
+  .month-picker-btn:hover, .month-picker-btn.open { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: color-mix(in srgb, var(--accent) 6%, var(--panel-2)); }
+  .month-picker-btn .mp-icon { font-size: 14px; opacity: .85; line-height: 1; }
+  .month-picker-btn .mp-label { flex: 1; text-align: left; text-transform: capitalize; white-space: nowrap; }
+  .month-picker-btn .mp-chevron { font-size: 10px; color: var(--text-faint); transition: transform .15s; }
+  .month-picker-btn.open .mp-chevron { transform: rotate(180deg); }
+  .month-picker-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 60; width: 272px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow), 0 16px 40px rgba(0,0,0,.35); padding: 12px; animation: fade .18s ease; }
+  .month-picker-pop[hidden] { display: none; }
+  .mp-year-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border-soft); }
+  .mp-year-row button { cursor: pointer; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); border-radius: 8px; width: 30px; height: 30px; font-size: 14px; line-height: 1; transition: .15s; }
+  .mp-year-row button:hover { border-color: var(--accent); color: var(--accent); }
+  .mp-year { font-weight: 800; font-size: 15px; letter-spacing: .3px; font-variant-numeric: tabular-nums; }
+  .mp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .mp-grid button { cursor: pointer; border: 1px solid transparent; background: var(--panel-2); color: var(--text-dim); border-radius: 9px; padding: 9px 4px; font-size: 12px; font-weight: 700; font-family: var(--font); transition: .12s; text-transform: lowercase; }
+  .mp-grid button:hover { border-color: var(--border); color: var(--text); background: color-mix(in srgb, var(--accent) 8%, var(--panel-2)); }
+  .mp-grid button.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .mp-grid button.today:not(.active) { border-color: color-mix(in srgb, var(--accent-2) 50%, var(--border)); color: var(--accent-2); }
+  .mp-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-soft); }
+  .mp-foot button { cursor: pointer; border: none; background: transparent; color: var(--accent); font-family: var(--font); font-size: 12px; font-weight: 700; padding: 4px 6px; border-radius: 6px; transition: .12s; }
+  .mp-foot button:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
   .badge { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 6px 11px; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-weight: 700; }
-  .badge b { color: var(--text); font-size: 13px; margin-left: 4px; }
-  .month-pick { display: flex; align-items: center; gap: 6px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 4px 8px; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-weight: 700; }
-  .month-pick input[type="month"] { background: transparent; border: none; color: var(--text); font-family: var(--font); font-size: 13px; outline: none; }
-  .month-pick input[type="month"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .82; cursor: pointer; }
-  html[data-theme="light"] .month-pick input[type="month"]::-webkit-calendar-picker-indicator { filter: none; opacity: .72; }
   .iconbtn, .ghost-btn { cursor: pointer; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); border-radius: 10px; padding: 7px 11px; font-size: 13px; font-family: var(--font); display: inline-flex; align-items: center; gap: 7px; transition: .15s; }
   .iconbtn:hover, .ghost-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
   .iconbtn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
@@ -396,9 +426,26 @@
   <div class="header-controls">
     <button class="iconbtn" id="trocarLojaTop" title="Trocar de loja / Divisional">🏪 Trocar</button>
     <button class="iconbtn" id="themeToggle" title="Alternar tema" aria-label="Alternar tema">🌙</button>
-    <div class="month-pick">Mês <input type="month" id="monthPicker" aria-label="Mês"></div>
-    <div class="badge" id="workdaysBadge" title="Dias úteis do mês (edite em Configuração)">Dias úteis <b>26</b></div>
-    <div class="badge" id="fbBadge" title="Tempo real">○ Local</div>
+    <div class="month-picker-wrap" id="monthPickerWrap">
+      <button type="button" class="month-picker-btn" id="monthPickerBtn" aria-haspopup="dialog" aria-expanded="false">
+        <span class="mp-icon" aria-hidden="true">📅</span>
+        <span class="mp-label" id="monthPickerLabel">—</span>
+        <span class="mp-chevron" aria-hidden="true">▾</span>
+      </button>
+      <div class="month-picker-pop" id="monthPickerPop" hidden role="dialog" aria-label="Selecionar mês">
+        <div class="mp-year-row">
+          <button type="button" id="mpPrevYear" aria-label="Ano anterior">‹</button>
+          <span class="mp-year" id="mpYear">2026</span>
+          <button type="button" id="mpNextYear" aria-label="Próximo ano">›</button>
+        </div>
+        <div class="mp-grid" id="mpGrid"></div>
+        <div class="mp-foot">
+          <button type="button" id="mpThisMonth">Este mês</button>
+        </div>
+      </div>
+    </div>
+    <div class="header-stat-bar" id="workdaysBadge" title="Calendário do mês (edite dias úteis/sábados em Regras de Negócio)"></div>
+    <div class="header-presence is-local" id="fbBadge" title="Status das lojas na plataforma"></div>
   </div>
 </header>
 
@@ -1113,6 +1160,12 @@ function elapsedWorkdays(m) {
   const n = daysInMonth(m); const sameMonth = todayISO() === m; const last = sameMonth ? new Date().getDate() : n;
   let c = 0; for (let d = 1; d <= Math.min(last, n); d++) if (!isSunday(m, d)) c++; return Math.max(c, 1);
 }
+function completosOf(m = currentMonth) {
+  const t = todayISO();
+  if (m < t) return workdaysOf(m);
+  if (m > t) return 0;
+  return workdaysSplit(m).done;
+}
 function weeksOf(m) { const n = daysInMonth(m); const weeks = []; for (let d = 1; d <= n; d += 7) { const w = []; for (let k = d; k < Math.min(d + 7, n + 1); k++) w.push(k); weeks.push(w); } return weeks; }
 
 /* Ordenação */
@@ -1625,7 +1678,118 @@ function renderActive() {
   else if (activeView === "kpis") renderIndicatorConfig();
   else if (activeView === "config") { renderConfig(); if (typeof renderSync === "function") renderSync(); }
 }
-function updateWorkdaysBadge() { const b = document.querySelector("#workdaysBadge b"); if (b) b.textContent = diasUteisOf(currentMonth); }
+function updateWorkdaysBadge() {
+  const el = document.getElementById("workdaysBadge");
+  if (!el) return;
+  const du = diasUteisOf(currentMonth), sb = sabadosOf(currentMonth), dom = countSundays(currentMonth), comp = completosOf(currentMonth);
+  const mk = (k, v) => `<span class="hs-item"><span class="hs-k">${k}</span><b class="hs-v">${v}</b></span>`;
+  el.innerHTML = mk("Dias Úteis", du) + '<span class="hs-sep">/</span>' + mk("Sábados", sb) + '<span class="hs-sep">/</span>' + mk("Domingos", dom) + '<span class="hs-sep">/</span>' + mk("Completos", comp);
+  el.title = `Calendário de ${monthLabel(currentMonth)} · Completos = dias úteis+sáb até ontem · Edite em Regras de Negócio`;
+  updateMonthPickerLabel();
+}
+
+const LOJA_ONLINE_MS = 10 * 60 * 1000;
+function lojaPresenceStats() {
+  const now = Date.now();
+  let online = 0, offline = 0;
+  Object.entries(remoteLojas || {}).forEach(([id, r]) => {
+    if (!/^VC/i.test(id)) return;
+    const ts = Number(r?.updatedAt) || 0;
+    if (ts && (now - ts) <= LOJA_ONLINE_MS) online++;
+    else offline++;
+  });
+  return { online, offline };
+}
+function setFbBadge(connected) {
+  const el = document.getElementById("fbBadge");
+  if (!el) return;
+  if (!fbReady) {
+    el.className = "header-presence is-local";
+    el.innerHTML = '<span class="hp-local">○ Modo local</span>';
+    el.title = "Sem tempo real (offline ou firewall). O app funciona localmente.";
+    return;
+  }
+  if (!connected) {
+    el.className = "header-presence";
+    el.innerHTML = '<span class="hp on"><i></i> Conectando…</span>';
+    el.title = "Conectando ao tempo real…";
+    return;
+  }
+  const { online, offline } = lojaPresenceStats();
+  el.className = "header-presence";
+  el.innerHTML = `<span class="hp on"><i></i> Ao vivo <b>${online}</b></span><span class="hp-sep">·</span><span class="hp off"><i></i> Offline <b>${offline}</b></span>`;
+  el.title = `Lojas na plataforma · Ao vivo = sincronizou nos últimos ${LOJA_ONLINE_MS / 60000} min · Offline = sem atividade recente`;
+}
+
+let monthPickerYear = null;
+let monthPickerOpen = false;
+function monthIso(y, mo) { return `${y}-${String(mo).padStart(2, "0")}`; }
+function updateMonthPickerLabel() {
+  const lbl = document.getElementById("monthPickerLabel");
+  if (lbl) lbl.textContent = monthLabel(currentMonth);
+}
+function setCurrentMonth(m) {
+  if (!m) return;
+  currentMonth = m;
+  monthData();
+  save();
+  closeMonthPicker();
+  updateMonthPickerLabel();
+  renderActive();
+}
+function renderMonthPickerGrid() {
+  const grid = document.getElementById("mpGrid");
+  const yearEl = document.getElementById("mpYear");
+  if (!grid || !yearEl) return;
+  const y = monthPickerYear ?? parseMonth(currentMonth).y;
+  monthPickerYear = y;
+  yearEl.textContent = y;
+  const cur = todayISO();
+  const names = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  grid.innerHTML = names.map((nm, i) => {
+    const iso = monthIso(y, i + 1);
+    const cls = [iso === currentMonth ? "active" : "", iso === cur ? "today" : ""].filter(Boolean).join(" ");
+    return `<button type="button" data-m="${iso}" class="${cls}">${nm}.</button>`;
+  }).join("");
+  grid.querySelectorAll("[data-m]").forEach(btn => {
+    btn.onclick = () => setCurrentMonth(btn.dataset.m);
+  });
+}
+function openMonthPicker() {
+  const pop = document.getElementById("monthPickerPop");
+  const btn = document.getElementById("monthPickerBtn");
+  if (!pop || !btn) return;
+  monthPickerYear = parseMonth(currentMonth).y;
+  monthPickerOpen = true;
+  pop.hidden = false;
+  btn.classList.add("open");
+  btn.setAttribute("aria-expanded", "true");
+  renderMonthPickerGrid();
+}
+function closeMonthPicker() {
+  const pop = document.getElementById("monthPickerPop");
+  const btn = document.getElementById("monthPickerBtn");
+  monthPickerOpen = false;
+  if (pop) pop.hidden = true;
+  if (btn) { btn.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); }
+}
+function setupMonthPicker() {
+  updateMonthPickerLabel();
+  const btn = document.getElementById("monthPickerBtn");
+  const wrap = document.getElementById("monthPickerWrap");
+  const prev = document.getElementById("mpPrevYear");
+  const next = document.getElementById("mpNextYear");
+  const thisM = document.getElementById("mpThisMonth");
+  if (btn) btn.onclick = e => { e.stopPropagation(); monthPickerOpen ? closeMonthPicker() : openMonthPicker(); };
+  if (prev) prev.onclick = e => { e.stopPropagation(); monthPickerYear--; renderMonthPickerGrid(); };
+  if (next) next.onclick = e => { e.stopPropagation(); monthPickerYear++; renderMonthPickerGrid(); };
+  if (thisM) thisM.onclick = e => { e.stopPropagation(); setCurrentMonth(todayISO()); };
+  document.addEventListener("click", e => {
+    if (!monthPickerOpen || !wrap) return;
+    if (!wrap.contains(e.target)) closeMonthPicker();
+  });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeMonthPicker(); });
+}
 
 /* Navegação por teclado */
 function moveCell(inp, dir) {
@@ -3076,7 +3240,6 @@ if (!myLojaId) { myLojaId = uid() + uid(); localStorage.setItem(FB_LOJA_KEY, myL
 let remoteLojas = {};
 let fbDb = null, fbReady = false, fbPushTimer = null;
 
-function setFbBadge(connected){ const el = document.getElementById("fbBadge"); if(!el) return; const n = Object.keys(remoteLojas).length || (fbReady?1:0); if(!fbReady){ el.innerHTML = '<span style="color:var(--text-faint)">○ Local</span>'; el.title="Sem tempo real (offline ou firewall). App funciona local."; return; } el.innerHTML = connected? `<span style="color:var(--ok)">● Ao vivo</span> <b>${n}</b>` : '<span style="color:var(--warn)">● conectando…</span>'; el.title = connected? (n+" loja(s) sincronizada(s)") : "conectando ao tempo real"; }
 function fbInit(){
   try{
     if (typeof firebase === "undefined" || !firebase.initializeApp) { setFbBadge(false); return; }
@@ -3569,6 +3732,7 @@ function fbInit(){
       fbDb.ref("lojas").on("value", snap => { remoteLojas = snap.val() || {}; setFbBadge(true); if(activeView==="fechamento"||activeView==="rscen") renderActive(); if(activeView==="config") renderSync(); },
         err => { console.warn("leitura lojas negada:", err && err.message); setFbBadge(false); });
       fbDb.ref(".info/connected").on("value", s => setFbBadge(!!(s && s.val())));
+      if (!window._presenceTick) window._presenceTick = setInterval(() => { if (fbReady) setFbBadge(true); }, 60000);
       startConfigListener();
       loadAuthConfig().then(() => {
         if (authUnlocked && lojaCode) pullLoja();
@@ -3785,11 +3949,12 @@ function renderSync(){
 
 function init() {
   applyTheme(); syncStore();
-  document.getElementById("monthPicker").value = currentMonth; monthData(); save();
+  monthData(); save();
+  setupMonthPicker();
+  updateWorkdaysBadge();
   document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => showView(b.dataset.view));
   applyTabOrder(); setupTabDnD();
   document.querySelectorAll("#matrizPeriodo button").forEach(x => x.classList.toggle("active", x.dataset.p === matrizPeriodo));
-  document.getElementById("monthPicker").addEventListener("change", e => { currentMonth = e.target.value || todayISO(); monthData(); save(); renderActive(); });
   document.getElementById("themeToggle").onclick = () => { state.theme = state.theme==="dark"?"light":"dark"; save(); applyTheme(); renderActive(); };
   document.getElementById("matrizReorder").onclick = () => { document.body.classList.toggle("moveon"); toast(document.body.classList.contains("moveon")? "Reordenar: arraste linhas e blocos" : "Reordenar desligado"); renderMatriz(); };
   document.getElementById("matrizCsv").onclick = exportCsv;
