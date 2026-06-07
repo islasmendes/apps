@@ -492,7 +492,7 @@
       </div>
       <div class="table-wrap" style="margin-top:6px;"><table id="acuracidadeTable"></table></div>
       <div class="acur-legend" id="acurLegend"></div>
-      <div class="hint" style="margin-top:10px;">Só entram indicadores com <b>lançamento do gestor (sistema ⚙)</b> na matriz. Acuracidade = proximidade relato ÷ sistema. Aderência = realizado ÷ planejado no check-in. Passe o mouse nas células para detalhes.</div>
+      <div class="hint" style="margin-top:10px;">Só entram indicadores com <b>lançamento do gestor (sistema ⚙)</b> na matriz, para os vendedores do filtro atual. O número com ⚙ na matriz é o sistema; sem ⚙, o Real vem só do check-out. <b>Aderência</b> = dias encerrados na escala com check-in e check-out completos ÷ dias encerrados (igual ao app do consultor).</div>
     </div>
   </section>
 
@@ -2467,9 +2467,9 @@ function fieldHasSistema(sellerId, f, m = currentMonth) {
   if (f.rate) return getSystemRate(sellerId, f.rateId, m) != null;
   return getSystem(sellerId, f.id, m) != null;
 }
-function acuracidadeVisibleFields(_sellers, allFields) {
+function acuracidadeVisibleFields(sellers, allFields) {
   const list = allFields || acuracidadeFieldList().filter(f => !f.rate);
-  const scope = orderedSellers();
+  const scope = (sellers && sellers.length) ? sellers : orderedSellers();
   return list.filter(f => scope.some(s => fieldHasSistema(s.id, f)));
 }
 function acurTipRelato(f, rel, sys, acc) {
@@ -2489,7 +2489,12 @@ function acurTipRelato(f, rel, sys, acc) {
 }
 function acurRelatoCellHtml(sellerId, f, days) {
   const sys = getSystem(sellerId, f.id);
-  if (sys == null) return `<td class="relato muted">—</td>`;
+  if (sys == null) {
+    const rel = accum(sellerId, f.id, "real", days);
+    const tip = (f.sub ? "↳ " : "") + f.name + "\nSem lançamento sistema ⚙ deste vendedor." +
+      (rel != null ? "\nRelato na matriz (" + fmt(rel) + ") vem só do check-out — clique no nome na matriz para lançar o sistema." : "\nClique no nome na matriz para lançar o sistema.");
+    return `<td class="relato muted"${matrizTipData(tip, f.color)}>—</td>`;
+  }
   const rel = accum(sellerId, f.id, "real", days);
   const acc = fieldAccuracy(sellerId, f.id, days);
   const accColor = acc != null ? heatText(acc) : "var(--text-faint)";
@@ -2509,7 +2514,8 @@ function renderAcurLegend() {
     `<i><span class="sw" style="background:var(--danger)"></span> Relato / % distantes do sistema</i>` +
     `<i><span class="sw" style="background:var(--warn)"></span> Atenção (50–94%)</i>` +
     `<i><span class="sw" style="background:var(--ok)"></span> Acurado (≥95%)</i>` +
-    `<i><span class="heat matriz-from-sys matriz-real acur-sys" style="padding:1px 5px;font-size:10px;min-width:0">24</span> Valor sistema ⚙ (gestor)</i>`;
+    `<i><span class="heat matriz-from-sys matriz-real acur-sys" style="padding:1px 5px;font-size:10px;min-width:0">24</span> Valor sistema ⚙ (gestor)</i>` +
+    `<i><span class="muted">—</span> Sem ⚙ = relato só do check-out, não entra na comparação</i>`;
 }
 function fieldAccuracy(sellerId, fieldId, days) {
   const sys = getSystem(sellerId, fieldId);
@@ -2528,9 +2534,9 @@ function renderAcuracidade() {
   if (!fields.length) {
     head += '<th class="muted" style="font-weight:600">—</th>';
   } else {
-    fields.forEach(f => head += `<th${f.sub?' style="color:var(--accent-2)"':''}${matrizTipData("Coluna visível porque o gestor lançou sistema ⚙ para este indicador.\nRelato / Sistema / Acuracidade", f.color)}>${f.sub?'↳ ':''}${f.name}<br><span class="muted" style="font-weight:600">relato · sis · %</span></th>`);
+    fields.forEach(f => head += `<th${f.sub?' style="color:var(--accent-2)"':''}${matrizTipData("Coluna visível: algum vendedor do filtro atual tem sistema ⚙ lançado.\nRelato / Sistema / Acuracidade", f.color)}>${f.sub?'↳ ':''}${f.name}<br><span class="muted" style="font-weight:600">relato · sis · %</span></th>`);
   }
-  head += '<th>Acurac.</th><th>Aderência<br><span class="muted" style="font-weight:600">check-in</span></th></tr></thead>';
+  head += '<th>Acurac.</th><th>Aderência<br><span class="muted" style="font-weight:600">escala · dias</span></th></tr></thead>';
   let body = "<tbody>";
   if (!sellers.length) {
     body += `<tr><td class="empty" colspan="${Math.max(fields.length, 1) + 3}">Nenhum vendedor no filtro.</td></tr>`;
@@ -2542,7 +2548,9 @@ function renderAcuracidade() {
       body += `<tr data-seller="${s.id}"><td class="name seller-link" title="Ver auditoria detalhada">${s.name}</td>`;
       fields.forEach(f => { body += acurRelatoCellHtml(s.id, f, days); });
       body += `<td style="color:${heatText(m.acc)}; font-weight:700;"${m.acc != null ? matrizTipData("Média de acuracidade nos indicadores com sistema ⚙\n" + pctTxt(m.acc), "var(--accent)") : ""}>${m.acc==null?'—':pctTxt(m.acc)}</td>`;
-      body += `<td style="color:${heatText(m.ader)}; font-weight:700;"${m.ader != null ? matrizTipData("Aderência check-in: realizado ÷ planejado\n" + pctTxt(m.ader), "var(--accent-2)") : ""}>${m.ader==null?'—':pctTxt(m.ader)}</td></tr>`;
+      const aderTip = m.disc ? `${m.disc.complete} de ${m.disc.closed} dias encerrados na escala com check-in e check-out completos\n${m.disc.scheduled} dias na escala do mês\nAderência ${pctTxt(m.ader)}` : "";
+      const aderDisp = m.ader == null ? "—" : pctTxt(m.ader) + (m.disc?.closed ? ` · ${m.disc.complete}/${m.disc.closed}` : "");
+      body += `<td style="color:${heatText(m.ader)}; font-weight:700;"${aderTip ? matrizTipData(aderTip, "var(--accent-2)") : ""}>${aderDisp}</td></tr>`;
     });
   }
   body += "</tbody>";
@@ -2769,9 +2777,10 @@ function closeLancamentoModal() {
 }
 function renderAuditoriaModal(sellerId) {
   const days = monthDays(); const m = sellerMetrics(sellerId);
+  const aderLbl = m.ader != null ? pctTxt(m.ader) + (m.disc?.closed ? " · " + m.disc.complete + "/" + m.disc.closed + " dias" : "") : "—";
   document.getElementById("auditoriaSummary").innerHTML =
     `<span class="pill" style="color:${heatText(m.acc)}">Acuracidade ${pctTxt(m.acc)}</span>` +
-    `<span class="pill" style="color:${heatText(m.ader)}">Aderência ${pctTxt(m.ader)}</span>`;
+    `<span class="pill" style="color:${heatText(m.ader)}">Aderência ${aderLbl}</span>`;
   const fields = acuracidadeFieldList().filter(f => !f.rate || fieldHasSistema(sellerId, f));
   let head = '<thead><tr><th class="name">Indicador</th><th>Check-in</th><th>Relato</th><th>Sistema</th><th>Acurac.</th></tr></thead>';
   let body = "<tbody>";
@@ -2813,21 +2822,57 @@ function closeAuditoriaModal() {
   document.getElementById("auditoriaModal").classList.remove("show");
 }
 
+function diarioFieldList() {
+  const list = [];
+  orderedIndicators().forEach(ind => {
+    if (ind.pctOnly) return;
+    if (cfgHasDiario(ind)) list.push(ind);
+    (ind.subs || []).filter(cfgHasDiario).forEach(s => list.push(s));
+  });
+  return list;
+}
+function hasCellValue(cell, key) {
+  return cell[key] != null && cell[key] !== "";
+}
+/** Aderência: % de dias encerrados na escala com check-in e check-out completos (igual app consultor). */
+function consultantDisciplineStats(sellerId, m = currentMonth) {
+  const n = daysInMonth(m);
+  const isCurrent = todayISO() === m;
+  const today = isCurrent ? new Date().getDate() : n + 1;
+  const fields = diarioFieldList();
+  let scheduled = 0, closed = 0, complete = 0;
+  if (!fields.length) return { pct: null, complete: 0, closed: 0, scheduled: 0 };
+  for (let d = 1; d <= n; d++) {
+    if (!sellerWorks(sellerId, d, m)) continue;
+    scheduled++;
+    if (isCurrent && d >= today) continue;
+    closed++;
+    let req = 0, ok = 0;
+    fields.forEach(cfg => {
+      const c = getCell(sellerId, cfg.id, d, m);
+      if (cfg.checkin) { req++; if (hasCellValue(c, "plan")) ok++; }
+      if (cfg.checkout) { req++; if (hasCellValue(c, "real")) ok++; }
+    });
+    if (req > 0 && ok === req) complete++;
+  }
+  return { pct: closed ? complete / closed : null, complete, closed, scheduled };
+}
+
 /* ============================================================ FOCO */
 function sellerMetrics(sellerId) {
-  const days = monthDays(), ewd = elapsedWorkdays(currentMonth), twd = workdaysOf(currentMonth);
-  let projSum = 0, projN = 0, aderSum = 0, aderN = 0, accSum = 0, accN = 0;
+  const days = monthDays();
+  let projSum = 0, projN = 0, accSum = 0, accN = 0;
   state.indicators.forEach(ind => {
     if (ind.pctOnly) return;
     const real = accum(sellerId, ind.id, "real", days), meta = metaMonthFor(ind);
     if (meta && real != null) { projSum += (sellerProjVal(sellerId, ind.id)/meta); projN++; }
-    if (ind.checkin && ind.checkout) { const plan = accum(sellerId, ind.id, "plan", days); const r = accum(sellerId, ind.id, "real", days); if (plan) { aderSum += (r||0)/plan; aderN++; } }
   });
   acuracidadeFieldList().filter(f => !f.rate && fieldHasSistema(sellerId, f)).forEach(f => {
     const acc = fieldAccuracy(sellerId, f.id, days);
     if (acc != null) { accSum += acc; accN++; }
   });
-  return { ritmo: projN ? projSum/projN : null, ader: aderN ? aderSum/aderN : null, acc: accN ? accSum/accN : null };
+  const disc = consultantDisciplineStats(sellerId);
+  return { ritmo: projN ? projSum/projN : null, ader: disc.pct, disc, acc: accN ? accSum/accN : null };
 }
 function renderFoco() {
   const sellers = orderedSellers(); const metrics = sellers.map(s => ({ s, ...sellerMetrics(s.id) }));
@@ -2846,7 +2891,7 @@ function renderFoco() {
   document.getElementById("attnCols").innerHTML =
     box("📉 Abaixo do ritmo", "vão furar a meta no ritmo atual", lowRitmo, "ritmo") +
     box("⚠️ Relato furado", "check-out longe do sistema", lowAcc, "acc") +
-    box("🎯 Não cumpre o plano", "realiza menos do que promete", lowAder, "ader");
+    box("🎯 Check-in/out incompletos", "dias encerrados na escala sem todos os lançamentos", lowAder, "ader");
 
   const ci = document.getElementById("chartInd"); ci.innerHTML = state.indicators.filter(i=>!i.pctOnly).map(i => `<option value="${i.id}">${i.name}</option>`).join("");
   const cw = document.getElementById("chartWho"); cw.innerHTML = '<option value="__team">⌀ Equipe (todos)</option>' + sellers.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
