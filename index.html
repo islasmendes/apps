@@ -1398,32 +1398,55 @@ function weekMeta(cfg, days) { let s = 0; days.forEach(d => { s += metaForDay(cf
 function getMetaLoja(fieldId, m = currentMonth) { const md = monthData(m); return md.metaLoja[fieldId] != null ? Number(md.metaLoja[fieldId]) : null; }
 function setMetaLoja(fieldId, val, m = currentMonth) { const md = monthData(m); if (val === "" || val == null || isNaN(val)) delete md.metaLoja[fieldId]; else md.metaLoja[fieldId] = Number(val); save(); }
 const DIV_META_LS = "gc_divisional_metas";
+const DEFAULT_DIVISIONAL_CODE = "RSCEN";
 let divisionalMetasByMonth = {};
 let divMetaPushTimer = null;
 let divMetaListenerRef = null;
+function divisionalMetaCode() {
+  return (divisionalMode() && divisionalCode) ? divisionalCode : DEFAULT_DIVISIONAL_CODE;
+}
 function loadDivisionalMetasStore() {
   try { const raw = localStorage.getItem(DIV_META_LS); return raw ? JSON.parse(raw) : {}; } catch (e) { return {}; }
 }
 function saveDivisionalMetasStore(all) {
   try { localStorage.setItem(DIV_META_LS, JSON.stringify(all)); } catch (e) { /* ignore */ }
 }
+function divisionalMetaNameKey(name) { return "_n:" + fechNormName(name); }
 function getMetaDivisional(fieldId, m = currentMonth) {
-  if (!divisionalMode()) return null;
-  const code = divisionalCode || "RSCEN";
+  const code = divisionalMetaCode();
   const bucket = divisionalMetasByMonth[m] || loadDivisionalMetasStore()[code]?.[m];
-  if (!bucket || bucket[fieldId] == null || isNaN(bucket[fieldId])) return null;
-  return Number(bucket[fieldId]);
+  if (!bucket) return null;
+  if (bucket[fieldId] != null && !isNaN(bucket[fieldId])) return Number(bucket[fieldId]);
+  const cfg = cfgById(fieldId);
+  if (cfg?.name) {
+    const nk = divisionalMetaNameKey(cfg.name);
+    if (bucket[nk] != null && !isNaN(bucket[nk])) return Number(bucket[nk]);
+  }
+  return null;
 }
 function setMetaDivisional(fieldId, val, m = currentMonth) {
-  const code = divisionalCode || "RSCEN";
+  if (!divisionalMode()) return;
+  const code = divisionalCode || DEFAULT_DIVISIONAL_CODE;
   if (!divisionalMetasByMonth[m]) divisionalMetasByMonth[m] = {};
-  if (val === "" || val == null || isNaN(val)) delete divisionalMetasByMonth[m][fieldId];
-  else divisionalMetasByMonth[m][fieldId] = Number(val);
+  const cfg = cfgById(fieldId);
+  const nk = cfg?.name ? divisionalMetaNameKey(cfg.name) : null;
+  if (val === "" || val == null || isNaN(val)) {
+    delete divisionalMetasByMonth[m][fieldId];
+    if (nk) delete divisionalMetasByMonth[m][nk];
+  } else {
+    divisionalMetasByMonth[m][fieldId] = Number(val);
+    if (nk) divisionalMetasByMonth[m][nk] = Number(val);
+  }
   const all = loadDivisionalMetasStore();
   if (!all[code]) all[code] = {};
   if (!all[code][m]) all[code][m] = {};
-  if (val === "" || val == null || isNaN(val)) delete all[code][m][fieldId];
-  else all[code][m][fieldId] = Number(val);
+  if (val === "" || val == null || isNaN(val)) {
+    delete all[code][m][fieldId];
+    if (nk) delete all[code][m][nk];
+  } else {
+    all[code][m][fieldId] = Number(val);
+    if (nk) all[code][m][nk] = Number(val);
+  }
   if (!Object.keys(all[code][m]).length) delete all[code][m];
   saveDivisionalMetasStore(all);
   scheduleDivMetaPush(m);
@@ -1433,31 +1456,32 @@ function scheduleDivMetaPush(m) {
   divMetaPushTimer = setTimeout(() => pushDivisionalMetas(m), 600);
 }
 function pushDivisionalMetas(m = currentMonth) {
-  if (!fbReady || !fbDb || !divisionalCode) return;
+  if (!fbReady || !fbDb || !divisionalMode() || !divisionalCode) return;
   try {
     fbDb.ref("divisionais/" + divisionalCode + "/metas/" + m).set(divisionalMetasByMonth[m] || {});
   } catch (e) { console.warn("push metas divisional falhou", e); }
 }
 function hydrateDivisionalMetasLocal(m = currentMonth) {
-  const code = divisionalCode || "RSCEN";
+  const code = divisionalMetaCode();
   const stored = loadDivisionalMetasStore()[code]?.[m];
   if (stored) divisionalMetasByMonth[m] = { ...stored };
 }
-function startDivisionalMetasListener(m = currentMonth) {
-  if (!fbReady || !fbDb || !divisionalCode) return;
+function watchDivisionalMetas(m = currentMonth) {
+  if (!fbReady || !fbDb) return;
+  const code = divisionalMetaCode();
   hydrateDivisionalMetasLocal(m);
   if (divMetaListenerRef) { try { divMetaListenerRef.off(); } catch (e) { /* ignore */ } divMetaListenerRef = null; }
-  divMetaListenerRef = fbDb.ref("divisionais/" + divisionalCode + "/metas/" + m);
+  divMetaListenerRef = fbDb.ref("divisionais/" + code + "/metas/" + m);
   divMetaListenerRef.on("value", snap => {
     divisionalMetasByMonth[m] = snap.val() || {};
     const all = loadDivisionalMetasStore();
-    const code = divisionalCode || "RSCEN";
     if (!all[code]) all[code] = {};
     all[code][m] = { ...divisionalMetasByMonth[m] };
     saveDivisionalMetasStore(all);
-    if (activeView === "rscen") renderArvore();
+    matrizUiRerender();
   });
 }
+function startDivisionalMetasListener(m) { watchDivisionalMetas(m); }
 function sumLojasMetaForTpl(localInd, lojas, subTpl) {
   let sum = 0, any = false;
   lojas.forEach(L => withState(L.data, () => {
@@ -1647,14 +1671,15 @@ function matrizTipReal(fromSystem) {
 function matrizTipPct(real, meta, dailyFallback, opts) {
   if (!meta || meta <= 0) return "Cadastre meta em KPIs";
   if (real == null) return "Sem realizado";
-  const { sellerId, isTeam, periodDays, indColor, lowerBetter } = opts || {};
+  const { sellerId, isTeam, periodDays, indColor, lowerBetter, divisionalMeta } = opts || {};
   const { done, total } = matrizScaleSplit(sellerId, isTeam, periodDays);
   const expected = matrizExpectedToDate(meta, sellerId, isTeam, periodDays);
   const pace = matrizPaceRatio(real, meta, sellerId, isTeam, periodDays, lowerBetter);
   const pctMes = real / meta;
+  const metaLbl = divisionalMeta ? "Meta divisional (rede): " + fmt(meta) : (dailyFallback ? "Meta período: meta/dia × dias na escala" : "Meta do período: " + fmt(meta));
   const lines = [
     lowerBetter ? "Modo: quanto menor melhor ↓" : "Modo: quanto maior melhor ↑",
-    dailyFallback ? "Meta período: meta/dia × dias na escala" : "Meta do período: " + fmt(meta),
+    metaLbl,
     "Escala: " + total + " dias · " + done + " completos (até ontem)",
     "Deveria até ontem: " + (expected != null ? fmt(expected, expected % 1 ? 1 : 0) : "—") + " (" + fmt(meta) + "×" + done + "÷" + total + ")",
     "Real: " + fmt(real),
@@ -1753,6 +1778,9 @@ function renderMatrizLegend(legId, hintId) {
       <span><i style="background:var(--danger)"></i> &lt;50%</span>
       <span style="margin-left:8px; opacity:.85">· <b>Proj.</b> e <b>taxas</b> vs alvo: verde ≥100% · amarelo 70–99% · vermelho &lt;70%</span>`;
     hint.innerHTML = "<b>Real</b> neutro · <b>%</b> ritmo vs meta proporcional (escala) · <b>Proj.</b> fechamento vs meta · <b>Subs</b> iguais ao pai · <b>Taxas/NPS</b> valor vs alvo (%). Tooltip na cor do bloco.";
+  }
+  if (hint && hintId !== "arvoreLegendHint") {
+    hint.innerHTML += " · <b>⌀ Equipe</b>: % e <b>Proj.</b> usam a <b>meta divisional</b> (rede) quando o regional cadastrar.";
   }
 }
 function syncLowerBetterChildren(ind, on) {
@@ -1953,7 +1981,7 @@ function setCurrentMonth(m) {
   save();
   closeMonthPicker();
   updateMonthPickerLabel();
-  if (divisionalMode()) startDivisionalMetasListener(m);
+  watchDivisionalMetas(m);
   renderActive();
 }
 function renderMonthPickerGrid() {
@@ -2132,6 +2160,10 @@ function sellerWeekMetaCapacity(cfg, sellerId, days, m = currentMonth) {
   return s;
 }
 function metaForMatriz(cfg, ids, days, periodo, isTeam) {
+  if (isTeam && periodo === "mes") {
+    const div = getMetaDivisional(cfg.id);
+    if (div != null && div > 0) return div;
+  }
   if (periodo === "semana") {
     if (isTeam) {
       let s = 0;
@@ -2178,6 +2210,8 @@ function matrizProjEquipe(realVal, m = currentMonth) {
 /** Meta para cor/% da coluna Proj.: loja = meta da loja; CV = meta mensal ou estimativa meta/dia na escala. */
 function matrizMetaForProj(cfg, ids, isTeam) {
   if (isTeam) {
+    const div = getMetaDivisional(cfg.id);
+    if (div != null && div > 0) return div;
     const ml = getMetaLoja(cfg.id);
     return ml != null && ml > 0 ? ml : null;
   }
@@ -2486,7 +2520,8 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
   const meta = metaForMatriz(ind, ids, days, periodo, isTeam);
   const dailyFb = metaUsesDailyFallback(ind, periodo);
   const realCls = fromSystem ? "heat matriz-from-sys matriz-real" : "matriz-real";
-  const cellOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days, lowerBetter: cfgLowerBetter(ind) };
+  const divMeta = isTeam ? getMetaDivisional(ind.id) : null;
+  const cellOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days, lowerBetter: cfgLowerBetter(ind), divisionalMeta: !!(isTeam && divMeta) };
   html += `<td style="border-left:3px solid ${ind.color};"><span class="${realCls}"${matrizTipData(matrizTipReal(fromSystem), ind.color)}>${has ? fmt(real) : "—"}</span></td>`;
   if (matrizShowPct(ind)) html += matrizPctCellHtml(has ? real : null, meta, dailyFb, cellOpts);
   if (periodo === "mes") {
@@ -2494,7 +2529,7 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
     const metaProj = matrizMetaForProj(ind, ids, isTeam);
     const lbProj = cfgLowerBetter(ind);
     const pp = metaProj && proj != null ? matrizProjPerfRatio(proj, metaProj, lbProj) : null;
-    const projTip = matrizTipProj({ isTeam, sellerId: isTeam ? null : ids[0], real: has ? real : null, proj, metaProj: metaProj || 0, ind: { ...ind, sub: false, lowerBetter: ind.lowerBetter } });
+    const projTip = matrizTipProj({ isTeam, sellerId: isTeam ? null : ids[0], real: has ? real : null, proj, metaProj: metaProj || 0, ind: { ...ind, sub: false, lowerBetter: ind.lowerBetter }, divisionalTotal: !!(isTeam && divMeta), sumMetasLojas: isTeam ? getMetaLoja(ind.id) : null });
     const projColor = lbProj && metaProj && proj != null ? heatMatrizLowerBetterColor(proj, metaProj, false) : (pp != null ? heatMatrizText(pp) : "var(--text-dim)");
     html += `<td style="color:${projColor}; font-weight:${proj != null ? 700 : 400};"${matrizTipData(projTip, ind.color)}>${proj == null ? "—" : fmt(proj)}</td>`;
   }
@@ -2503,7 +2538,8 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
       const { real: sr, has: h, fromSystem: fs } = matrizRealForSellers(ids, s.id, days, periodo);
       const subMeta = metaForMatriz(s, ids, days, periodo, isTeam);
       const subDailyFb = metaUsesDailyFallback(s, periodo);
-      const subOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days, lowerBetter: cfgLowerBetter(s) };
+      const subDivMeta = isTeam ? getMetaDivisional(s.id) : null;
+      const subOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days, lowerBetter: cfgLowerBetter(s), divisionalMeta: !!(isTeam && subDivMeta) };
       const subCls = fs ? "heat matriz-from-sys matriz-real" : "matriz-real";
       html += `<td style="border-left:1px solid var(--border-soft);"><span class="${subCls}"${matrizTipData(matrizTipReal(fs), ind.color)}>${h ? fmt(sr) : "—"}</span></td>`;
       if (matrizShowPct(s)) html += matrizPctCellHtml(h ? sr : null, subMeta, subDailyFb, subOpts);
@@ -2512,7 +2548,7 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
         const subMetaProj = matrizMetaForProj(s, ids, isTeam);
         const lbSub = cfgLowerBetter(s);
         const subPp = subMetaProj && subProj != null ? matrizProjPerfRatio(subProj, subMetaProj, lbSub) : null;
-        const subProjTip = matrizTipProj({ isTeam, sellerId: isTeam ? null : ids[0], real: h ? sr : null, proj: subProj, metaProj: subMetaProj || 0, ind: { ...s, sub: true, lowerBetter: s.lowerBetter } });
+        const subProjTip = matrizTipProj({ isTeam, sellerId: isTeam ? null : ids[0], real: h ? sr : null, proj: subProj, metaProj: subMetaProj || 0, ind: { ...s, sub: true, lowerBetter: s.lowerBetter }, divisionalTotal: !!(isTeam && subDivMeta), sumMetasLojas: isTeam ? getMetaLoja(s.id) : null });
         const subProjColor = lbSub && subMetaProj && subProj != null ? heatMatrizLowerBetterColor(subProj, subMetaProj, false) : (subPp != null ? heatMatrizText(subPp) : "var(--text-dim)");
         html += `<td style="color:${subProjColor}; font-weight:700;"${matrizTipData(subProjTip, ind.color)}>${subProj == null ? "—" : fmt(subProj)}</td>`;
       }
@@ -4781,7 +4817,7 @@ function pullDivisional() {
   if (hdr) hdr.value = state.storeName;
   syncStore();
   updateDivisionalNav();
-  startDivisionalMetasListener();
+  watchDivisionalMetas();
   applyTemplateFromCloud().then(changed => {
     if (changed && activeView === "rscen") renderArvore();
     showView(DIVISIONAL_VIEWS.includes(activeView) ? activeView : "rscen");
@@ -4797,6 +4833,7 @@ function pullLoja(){
     const finish = () => {
       applyTheme(); syncStore(); expandedBlocks = state.ui.expanded;
       updateDivisionalNav();
+      watchDivisionalMetas();
       renderActive(); startLojaDataListener();
     };
     if (v && v.data) {
@@ -5017,6 +5054,7 @@ function init() {
   if (tryRestoreAuthSession()) { /* sessão válida neste aparelho */ }
   if (divisionalMode() && !DIVISIONAL_VIEWS.includes(activeView)) activeView = "rscen";
   updateDivisionalNav();
+  hydrateDivisionalMetasLocal();
   showView(activeView);
   if (typeof fbInit === "function") fbInit();
   else if (!authUnlocked) startAuthFlow();
