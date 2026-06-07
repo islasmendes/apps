@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v6";
+  var BUILD = "v7";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -230,15 +230,16 @@
     50% { opacity: .72; text-shadow: 0 0 22px color-mix(in srgb, var(--danger) 65%, transparent); }
   }
   .resumo-hero .subline { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
-  .resumo-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .resumo-chips { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; align-items: flex-start; }
+  .resumo-chip-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 100%; }
   .resumo-chip {
-    font-size: 10px; font-weight: 800; padding: 4px 9px; border-radius: 99px;
+    font-size: 10px; font-weight: 800; padding: 4px 9px; border-radius: 99px; width: fit-content;
     border: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 40%, transparent);
   }
-  .resumo-sema { display: flex; gap: 10px; font-size: 11px; font-weight: 700; margin-top: 8px; color: var(--text-dim); }
-  .resumo-sema b.ok { color: var(--ok); }
-  .resumo-sema b.warn { color: var(--warn); }
-  .resumo-sema b.bad { color: var(--danger); }
+  .resumo-chip-leg {
+    font-size: 9px; font-weight: 600; line-height: 1.25; color: var(--text-faint);
+    opacity: .55; padding: 0 2px; max-width: 168px;
+  }
   .resumo-sec { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .45px; color: var(--text-faint); margin: 14px 0 8px; }
   .resumo-card {
     border: 2px solid color-mix(in srgb, var(--rc) 58%, var(--border));
@@ -412,7 +413,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v6";
+const APP_BUILD = "v7";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -784,19 +785,6 @@ function resumoCallout(cfg, sellerId, m = todayISO(), mini, parentInd = null) {
   }
   return { html: `<div class="resumo-callout ${tone}${mini ? " mini" : ""}">${text}</div>`, tone, perfRatio };
 }
-function countSemaforo(perfRatio, actual, target, lowerBetter, isPercent) {
-  if (lowerBetter && actual != null && target) {
-    const band = matrizLowerBetterBand(actual, target, matrizLowerWarnMargin(target, isPercent), isPercent);
-    if (band === "ok") return "g";
-    if (band === "warn") return "y";
-    if (band === "danger") return "r";
-    return null;
-  }
-  if (perfRatio == null) return null;
-  if (perfRatio >= 1) return "g";
-  if (perfRatio >= 0.7) return "y";
-  return "r";
-}
 /** Aderência consultor: % de dias encerrados na escala com check-in e check-out completos. */
 function consultantDisciplineStats(sellerId, m = todayISO()) {
   const n = daysInMonth(m);
@@ -960,7 +948,6 @@ function renderResumo() {
   const vendaSt = venda ? fieldProjStats(venda, sid, m) : null;
   const vendaCallout = venda ? resumoCallout(venda, sid, m, false) : { html: '<div class="resumo-callout muted">Indicador Vendas não configurado.</div>', tone: "muted" };
   const vendaRank = venda ? teamRankByProjPct(venda.id, venda, sid, m) : { pos: 0, total: teamSellerTotal() };
-  let g = 0, y = 0, r = 0;
   const cards = [];
   orderedIndicators().forEach(ind => {
     const color = ind.color || "var(--accent)";
@@ -976,9 +963,6 @@ function renderResumo() {
           const target = matrizRateTarget(rate, m);
           const val = rateValueForSeller(rate, sid, m);
           const lb = rateLowerBetter(rate, ind);
-          const pr = matrizRateRatio(val, target, lb);
-          const band = countSemaforo(pr, val, target, lb, true);
-          if (band === "g") g++; else if (band === "y") y++; else if (band === "r") r++;
           expandHtml += resumoRateRow(rate, ind, color, sid, m, true);
         });
         expandHtml += "</div>";
@@ -990,9 +974,6 @@ function renderResumo() {
     let mainHtml = "";
     let expandHtml = "";
     if (ind.checkout || ind.checkin) {
-      const st = fieldProjStats(ind, sid, m);
-      const band = countSemaforo(st.perfRatio, st.proj, st.meta, st.lb, false);
-      if (band === "g") g++; else if (band === "y") y++; else if (band === "r") r++;
       mainHtml = resumoFieldRow(ind, color, sid, {
         sub: false, showRank: true, main: true, toggle: hasExpandable, open: isOpen, indId: ind.id
       }, m);
@@ -1000,15 +981,7 @@ function renderResumo() {
     if (hasExpandable) {
       expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
       subs.forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false, parentInd: ind }, m); });
-      rates.forEach(rate => {
-        const target = matrizRateTarget(rate, m);
-        const val = rateValueForSeller(rate, sid, m);
-        const lb = rateLowerBetter(rate, ind);
-        const pr = matrizRateRatio(val, target, lb);
-        const band = countSemaforo(pr, val, target, lb, true);
-        if (band === "g") g++; else if (band === "y") y++; else if (band === "r") r++;
-        expandHtml += resumoRateRow(rate, ind, color, sid, m, true);
-      });
+      rates.forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
       expandHtml += "</div>";
     }
     const body = mainHtml + expandHtml;
@@ -1018,7 +991,6 @@ function renderResumo() {
   const vendaPct = vendaSt?.perfRatio;
   const vendaHeat = vendaSt ? resumoHeatColor(vendaSt.proj, vendaSt.meta, vendaSt.perfRatio, vendaSt.lb, false) : "var(--text-faint)";
   const vendaPulse = vendaCallout.tone === "bad" ? " pulse-bad" : "";
-  const semaTip = "Contagem por indicador principal e taxas: verde ≥100% da meta · atenção entre 70% e 99% · risco abaixo de 70% (indicadores ↓ usam faixa verde/amarelo/vermelho pela projeção vs meta).";
   const vendaRankTxt = vendaRank.pos > 0 && vendaRank.total > 1 ? `${vendaRank.pos}º de ${vendaRank.total} em vendas` : "—";
   document.getElementById("resumoRoot").innerHTML = `
     <div class="resumo-hero">
@@ -1030,11 +1002,19 @@ function renderResumo() {
         <div class="big resumo-hero-pct${vendaPulse}" style="color:${vendaHeat}">${pctTxt(vendaPct)}</div>
       </div>
       ${vendaCallout.html}
-      <div class="resumo-sema" title="${semaTip}"><b class="ok">${g} verde</b><b class="warn">${y} atenção</b><b class="bad">${r} risco</b></div>
       <div class="resumo-chips">
-        <span class="resumo-chip" style="color:${heatMatrizText(discipline.pct)}" title="${discipline.closed ? discipline.complete + " de " + discipline.closed + " dias encerrados com check-in e check-out completos · " + discipline.scheduled + " dias na escala do mês" : "Ainda sem dias encerrados na escala"}">Aderência ${pctTxt(discipline.pct)}${discipline.closed ? " · " + discipline.complete + "/" + discipline.closed + " dias" : ""}</span>
-        <span class="resumo-chip" style="color:${heatMatrizText(metrics.acc)}">Acurácia ${pctTxt(metrics.acc)}</span>
-        <span class="resumo-chip" style="color:var(--accent-2)">${vendaRankTxt}</span>
+        <div class="resumo-chip-item">
+          <span class="resumo-chip" style="color:${heatMatrizText(discipline.pct)}">Aderência ${pctTxt(discipline.pct)}${discipline.closed ? " · " + discipline.complete + "/" + discipline.closed + " dias" : ""}</span>
+          <span class="resumo-chip-leg">Dias da escala com check-in e check-out completos.</span>
+        </div>
+        <div class="resumo-chip-item">
+          <span class="resumo-chip" style="color:${heatMatrizText(metrics.acc)}">Acurácia ${pctTxt(metrics.acc)}</span>
+          <span class="resumo-chip-leg">Seu check-out batendo com o que o gestor lançou.</span>
+        </div>
+        <div class="resumo-chip-item">
+          <span class="resumo-chip" style="color:var(--accent-2)">${vendaRankTxt}</span>
+          <span class="resumo-chip-leg">Posição na equipe pela projeção de vendas.</span>
+        </div>
       </div>
     </div>
     <div class="resumo-sec">Indicadores · toque para ver subs e taxas</div>
