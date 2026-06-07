@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v14";
+  var BUILD = "v15";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1523,7 +1523,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v14";
+const APP_BUILD = "v15";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3356,8 +3356,7 @@ function diarioCheckoutFieldIds(sellerId, day) {
   orderedIndicators().forEach(ind => {
     if (ind.pctOnly) return;
     const add = cfg => {
-      if (!cfg.checkout) return;
-      if (diarioFieldGated(sellerId, cfg, day)) return;
+      if (!diarioFieldNeeds(sellerId, cfg, day).checkout) return;
       ids.push(cfg.id);
     };
     if (cfgHasDiario(ind)) add(ind);
@@ -3439,8 +3438,12 @@ function renderDiario() {
     const diarioSubs = (ind.subs || []).filter(cfgHasDiario);
     const showInd = cfgHasDiario(ind);
     if (!showInd && !diarioSubs.length) return;
-    if (showInd) { body += diarioRow(ind, ind.color, false); anyDiario = true; }
-    diarioSubs.forEach(s => { body += diarioRow(s, ind.color, true); anyDiario = true; });
+    if (showInd && diarioRowNeedsAnyDay(diarioSeller, ind, days)) { body += diarioRow(ind, ind.color, false); anyDiario = true; }
+    diarioSubs.forEach(s => {
+      if (!diarioRowNeedsAnyDay(diarioSeller, s, days)) return;
+      body += diarioRow(s, ind.color, true);
+      anyDiario = true;
+    });
   });
   if (!anyDiario) body += `<tr><td class="empty" colspan="${days.length + 4}">Nenhum indicador com Check-in ou Check-out.<br>Ative em <b>KPIs</b> nos indicadores que entram no diário.</td></tr>`;
   body += "</tbody>";
@@ -3458,22 +3461,25 @@ function renderDiario() {
 }
 function diarioRow(cfg, color, isSub) {
   const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
-  const gated = cfg.sundayOnly && days.some(d => diarioFieldGated(diarioSeller, cfg, d));
-  const ci = cfg.checkin && !gated, co = cfg.checkout && !gated;
-  const label = (isSub ? `<span class="tag sub">↳</span> ${cfg.name}` : `<b style="color:${color}">${cfg.name}</b>`) + (gated ? ` <span class="hint" style="font-size:9px">🔒 só domingo</span>` : (cfg.sundayOnly ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">dom</span>` : ""));
+  const domTag = cfg.sundayOnly ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">dom · véspera</span>` : "";
+  const label = (isSub ? `<span class="tag sub">↳</span> ${cfg.name}` : `<b style="color:${color}">${cfg.name}</b>`) + domTag;
   let row = `<tr class="${isSub?'dsub':'dgroup'}" style="--gc:${color}"><td class="name" style="border-left:3px solid ${color};">${label}</td>`;
-  row += `<td><span class="neon">${fmt(cfg.metaDay)}</span>${Number(cfg.metaSat)?`<br><span class="muted" style="font-size:10px">sáb ${fmt(cfg.metaSat)}</span>`:''}</td>`;
+  row += `<td><span class="neon">${fmt(cfg.metaDay)}</span>${Number(cfg.metaSat)?`<br><span class="muted" style="font-size:10px">sáb ${fmt(cfg.metaSat)}</span>`:''}${Number(cfg.metaSun)?`<br><span class="muted" style="font-size:10px">dom ${fmt(cfg.metaSun)}</span>`:''}</td>`;
   days.forEach(d => {
+    const needs = diarioFieldNeeds(diarioSeller, cfg, d);
     const editable = diarioDayEditable(d);
     const ro = editable ? "" : ' readonly tabindex="-1"';
-    const c = getCell(diarioSeller, cfg.id, d); let cell = '<div class="daycell">';
-    if (ci) cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"${ro}></label>`;
-    if (co) {
+    const c = getCell(diarioSeller, cfg.id, d);
+    let cell = '<div class="daycell">';
+    if (needs.checkin) cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"${ro}></label>`;
+    if (needs.checkout) {
       const metaD = metaForDay(cfg, currentMonth, d);
       const pct = metaD ? (c.real != null ? c.real / metaD : null) : null;
       cell += `<label class="dio-field dio-checkout"><span class="dio-lbl">Check-out${cellSourceTag(c, "real")}</span><input class="cellinput checkout-cell" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${c.real ?? ''}" placeholder="—" style="color:${c.real != null ? heatText(pct) : 'var(--text)'};"${ro}></label>`;
     }
-    cell += '</div>'; row += `<td class="${dayCls(d)}${editable ? "" : " dio-locked-day"}">${cell}</td>`;
+    if (!needs.checkin && !needs.checkout) cell += `<span class="muted" style="font-size:10px;opacity:.45">—</span>`;
+    cell += '</div>';
+    row += `<td class="${dayCls(d)}${editable ? "" : " dio-locked-day"}">${cell}</td>`;
   });
   const realSum = accum(diarioSeller, cfg.id, "real", days) ?? 0;
   const metaSum = weekMeta(cfg, days);
