@@ -825,6 +825,8 @@ let configApplying = false;
 let configListenerOn = false;
 
 function isConfigAdmin() { return !!(isAdmin || (typeof isDeviceAdmin === "function" && isDeviceAdmin())); }
+/** Só o admin Firebase (/admins/{uid}) pode gravar /config/operational — regras do Realtime Database. */
+function canPushOperationalConfig() { return !!(isAdmin && fbReady && fbDb && !configPushBlocked); }
 function fieldNameById(fieldId, st) {
   if (!fieldId) return "";
   for (const ind of st.indicators || []) {
@@ -969,23 +971,29 @@ function syncConfigToAllLojas(tpl) {
   });
 }
 function pushConfigTemplate() {
-  if (!isConfigAdmin() || !fbReady || !fbDb || configApplying || configPushBlocked) return;
+  if (!canPushOperationalConfig() || configApplying) return;
   const tpl = extractOperationalConfig(state);
   const hash = configHash(tpl);
   if (hash === lastPushedConfigHash) return;
   lastPushedConfigHash = hash;
   lastAppliedConfigVersion = tpl.updatedAt;
   fbDb.ref(CONFIG_OP_PATH).set(tpl).then(() => {
+    configWriteOk = true;
     syncConfigToAllLojas(tpl);
     if (divisionalMode()) toast("Configuração operacional sincronizada com todas as lojas");
+    if (activeView === "config") renderSync();
   }).catch(e => {
     const msg = String(e && e.message || e);
-    if (/PERMISSION_DENIED|permission_denied/i.test(msg)) configPushBlocked = true;
-    console.warn("config push falhou", e);
+    if (/PERMISSION_DENIED|permission_denied/i.test(msg)) {
+      configPushBlocked = true;
+      configWriteOk = false;
+    }
+    if (isAdmin) console.warn("config push falhou", e);
+    if (activeView === "config") renderSync();
   });
 }
 function queueConfigPush() {
-  if (!isConfigAdmin() || configApplying || configPushBlocked) return;
+  if (!canPushOperationalConfig() || configApplying) return;
   clearTimeout(configPushTimer);
   configPushTimer = setTimeout(pushConfigTemplate, 800);
 }
@@ -1053,6 +1061,7 @@ function todayDateKey() {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
 }
 let configPushBlocked = false;
+let configWriteOk = null;
 function normalizeDiarioUnlock(u, key) {
   if (!u || u.resetDate !== key) return { resetDate: key, days: [], past: false, future: false, week: false };
   if (!Array.isArray(u.days)) u.days = [];
@@ -3961,7 +3970,12 @@ function fbInit(){
     auth.onAuthStateChanged(user => {
       if (!user) return;
       authUid = user.uid; fbReady = true; if (lojaCode) myLojaId = lojaCode; setFbBadge(false);
-      try { fbDb.ref("admins/"+authUid).on("value", s => { isAdmin = (s.val()===true); if(activeView==="config") renderSync(); }); } catch(e){}
+      try { fbDb.ref("admins/"+authUid).on("value", s => {
+        const was = isAdmin;
+        isAdmin = (s.val() === true);
+        if (isAdmin && !was) { configPushBlocked = false; configWriteOk = null; queueConfigPush(); }
+        if (activeView === "config") renderSync();
+      }); } catch(e){}
       try { fbDb.ref("auth/adminDevices").on("value", s => { authAdminDevices = s.val() || {}; if(activeView==="config") renderSync(); }); } catch(e){}
       try { fbDb.ref("auth/master").on("value", s => { authMasterCache = s.val(); }); } catch(e){}
       fbDb.ref("lojas").on("value", snap => { remoteLojas = snap.val() || {}; setFbBadge(true); if(activeView==="fechamento"||activeView==="rscen") renderActive(); if(activeView==="config") renderSync(); },
@@ -4071,14 +4085,14 @@ function pullLoja(){
       state = migrate(v.data);
       state.storeName = v.name || lojaCode;
       applyTemplateFromCloud().then(() => {
-        save({ skipConfigPush: !isConfigAdmin() });
+        save({ skipConfigPush: !isAdmin });
         finish();
         toast("Loja "+lojaCode+" carregada da nuvem");
       });
     } else {
       state.storeName = lojaCode;
       applyTemplateFromCloud().then(() => {
-        save({ skipConfigPush: !isConfigAdmin() });
+        save({ skipConfigPush: !isAdmin });
         fbPush();
         finish();
         toast("Nova loja "+lojaCode+" criada");
@@ -4107,7 +4121,10 @@ function renderSync(){
   const el = document.getElementById("syncPanel"); if(!el) return;
   const div = divisionalMode(); const lojas = allLojas();
   let html = `<h2>Sincronização &amp; Lojas</h2>`;
-  html += `<div class="sub">Tempo real: <b style="color:${fbReady?'var(--ok)':'var(--text-faint)'}">${fbReady?'ligado':'desligado (só local)'}</b> · ${div? '<b style="color:var(--accent-2)">Modo Divisional ('+escapeHtml(lojaCode)+')</b> — vê todas as lojas' : 'Sua loja: <code style="background:var(--cell);border:1px solid var(--border);padding:2px 8px;border-radius:6px;font-weight:800">'+escapeHtml(lojaCode||state.storeName||'—')+'</code>'} <button class="btn sec sm" id="trocarLoja">Trocar</button> ${isAdmin?'<span class="tag" style="background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)">ADMIN</span>':(div?'':'<span class="tag">gestor</span>')}</div>`;
+  const adminTag = isAdmin
+    ? '<span class="tag" style="background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)">ADMIN Firebase</span>'
+    : (isDeviceAdmin() ? '<span class="tag" style="background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)">ADMIN aparelho</span>' : (div ? '' : '<span class="tag">gestor</span>'));
+  html += `<div class="sub">Tempo real: <b style="color:${fbReady?'var(--ok)':'var(--text-faint)'}">${fbReady?'ligado':'desligado (só local)'}</b> · ${div? '<b style="color:var(--accent-2)">Modo Divisional ('+escapeHtml(lojaCode)+')</b> — vê todas as lojas' : 'Sua loja: <code style="background:var(--cell);border:1px solid var(--border);padding:2px 8px;border-radius:6px;font-weight:800">'+escapeHtml(lojaCode||state.storeName||'—')+'</code>'} <button class="btn sec sm" id="trocarLoja">Trocar</button> ${adminTag}</div>`;
   if (!div) {
     html += `<div class="hint" style="margin-top:6px;">Qualquer aparelho que abrir e digitar <b>${escapeHtml(lojaCode||'')}</b> carrega esta mesma configuração (a última sincronizada).</div>`;
     html += `<div class="row" style="margin-top:10px;"><button class="btn sec" id="reloadCloud">↻ Baixar da nuvem agora</button><button class="btn danger" id="clearMine">🗑 Apagar e recomeçar esta loja</button></div>`;
@@ -4117,7 +4134,16 @@ function renderSync(){
   if (isAdmin) {
     html += `<div style="margin-top:16px;"><b style="font-size:13px;">Lojas conectadas (admin)</b>` +
       (lojas.length? lojas.map(L=>`<div class="row" style="align-items:center; margin-top:8px; border-top:1px solid var(--border-soft); padding-top:8px;"><span style="flex:1; min-width:160px;"><b>${escapeHtml(L.name)}</b> <span class="hint">${L.self?'· você':''} · ${escapeHtml(String(L.id))}</span></span>${L.self?'<span class="hint">(use Apagar acima)</span>':`<button class="btn danger sm" data-del-loja="${L.id}">Excluir loja</button>`}</div>`).join("") : '<div class="empty">Nenhuma loja.</div>') + `</div>`;
-    html += `<div class="hint" style="margin-top:10px; padding:10px 12px; background:color-mix(in srgb,var(--ok) 8%,transparent); border-radius:8px; border:1px solid color-mix(in srgb,var(--ok) 25%,transparent);">Como <b>admin</b>, alterações em <b>KPIs / indicadores</b> (criar, remover, cores, check-in/out, taxas, ordem) sincronizam automaticamente com <b>todas as lojas VC</b> e o <b>RSCEN+</b>. Metas, vendedores e lançamentos permanecem locais de cada loja.</div>`;
+    const cfgSyncOk = configWriteOk === true && !configPushBlocked;
+    const cfgSyncBad = configPushBlocked || configWriteOk === false;
+    html += `<div class="hint" style="margin-top:10px; padding:10px 12px; background:color-mix(in srgb,${cfgSyncBad ? 'var(--warn)' : 'var(--ok)'} 8%,transparent); border-radius:8px; border:1px solid color-mix(in srgb,${cfgSyncBad ? 'var(--warn)' : 'var(--ok)'} 25%,transparent);">`;
+    html += `<b>Sync KPIs → todas as lojas</b> · `;
+    if (cfgSyncOk) html += `<span style="color:var(--ok)">✓ ativo</span> — alterações em indicadores (KPIs) propagam para lojas VC e RSCEN+.`;
+    else if (cfgSyncBad) html += `<span style="color:var(--warn)">⚠ bloqueado pelo Firebase</span> — cadastre seu UID <code style="font-size:10px">${escapeHtml(authUid||'—')}</code> em <code>/admins</code> e libere escrita em <code>/config/operational</code> nas regras. Metas e lançamentos locais continuam normais.`;
+    else html += `<span style="color:var(--text-dim)">aguardando…</span> — ao editar KPIs, o template operacional será publicado se as regras permitirem.`;
+    html += `</div>`;
+  } else if (isDeviceAdmin()) {
+    html += `<div class="hint" style="margin-top:12px; padding:10px 12px; background:color-mix(in srgb,var(--warn) 8%,transparent); border-radius:8px; border:1px solid color-mix(in srgb,var(--warn) 28%,transparent);"><b>Admin deste aparelho</b> (ID <code style="font-size:10px">${escapeHtml(getDeviceId())}</code>) — senha mestra e gestão de lojas OK.<br>Para <b>sync de KPIs em todas as lojas</b>, cadastre também o UID Firebase <code style="font-size:10px">${escapeHtml(authUid||'—')}</code> em <code>/admins/{uid}</code> (não basta só o ID do Mac).</div>`;
   } else if (!div) {
     html += `<div class="hint" style="margin-top:12px;">Só o <b>admin</b> exclui lojas. ID deste aparelho (para virar admin): <code style="font-size:10px">${escapeHtml(authUid||'—')}</code></div>`;
   }
