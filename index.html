@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v18";
+  var BUILD = "v19";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -922,6 +922,7 @@ function migrate(s) {
       if (sub.metaSun == null) sub.metaSun = 0;
       if (sub.lowerBetter == null) sub.lowerBetter = false;
       if (sub.openQuestion == null) sub.openQuestion = false;
+      if (sub.planCrossId == null) sub.planCrossId = "";
     });
     if (i.openQuestion == null) i.openQuestion = false;
     (i.rates || []).forEach(r => { if (r.lowerBetter == null) r.lowerBetter = false; });
@@ -977,7 +978,8 @@ function extractOperationalConfig(st) {
       checkout: !!s.checkout,
       lowerBetter: !!s.lowerBetter,
       sundayOnly: !!s.sundayOnly,
-      openQuestion: !!s.openQuestion
+      openQuestion: !!s.openQuestion,
+      planCrossName: fieldNameById(s.planCrossId, st) || ""
     })),
     rates: (ind.rates || []).map(r => ({
       name: r.name,
@@ -1031,6 +1033,7 @@ function applyOperationalConfig(st, tpl, opts) {
         lowerBetter: ts.lowerBetter,
         sundayOnly: !!ts.sundayOnly,
         openQuestion: !!ts.openQuestion,
+        planCrossId: ls?.planCrossId || "",
         metaDay: ls?.metaDay ?? 0,
         metaSat: ls?.metaSat ?? 0,
         metaSun: ls?.metaSun ?? 0,
@@ -1060,6 +1063,12 @@ function applyOperationalConfig(st, tpl, opts) {
       if (tr) {
         r.numId = resolveFieldIdByName(tr.numName, { indicators: newIndicators });
         r.denId = resolveFieldIdByName(tr.denName, { indicators: newIndicators });
+      }
+    });
+    (ind.subs || []).forEach(s => {
+      const ts = (tInd?.subs || []).find(x => x.name === s.name);
+      if (ts?.planCrossName) {
+        s.planCrossId = resolveFieldIdByName(ts.planCrossName, { indicators: newIndicators }) || s.planCrossId || "";
       }
     });
   });
@@ -1539,7 +1548,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v18";
+const APP_BUILD = "v19";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4392,7 +4401,10 @@ function renderIndicatorConfig() {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
       (ind.subs||[]).forEach(s => {
         const subLb = cfgLowerBetter(s) || cfgLowerBetter(ind);
-        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`;
+        const crossOpts = (ind.subs || []).filter(x => x.id !== s.id && x.checkin && !x.openQuestion)
+          .map(x => `<option value="${x.id}"${s.planCrossId === x.id ? " selected" : ""}>${escapeHtml(x.name)}</option>`).join("");
+        const crossSel = s.openQuestion ? `<span class="hint" title="Check-in numérico para comparar confirmações">cruzar</span><select class="sub-field" data-sk="planCrossId" style="max-width:140px;font-size:11px"><option value="">auto</option>${crossOpts}</select>` : "";
+        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label>${crossSel}<label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-del-sub="${s.id}">✕</button></div>`;
       });
       html += `</div>`;
     }
@@ -4484,7 +4496,7 @@ function bindIndicatorEvents() {
     card.querySelectorAll("[data-meta]").forEach(f => f.addEventListener("change", () => { ind[f.dataset.meta]=Number(f.value)||0; save(); refreshMetaAdherence(ind.id); }));
     card.querySelectorAll(".metaloja-inp[data-field]").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-ind]").forEach(b => b.addEventListener("click", () => { if(confirm("Excluir este indicador?")){ const id = b.dataset.delInd; state.indicators = state.indicators.filter(i=>i.id!==id); if (state.order.indicators) state.order.indicators = state.order.indicators.filter(x => x !== id); save(); renderIndicatorConfig(); } }));
-  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false, openQuestion:false }); save(); renderIndicatorConfig(); }));
+  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false, openQuestion:false, planCrossId:"" }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".sub-row").forEach(row => { const ind = findIndBySub(row.dataset.sub); const s = ind && ind.subs.find(x=>x.id===row.dataset.sub); if(!s) return;
     row.querySelectorAll(".sub-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => {
       const k = f.dataset.sk;
