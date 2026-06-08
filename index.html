@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v38";
+  var BUILD = "v39";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -940,7 +940,10 @@ function migrate(s) {
     if (i.openQuestion == null) i.openQuestion = false;
     if (i.planCrossId == null) i.planCrossId = "";
     if (!Array.isArray(i.planCrossIds)) i.planCrossIds = i.planCrossId ? [i.planCrossId] : [];
-    (i.rates || []).forEach(r => { if (r.lowerBetter == null) r.lowerBetter = false; });
+    (i.rates || []).forEach(r => {
+      if (r.lowerBetter == null) r.lowerBetter = false;
+      if (r.absolute == null) r.absolute = false;
+    });
   });
   (s.sellers || []).forEach(seller => {
     if (seller.matricula == null) seller.matricula = "";
@@ -1044,7 +1047,8 @@ function extractOperationalConfig(st) {
       denName: fieldNameById(r.denId, st),
       invert: !!r.invert,
       manual: !!r.manual,
-      lowerBetter: !!r.lowerBetter
+      lowerBetter: !!r.lowerBetter,
+      absolute: !!r.absolute
     }))
   }));
   const idToName = Object.fromEntries((st.indicators || []).map(i => [i.id, i.name]));
@@ -1111,6 +1115,7 @@ function applyOperationalConfig(st, tpl, opts) {
         invert: tr.invert,
         manual: tr.manual,
         lowerBetter: tr.lowerBetter,
+        absolute: lr?.absolute ?? !!tr.absolute,
         target: lr?.target ?? 0
       };
     });
@@ -1618,7 +1623,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v38";
+const APP_BUILD = "v39";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -1784,7 +1789,9 @@ function rateValue(rate, sellerIds, m = currentMonth) {
   if (rate.manual) { let s = 0, c = 0; sellerIds.forEach(id => { const v = getSystemRate(id, rate.id, m); if (v != null) { s += v; c++; } }); return c ? s / c : null; }
   let num = 0, den = 0, hasN = false, hasD = false;
   sellerIds.forEach(id => { const a = getSystem(id, rate.numId, m); if (a != null) { num += a; hasN = true; } const b = getSystem(id, rate.denId, m); if (b != null) { den += b; hasD = true; } });
-  if (!hasN && !hasD) return null; let A = num, B = den; if (rate.invert) { const t = A; A = B; B = t; } if (!B) return null; return (A / B) * 100;
+  if (!hasN && !hasD) return null; let A = num, B = den; if (rate.invert) { const t = A; A = B; B = t; } if (!B) return null;
+  if (rate.absolute) return A;
+  return (A / B) * 100;
 }
 
 /* Cores */
@@ -1964,6 +1971,20 @@ function cfgLowerBetter(cfg, parentInd) {
 function rateLowerBetter(rate, ind) {
   return !!(rate && rate.lowerBetter) || !!(ind && ind.lowerBetter);
 }
+function rateIsAbsolute(rate) { return !!(rate && rate.absolute); }
+function rateIsPercent(rate) { return !rateIsAbsolute(rate); }
+function rateFmtValue(rate, val, ind) {
+  if (val == null) return "—";
+  const lb = rateLowerBetter(rate, ind);
+  if (rateIsAbsolute(rate)) return fmt(val, 0);
+  return lb ? fmtPctFineUnit(val) : fmt(val, 0) + "%";
+}
+function rateFmtTarget(rate, tgt, ind) {
+  if (!tgt) return "—";
+  const lb = rateLowerBetter(rate, ind);
+  if (rateIsAbsolute(rate)) return fmt(tgt, 0);
+  return lb ? fmtPctFineUnit(tgt) : tgt + "%";
+}
 /** Faixa de alerta abaixo do teto (ex.: alvo 2,9% → amarelo acima de 2,4%). */
 const MATRIZ_LOWER_WARN_PP = 0.5;
 function matrizLowerWarnMargin(target, isPercent) {
@@ -2067,19 +2088,23 @@ function matrizRateRatio(valuePct, targetPct, lowerBetter) {
 }
 function matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam) {
   const lb = rateLowerBetter(rate, ind);
+  const pct = rateIsPercent(rate);
   const rp = matrizRateRatio(rv, tgt, lb);
   const lines = [
     "Taxa: " + rate.name,
+    rateIsAbsolute(rate) ? "Unidade: número absoluto" : "Unidade: percentual (%)",
     lb ? "Modo: quanto menor melhor ↓" : "Modo: quanto maior melhor ↑",
-    rate.manual ? "Fonte: gestor (sistema) ⚙" : "Fonte: calculada (numerador ÷ denominador)",
-    "Valor: " + (rv == null ? "—" : (lb ? fmtPctFineUnit(rv) : fmt(rv, 0) + "%")),
-    "Alvo: " + (tgt ? (lb ? fmtPctFineUnit(tgt) : tgt + "%") : "—"),
+    rate.manual ? "Fonte: gestor (sistema) ⚙" : (rateIsAbsolute(rate) ? "Fonte: soma do numerador" : "Fonte: calculada (numerador ÷ denominador)"),
+    "Valor: " + rateFmtValue(rate, rv, ind),
+    "Alvo: " + rateFmtTarget(rate, tgt, ind),
   ];
   if (rv != null && tgt) {
     if (lb) {
-      const m = matrizLowerWarnMargin(tgt, true);
-      lines.push("Alerta amarelo: acima de " + fmtPctFineUnit(Math.max(0, tgt - m)) + " (até " + m + " p.p. abaixo do alvo)");
-      lines.push("Situação: " + matrizLowerBetterLabel(rv, tgt, true));
+      const m = matrizLowerWarnMargin(tgt, pct);
+      lines.push(pct
+        ? "Alerta amarelo: acima de " + fmtPctFineUnit(Math.max(0, tgt - m)) + " (até " + m + " p.p. abaixo do alvo)"
+        : "Alerta amarelo: acima de " + fmt(Math.max(0, tgt - m), 0) + " (até " + fmt(m, 0) + " abaixo do alvo)");
+      lines.push("Situação: " + matrizLowerBetterLabel(rv, tgt, pct));
     } else {
       lines.push("Relação: " + Math.round((rp || 0) * 100) + "% do alvo · " + heatMatrizBandLabel(rp));
       lines.push("Cor: verde ≥100% do alvo · amarelo 70–99% · vermelho &lt;70%");
@@ -2106,9 +2131,9 @@ function matrizRateCells(rate, ids, days, periodo, ind, isTeam, rvOverride) {
   const lb = rateLowerBetter(rate, ind);
   const rp = matrizRateRatio(rv, tgt, lb);
   const tip = matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam);
-  const color = lb && rv != null && tgt ? heatMatrizLowerBetterColor(rv, tgt, true) : heatMatrizText(rp);
-  const valDisp = rv == null ? "—" : (lb ? fmtPctFineUnit(rv) : fmt(rv, 0) + "%");
-  const tgtDisp = tgt ? (lb ? fmtPctFineUnit(tgt) : tgt + "%") : "—";
+  const color = lb && rv != null && tgt ? heatMatrizLowerBetterColor(rv, tgt, rateIsPercent(rate)) : heatMatrizText(rp);
+  const valDisp = rateFmtValue(rate, rv, ind);
+  const tgtDisp = rateFmtTarget(rate, tgt, ind);
   return `<td style="border-left:3px solid ${ind.color}; color:${color}; font-weight:700;"${matrizTipData(tip, ind.color)}>${valDisp}</td><td class="muted">${tgtDisp}</td>`;
 }
 function matrizTipArvTotalReal(ind, real, lojaCount) {
@@ -2410,6 +2435,7 @@ function rateValueForMatriz(rate, sellerIds, days, periodo, m = currentMonth) {
   let A = num, B = den;
   if (rate.invert) { const t = A; A = B; B = t; }
   if (!B) return null;
+  if (rate.absolute) return A;
   return (A / B) * 100;
 }
 function sellerMetaCapacity(cfg, sellerId, m = currentMonth) {
@@ -3663,14 +3689,15 @@ function renderLancamentoCards(sellerId) {
     }
     (ind.rates||[]).forEach(r => {
       const rLb = rateLowerBetter(r, ind);
+      const unit = rateIsAbsolute(r) ? "nº" : "%";
       if (r.manual) {
-        const step = rLb ? "0.01" : "1";
-        fields += `<div class="sysfield rate"><label>% ${r.name}</label><input type="number" class="sysratecell" data-rate="${r.id}" step="${step}" inputmode="decimal" value="${getSystemRate(sellerId, r.id) ?? ''}" placeholder="${rLb ? '0,00' : '0'}"></div>`;
+        const step = rateIsAbsolute(r) ? "1" : (rLb ? "0.01" : "1");
+        fields += `<div class="sysfield rate"><label>${unit} ${r.name}</label><input type="number" class="sysratecell" data-rate="${r.id}" step="${step}" inputmode="${rateIsAbsolute(r) ? 'numeric' : 'decimal'}" value="${getSystemRate(sellerId, r.id) ?? ''}" placeholder="${rateIsAbsolute(r) ? '0' : (rLb ? '0,00' : '0')}"></div>`;
       } else {
         const rv = rateValue(r, [sellerId]); const tgt = matrizRateTarget(r);
-        const rvDisp = rv == null ? "—" : (rLb ? fmtPctFineUnit(rv) : fmt(rv, 0) + "%");
-        const tgtDisp = tgt ? (rLb ? fmtPctFineUnit(tgt) : tgt + "%") : "";
-        fields += `<div class="sysfield rate calc"><label>% ${r.name} <span class="hint">auto</span></label><div class="syscalc">${rvDisp}${tgtDisp ? ` <span class="muted">/ alvo ${tgtDisp}</span>` : ""}</div></div>`;
+        const rvDisp = rateFmtValue(r, rv, ind);
+        const tgtDisp = tgt ? rateFmtTarget(r, tgt, ind) : "";
+        fields += `<div class="sysfield rate calc"><label>${unit} ${r.name} <span class="hint">auto</span></label><div class="syscalc">${rvDisp}${tgtDisp ? ` <span class="muted">/ alvo ${tgtDisp}</span>` : ""}</div></div>`;
       }
     });
     if (!fields) return "";
@@ -4722,7 +4749,7 @@ function lowerBetterPanelHtml(ind) {
   const t = kpiSampleTargetPct(ind, rateLb);
   const m = MATRIZ_LOWER_WARN_PP;
   const floor = Math.max(0, t - m);
-  const unit = ind.pctOnly || (rateLb && rateLb.manual) ? "%" : "";
+  const unit = ind.pctOnly || (rateLb && rateLb.manual && !rateLb.absolute) ? "%" : (rateLb && rateLb.absolute ? "nº" : "");
   return `<div class="lower-better-panel">
     <span class="lb-title">↓ Quanto menor melhor — regras de cor na matriz</span>
     <div class="lb-chips">
@@ -4760,7 +4787,7 @@ function renderIndicatorConfig() {
     }
     html += `<div class="rate-list"><div class="flex-between"><b style="font-size:12.5px;">Taxas (A ÷ B)</b><button class="btn sec sm" data-add-rate="${ind.id}">+ taxa</button></div>`;
     const opts = fields.map(f => `<option value="${f.id}">${f.kind==='sub'?'↳ ':''}${escapeHtml(f.name)}</option>`).join("");
-    (ind.rates||[]).forEach(r => { const rLb = rateLowerBetter(r, ind); html += `<div class="rate-row${rLb ? " lower-better-row" : ""}" data-rate="${r.id}"><span class="kpi-draghandle" draggable="true" data-drag-kpi-rate="${r.id}" title="Arrastar taxa">⋮⋮</span><span class="tag">%</span><input type="text" value="${escapeHtml(r.name)}" data-rk="name" class="rate-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="rate-field" data-rk="lowerBetter" ${r.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><label class="switch"><input type="checkbox" class="rate-field" data-rk="manual" ${r.manual?'checked':''}><span class="track"></span>Manual</label>${r.manual?'':`<select data-rk="numId" class="rate-field">${opts}</select><b>÷</b><select data-rk="denId" class="rate-field">${opts}</select><label class="switch"><input type="checkbox" class="rate-field" data-rk="invert" ${r.invert?'checked':''}><span class="track"></span>Inverter</label>`}<span class="hint">alvo %</span><input type="number" value="${r.target}" data-rk="target" class="rate-field" style="width:56px;" title="Meta do consultor (%)"><span class="hint">loja %</span><input type="number" class="rate-field metaloja-inp" data-field="${r.id}" value="${getMetaLoja(r.id) ?? ''}" placeholder="—" style="width:56px;" title="Meta da loja (%)"><button class="iconbtn" data-del-rate="${r.id}">✕</button></div>`; });
+    (ind.rates||[]).forEach(r => { html += rateConfigRowHtml(r, ind, opts); });
     html += `</div></div>`;
     return html;
   }).join("") || '<div class="empty">Nenhum indicador.</div>';
@@ -4826,6 +4853,14 @@ function metaGoalsQtyHtml(cfg, fieldId) {
     <div class="field"><label>Meta da loja</label><input type="number" class="metaloja-inp" data-field="${fieldId}" value="${getMetaLoja(fieldId) ?? ''}" placeholder="—" title="Total sistêmico da loja no mês"></div>
   </div>${metaAdherenceHtml(cfg, fieldId)}</div>`;
 }
+function rateConfigRowHtml(r, ind, optsHtml) {
+  const rLb = rateLowerBetter(r, ind);
+  const unitTag = rateIsAbsolute(r) ? "nº" : "%";
+  const tgtLbl = rateIsAbsolute(r) ? "alvo" : "alvo %";
+  const lojaLbl = rateIsAbsolute(r) ? "loja" : "loja %";
+  const formula = r.manual ? "" : `<select data-rk="numId" class="rate-field">${optsHtml}</select><b>÷</b><select data-rk="denId" class="rate-field">${optsHtml}</select><label class="switch"><input type="checkbox" class="rate-field" data-rk="invert" ${r.invert ? "checked" : ""}><span class="track"></span>Inverter</label>`;
+  return `<div class="rate-row${rLb ? " lower-better-row" : ""}" data-rate="${r.id}"><span class="kpi-draghandle" draggable="true" data-drag-kpi-rate="${r.id}" title="Arrastar taxa">⋮⋮</span><span class="tag">${unitTag}</span><input type="text" value="${escapeHtml(r.name)}" data-rk="name" class="rate-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="rate-field" data-rk="lowerBetter" ${r.lowerBetter ? "checked" : ""}><span class="track"></span>↓ menor</label><label class="switch" title="Valor em quantidade (ex.: oportunidades NPS), não em %"><input type="checkbox" class="rate-field" data-rk="absolute" ${r.absolute ? "checked" : ""}><span class="track"></span>Nº absoluto</label><label class="switch"><input type="checkbox" class="rate-field" data-rk="manual" ${r.manual ? "checked" : ""}><span class="track"></span>Manual</label>${formula}<span class="hint">${tgtLbl}</span><input type="number" value="${r.target}" data-rk="target" class="rate-field" style="width:56px;" title="Meta do consultor"><span class="hint">${lojaLbl}</span><input type="number" class="rate-field metaloja-inp" data-field="${r.id}" value="${getMetaLoja(r.id) ?? ""}" placeholder="—" style="width:56px;" title="Meta da loja"><button class="iconbtn" data-del-rate="${r.id}">✕</button></div>`;
+}
 function findIndByRate(rid){ return state.indicators.find(i => (i.rates||[]).some(r=>r.id===rid)); }
 function findIndBySub(sid){ return state.indicators.find(i => (i.subs||[]).some(s=>s.id===sid)); }
 function bindIndicatorEvents() {
@@ -4856,12 +4891,13 @@ function bindIndicatorEvents() {
     }));
     row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-sub]").forEach(b => b.addEventListener("click", () => { const ind = findIndBySub(b.dataset.delSub); ind.subs = ind.subs.filter(s=>s.id!==b.dataset.delSub); save(); renderIndicatorConfig(); }));
-  list.querySelectorAll("[data-add-rate]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addRate); const f = allFields(); ind.rates = ind.rates||[]; ind.rates.push({ id:uid(), name:"Nova taxa %", numId:(f[0]&&f[0].id)||"", denId:(f[1]&&f[1].id)||(f[0]&&f[0].id)||"", invert:false, target:0, manual:false, lowerBetter:false }); save(); renderIndicatorConfig(); }));
+  list.querySelectorAll("[data-add-rate]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addRate); const f = allFields(); ind.rates = ind.rates||[]; ind.rates.push({ id:uid(), name:"Nova taxa", numId:(f[0]&&f[0].id)||"", denId:(f[1]&&f[1].id)||(f[0]&&f[0].id)||"", invert:false, target:0, manual:false, lowerBetter:false, absolute:false }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".rate-row").forEach(row => { const ind = findIndByRate(row.dataset.rate); const r = ind && ind.rates.find(x=>x.id===row.dataset.rate); if(!r) return;
     row.querySelectorAll(".rate-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => {
       const k = f.dataset.rk;
       r[k] = f.type === "checkbox" ? f.checked : (k === "target" ? Number(f.value) || 0 : f.value);
-      if (k === "lowerBetter") { renderMatrizLegend(); renderMatrizLegend("arvoreLegend", "arvoreLegendHint"); matrizUiRerender(); }
+      if (k === "absolute" && r.absolute) r.manual = true;
+      if (k === "lowerBetter" || k === "absolute") { renderMatrizLegend(); renderMatrizLegend("arvoreLegend", "arvoreLegendHint"); matrizUiRerender(); }
       save(); renderIndicatorConfig();
     }));
     row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });

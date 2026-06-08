@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v38";
+  var BUILD = "v39";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -479,7 +479,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v38";
+const APP_BUILD = "v39";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -982,6 +982,7 @@ function normalizeLojaIndicators() {
       if (!Array.isArray(sub.planCrossIds)) sub.planCrossIds = sub.planCrossId ? [sub.planCrossId] : [];
       normalizePlanCrossIds(sub);
     });
+    (ind.rates || []).forEach(r => { if (r.absolute == null) r.absolute = false; });
   });
 }
 function metaForDay(cfg, month, day) {
@@ -1180,6 +1181,7 @@ function rateValueForSeller(rate, sellerId, m = todayISO()) {
   let A = num, B = den;
   if (rate.invert) { const t = A; A = B; B = t; }
   if (!B) return null;
+  if (rate.absolute) return A;
   return (A / B) * 100;
 }
 function fieldAccuracy(sellerId, fieldId, days, m = todayISO()) {
@@ -1195,6 +1197,20 @@ function cfgLowerBetter(cfg, parentInd) {
 }
 function rateLowerBetter(rate, ind) {
   return !!(rate && rate.lowerBetter) || !!(ind && ind.lowerBetter);
+}
+function rateIsAbsolute(rate) { return !!(rate && rate.absolute); }
+function rateIsPercent(rate) { return !rateIsAbsolute(rate); }
+function rateFmtValue(rate, val, ind) {
+  if (val == null) return "—";
+  const lb = rateLowerBetter(rate, ind);
+  if (rateIsAbsolute(rate)) return fmt(val, 0);
+  return lb ? fmtPctFineUnit(val) : fmt(val, 0) + "%";
+}
+function rateFmtTarget(rate, tgt, ind) {
+  if (!tgt) return "—";
+  const lb = rateLowerBetter(rate, ind);
+  if (rateIsAbsolute(rate)) return fmt(tgt, 0);
+  return lb ? fmtPctFineUnit(tgt) : tgt + "%";
 }
 const MATRIZ_LOWER_WARN_PP = 0.5;
 function matrizLowerWarnMargin(target, isPercent) {
@@ -1576,11 +1592,12 @@ function resumoRateRow(rate, ind, color, sellerId, m = todayISO(), sub) {
   const target = matrizRateTarget(rate, m);
   const lb = rateLowerBetter(rate, ind);
   const perfRatio = matrizRateRatio(val, target, lb);
-  const heatColor = resumoHeatColor(val, target, perfRatio, lb, true);
-  const barW = resumoBarWidth(val, target, perfRatio, lb, true);
+  const isPct = rateIsPercent(rate);
+  const heatColor = resumoHeatColor(val, target, perfRatio, lb, isPct);
+  const barW = resumoBarWidth(val, target, perfRatio, lb, isPct);
   const label = rateDisplayName(rate, ind);
-  const valDisp = val == null ? "—" : (lb ? fmtPctFineUnit(val) : fmt(val, 0) + "%");
-  const tgtDisp = target ? (lb ? fmtPctFineUnit(target) : target + "%") : "—";
+  const valDisp = rateFmtValue(rate, val, ind);
+  const tgtDisp = rateFmtTarget(rate, target, ind);
   const pctDisp = perfRatio != null ? pctTxt(perfRatio) : "—";
   const atingMeta = resumoAtingTxt(perfRatio, lb);
   return `<div class="resumo-row rate${sub ? " sub" : ""}" style="--rc:${color};--bc:${heatColor}">
