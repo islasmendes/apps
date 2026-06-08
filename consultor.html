@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v45";
+  var BUILD = "v46";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -30,6 +30,10 @@
   }).catch(function () { norm(BUILD); });
 })();
 </script>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://gestao-altaperformance-default-rtdb.firebaseio.com">
+<link rel="dns-prefetch" href="https://www.gstatic.com">
+<link rel="dns-prefetch" href="https://gestao-altaperformance-default-rtdb.firebaseio.com">
 <meta name="theme-color" content="#050506">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Meu Dia — Gestão Alta Performance</title>
@@ -434,12 +438,13 @@
     <div class="content">
       <div class="card">
         <h2>Entrar</h2>
-        <p class="sub">Use a <b>matrícula</b> e o <b>PIN</b> definidos pelo gestor em Regras de Negócio. Requer internet para sincronizar ao vivo. Se a tela parecer antiga, peça ao gestor um <b>link novo</b> ou force atualizar (puxe para baixo / recarregar).</p>
+        <p class="sub">Use a <b>matrícula</b> e o <b>PIN</b> definidos pelo gestor em Regras de Negócio. Requer internet para sincronizar ao vivo. Em celulares antigos, prefira o <b>Google Chrome</b>. Se a tela parecer antiga, peça ao gestor um <b>link novo</b> ou force atualizar (puxe para baixo / recarregar).</p>
         <div class="field"><label>Loja</label><input id="inLoja" placeholder="VCANT" autocapitalize="characters" autocomplete="organization"></div>
         <div class="field"><label>Matrícula</label><input id="inMat" placeholder="Ex.: 10482" inputmode="numeric" autocomplete="username"></div>
         <div class="field"><label>PIN</label><input id="inPin" type="password" placeholder="••••" inputmode="numeric" maxlength="8" autocomplete="current-password"></div>
         <div class="err" id="loginErr"></div>
         <button class="btn" id="btnLogin">Acessar meu dia</button>
+        <button type="button" class="btn sec sm" id="btnRetryCloud" style="display:none;margin-top:10px;width:100%">↺ Tentar conexão com a nuvem</button>
       </div>
     </div>
   </section>
@@ -497,11 +502,14 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v45";
+const APP_BUILD = "v46";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
-let fbDb = null, fbReady = false, connected = false;
+let fbDb = null, fbReady = false, connected = false, fbConnecting = false;
+const FB_CONNECT_MAX = 6;
+const FB_CONNECT_BASE_MS = 1200;
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 let lojaData = null, lojaCode = "", seller = null, lojaListener = null;
 let tickTimer = null, lastRenderDay = null, lastTimePhase = null;
 const CONSULTOR_SCHEDULE_DEFAULTS = {
@@ -658,6 +666,100 @@ function setLive(on, txt) {
   const pill = document.getElementById("livePill");
   pill.classList.toggle("on", on);
   document.getElementById("liveTxt").textContent = txt || (on ? "ao vivo" : "offline");
+}
+function updateLoginCloudUi(msg) {
+  const err = document.getElementById("loginErr");
+  const btn = document.getElementById("btnLogin");
+  const retry = document.getElementById("btnRetryCloud");
+  if (fbReady) {
+    if (btn) { btn.disabled = false; btn.textContent = "Acessar meu dia"; }
+    if (retry) retry.style.display = "none";
+    if (err && err.dataset.cloudMsg) { err.textContent = ""; delete err.dataset.cloudMsg; err.style.color = ""; }
+    return;
+  }
+  if (fbConnecting) {
+    if (btn) { btn.disabled = true; btn.textContent = "Conectando à nuvem…"; }
+    if (retry) retry.style.display = "none";
+    if (err) {
+      err.textContent = msg || "Inicializando conexão com a nuvem…";
+      err.dataset.cloudMsg = "1";
+      err.style.color = "var(--text-dim)";
+    }
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = "Acessar meu dia"; }
+    if (retry) retry.style.display = "inline-flex";
+    if (err && err.dataset.cloudMsg) {
+      err.textContent = msg || "Sem conexão com a nuvem. Toque em Tentar de novo ou abra no Chrome.";
+      err.style.color = "var(--danger)";
+    }
+  }
+}
+async function waitForFbReady(timeoutMs = 22000) {
+  const t0 = Date.now();
+  while (!fbReady && Date.now() - t0 < timeoutMs) {
+    if (!fbConnecting) connectCloud();
+    await sleep(450);
+  }
+  return fbReady;
+}
+function attachFbConnectionListener() {
+  if (!fbDb || window._fbConnListener) return;
+  window._fbConnListener = true;
+  fbDb.ref(".info/connected").on("value", s => {
+    connected = !!(s && s.val());
+    setLive(connected, connected ? "ao vivo" : "reconectando…");
+    if (!connected && fbDb) {
+      clearTimeout(window._fbGoOnlineT);
+      window._fbGoOnlineT = setTimeout(() => { try { fbDb.goOnline(); } catch (e) {} }, 2800);
+    }
+  });
+}
+async function connectCloud() {
+  if (fbReady) return true;
+  if (fbConnecting) return waitForFbReady();
+  if (typeof firebase === "undefined") {
+    setLive(false, "offline");
+    updateLoginCloudUi("Biblioteca da nuvem não carregou. Use o Google Chrome ou atualize o navegador.");
+    return false;
+  }
+  fbConnecting = true;
+  updateLoginCloudUi("Conectando à nuvem…");
+  try {
+    if (!fbDb) {
+      try { firebase.initializeApp(FIREBASE_CONFIG); } catch (e) {
+        if (!/already exists/i.test(String(e && e.message))) throw e;
+      }
+      fbDb = firebase.database();
+    }
+    for (let i = 0; i < FB_CONNECT_MAX; i++) {
+      updateLoginCloudUi(`Conectando à nuvem… (${i + 1}/${FB_CONNECT_MAX})`);
+      try {
+        await firebase.auth().signInAnonymously();
+        fbReady = true;
+        setLive(false, "conectando…");
+        watchAppBuild();
+        attachFbConnectionListener();
+        startTickLoop();
+        tryRestore().then(ok => { if (!ok) showScreen("screenLogin"); });
+        updateLoginCloudUi();
+        return true;
+      } catch (e) {
+        console.warn("nuvem tentativa", i + 1, e);
+        await sleep(FB_CONNECT_BASE_MS * Math.pow(1.45, i));
+      }
+    }
+    setLive(false, "offline");
+    updateLoginCloudUi("Sem conexão com a nuvem. Rede lenta ou navegador antigo — tente de novo ou use o Chrome.");
+    return false;
+  } catch (e) {
+    console.warn(e);
+    setLive(false, "offline");
+    updateLoginCloudUi("Erro ao iniciar a nuvem. Tente de novo ou use o Google Chrome.");
+    return false;
+  } finally {
+    fbConnecting = false;
+    if (!fbReady) updateLoginCloudUi();
+  }
 }
 function showScreen(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
@@ -2355,7 +2457,20 @@ async function doLogin(loja, mat, pin) {
   const matNorm = String(mat).trim();
   if (!matNorm) { err.textContent = "Informe a matrícula."; return; }
   if (!/^\d{4,8}$/.test(pin)) { err.textContent = "PIN deve ter 4 a 8 dígitos."; return; }
-  if (!fbReady) { err.textContent = "Sem conexão com a nuvem. Tente novamente."; return; }
+  if (!fbReady) {
+    err.style.color = "var(--text-dim)";
+    err.textContent = "Conectando à nuvem…";
+    if (!await waitForFbReady()) {
+      err.style.color = "";
+      err.textContent = "Sem conexão com a nuvem. Toque em Tentar de novo.";
+      return;
+    }
+    err.style.color = "";
+  }
+  if (!window.crypto || !crypto.subtle) {
+    err.textContent = "Este navegador não suporta verificação de PIN. Use o Google Chrome.";
+    return;
+  }
   err.textContent = "Verificando…";
   try {
     const snap = await fbDb.ref("lojas/" + lojaCode).once("value");
@@ -2452,26 +2567,9 @@ function watchAppBuild() {
   });
 }
 function fbInit() {
-  try {
-    firebase.initializeApp(FIREBASE_CONFIG);
-    fbDb = firebase.database();
-    firebase.auth().signInAnonymously().then(() => {
-      fbReady = true;
-      watchAppBuild();
-      fbDb.ref(".info/connected").on("value", s => {
-        connected = !!(s && s.val());
-        setLive(connected, connected ? "ao vivo" : "conectando…");
-      });
-      startTickLoop();
-      tryRestore().then(ok => { if (!ok) showScreen("screenLogin"); });
-    }).catch(() => {
-      setLive(false, "offline");
-      document.getElementById("loginErr").textContent = "Não foi possível conectar. Verifique a internet.";
-    });
-  } catch (e) {
-    setLive(false, "erro");
-  }
+  connectCloud();
 }
+document.getElementById("btnRetryCloud").onclick = () => connectCloud();
 document.getElementById("btnLogin").onclick = () => {
   doLogin(
     document.getElementById("inLoja").value,
