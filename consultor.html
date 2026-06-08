@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v44";
+  var BUILD = "v45";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -270,6 +270,10 @@
   .resumo-row-top b { font-size: 13px; }
   .resumo-row-top .pct { font-size: 14px; font-weight: 800; white-space: nowrap; }
   .resumo-row-meta { font-size: 10px; color: var(--text-faint); margin-top: 3px; font-weight: 700; line-height: 1.45; }
+  .resumo-track-line { font-size: 10px; font-weight: 700; line-height: 1.45; color: var(--text-faint); }
+  .resumo-track-line + .resumo-track-line { margin-top: 4px; }
+  .resumo-track-line.relato { color: var(--text-dim); }
+  .resumo-track-line.gestor { color: color-mix(in srgb, var(--accent) 75%, var(--text-dim)); }
   .resumo-meta-sep { color: var(--text-faint); opacity: .55; font-weight: 800; margin: 0 1px; }
   .resumo-bar { height: 5px; border-radius: 99px; background: var(--border); margin-top: 8px; overflow: hidden; }
   .resumo-bar i { display: block; height: 100%; border-radius: 99px; background: var(--bc); max-width: 100%; }
@@ -493,7 +497,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v44";
+const APP_BUILD = "v45";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -1247,12 +1251,43 @@ function getSystem(sellerId, fieldId, m = todayISO()) {
   const v = monthData(m).system?.[sellerId]?.[fieldId];
   return v != null ? Number(v) : null;
 }
+function getSystemAt(sellerId, fieldId, m = todayISO()) {
+  const v = monthData(m).systemAt?.[sellerId]?.[fieldId];
+  return v != null ? Number(v) : null;
+}
 function getSystemRate(sellerId, rateId, m = todayISO()) {
   const v = monthData(m).systemRate?.[sellerId]?.[rateId];
   return v != null ? Number(v) : null;
 }
+function systemInputDay(sellerId, fieldId, m = todayISO()) {
+  const at = getSystemAt(sellerId, fieldId, m);
+  if (at == null) return null;
+  const d = new Date(at);
+  const { y, mo } = parseMonth(m);
+  if (d.getFullYear() !== y || d.getMonth() + 1 !== mo) return 1;
+  return d.getDate();
+}
+function accumSinceDay(sellerId, fieldId, key, fromDay, m = todayISO()) {
+  if (fromDay == null || fromDay < 1) return null;
+  const end = todayISO() === m ? todayDay() : daysInMonth(m);
+  let sum = 0, has = false;
+  for (let d = fromDay; d <= end; d++) {
+    const c = getCell(sellerId, fieldId, d, m);
+    if (c[key] != null && c[key] !== "") { sum += Number(c[key]); has = true; }
+  }
+  return has ? sum : 0;
+}
+/** Real de acompanhamento do CV: relato até gestor lançar; depois sistema + check-outs do dia do lançamento em diante. */
+function consultorTrackingReal(sellerId, fieldId, days, m = todayISO()) {
+  const relato = accum(sellerId, fieldId, "real", days, m);
+  const sistema = getSystem(sellerId, fieldId, m);
+  if (sistema == null) return relato;
+  const fromDay = systemInputDay(sellerId, fieldId, m);
+  if (fromDay == null) return sistema;
+  return sistema + (accumSinceDay(sellerId, fieldId, "real", fromDay, m) ?? 0);
+}
 function matrizFieldValue(sellerId, fieldId, days, periodo, m = todayISO()) {
-  if (periodo === "mes") { const sys = getSystem(sellerId, fieldId, m); if (sys != null) return sys; }
+  if (periodo === "mes") return consultorTrackingReal(sellerId, fieldId, days, m);
   return accum(sellerId, fieldId, "real", days, m);
 }
 function sellerProjFromReal(sellerId, fieldId, realVal, m = todayISO()) {
@@ -1429,14 +1464,20 @@ function rankScoreLowerBetter(cfg, parentInd) {
 function fieldProjStats(cfg, sellerId, m = todayISO(), parentInd = null) {
   const days = monthDays(m);
   const lb = cfgLowerBetter(cfg, parentInd);
-  const real = matrizFieldValue(sellerId, cfg.id, days, "mes", m);
   const meta = sellerMetaFor(cfg, sellerId, m);
-  const proj = real != null ? sellerProjFromReal(sellerId, cfg.id, real, m) : null;
-  const perfRatio = meta && proj != null ? matrizProjPerfRatio(proj, meta, lb) : null;
-  const gap = meta != null && proj != null ? Math.round(proj - meta) : null;
   const { done } = sellerWorkedSplit(sellerId, m);
+  const relato = accum(sellerId, cfg.id, "real", days, m);
+  const sistema = getSystem(sellerId, cfg.id, m);
+  const real = consultorTrackingReal(sellerId, cfg.id, days, m);
+  const proj = real != null ? sellerProjFromReal(sellerId, cfg.id, real, m) : null;
+  const relatoProj = relato != null ? sellerProjFromReal(sellerId, cfg.id, relato, m) : null;
+  const perfRatio = meta && proj != null ? matrizProjPerfRatio(proj, meta, lb) : null;
+  const relatoPerfRatio = meta && relatoProj != null ? matrizProjPerfRatio(relatoProj, meta, lb) : null;
+  const gap = meta != null && proj != null ? Math.round(proj - meta) : null;
+  const relatoGap = meta != null && relatoProj != null ? Math.round(relatoProj - meta) : null;
   const ritmo = done > 0 && real != null ? real / done : null;
-  return { real, meta, proj, perfRatio, lb, gap, ritmo, done };
+  const relatoRitmo = done > 0 && relato != null ? relato / done : null;
+  return { real, relato, sistema, meta, proj, relatoProj, perfRatio, relatoPerfRatio, lb, gap, relatoGap, ritmo, relatoRitmo, done };
 }
 function resumoCallout(cfg, sellerId, m = todayISO(), mini, parentInd = null) {
   const st = fieldProjStats(cfg, sellerId, m, parentInd);
@@ -1648,12 +1689,12 @@ function rateDisplayName(rate, ind) {
   if (!raw || raw === "%") return ind?.name || "Taxa";
   return raw.replace(/^%+\s*/, "");
 }
-function resumoMetaLine(st) {
-  const { real, meta, proj, lb, gap, ritmo } = st;
+function resumoTrackingLine(label, base, ritmo, meta, proj, gap, lb, cls) {
+  if (base == null && proj == null) return "";
   const sep = '<span class="resumo-meta-sep">&gt;</span>';
   const parts = [];
-  const realDisp = lb ? fmtPctFine(real) : fmt(real);
-  parts.push(`Real ${realDisp}`);
+  const baseDisp = base != null ? (lb ? fmtPctFine(base) : fmt(base)) : "—";
+  parts.push(`${label} ${baseDisp}`);
   if (ritmo != null) parts.push(`Média de ${fmt(ritmo, ritmo % 1 ? 1 : 0)}/dia`);
   if (meta != null) parts.push(`Meta é ${lb ? fmtPctFine(meta) : fmt(meta)}`);
   if (proj != null) parts.push(`Projetando ${lb ? fmtPctFine(proj) : fmt(proj)}`);
@@ -1662,12 +1703,19 @@ function resumoMetaLine(st) {
     const gapColor = gap >= 0 ? "var(--ok)" : "var(--danger)";
     parts.push(`<span style="color:${gapColor}">${gapTxt}</span>`);
   }
-  return parts.join(" " + sep + " ");
+  return `<div class="resumo-track-line ${cls}">${parts.join(" " + sep + " ")}</div>`;
+}
+function resumoMetaLine(st) {
+  let html = resumoTrackingLine("Check-out", st.relato, st.relatoRitmo, st.meta, st.relatoProj, st.relatoGap, st.lb, "relato");
+  if (st.sistema != null) {
+    html += resumoTrackingLine("Gestor", st.sistema, st.ritmo, st.meta, st.proj, st.gap, st.lb, "gestor");
+  }
+  return html || resumoTrackingLine("Check-out", st.real, st.ritmo, st.meta, st.proj, st.gap, st.lb, "relato");
 }
 function resumoFieldRow(cfg, color, sellerId, opts, m = todayISO()) {
   const parentInd = opts.parentInd || null;
   const st = fieldProjStats(cfg, sellerId, m, parentInd);
-  const { real, meta, proj, perfRatio, lb, gap, ritmo } = st;
+  const { real, meta, proj, perfRatio, lb } = st;
   const heatColor = resumoHeatColor(proj, meta, perfRatio, lb, false);
   const barW = resumoBarWidth(proj, meta, perfRatio, lb, false);
   const pctDisp = perfRatio != null ? pctTxt(perfRatio) : "—";

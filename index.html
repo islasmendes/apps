@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v44";
+  var BUILD = "v45";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1398,9 +1398,9 @@ function save(opts) {
 
 let currentMonth = todayISO();
 function monthData(m = currentMonth) {
-  if (!state.months[m]) state.months[m] = { workdays: autoWorkdays(m), daily: {}, system: {}, systemRate: {}, metaLoja: {}, fechamento: {} };
+  if (!state.months[m]) state.months[m] = { workdays: autoWorkdays(m), daily: {}, system: {}, systemAt: {}, systemRate: {}, metaLoja: {}, fechamento: {} };
   const md = state.months[m];
-  md.daily = md.daily || {}; md.system = md.system || {}; md.systemRate = md.systemRate || {}; md.metaLoja = md.metaLoja || {}; md.fechamento = md.fechamento || {};
+  md.daily = md.daily || {}; md.system = md.system || {}; md.systemAt = md.systemAt || {}; md.systemRate = md.systemRate || {}; md.metaLoja = md.metaLoja || {}; md.fechamento = md.fechamento || {};
   return md;
 }
 
@@ -1773,7 +1773,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v44";
+const APP_BUILD = "v45";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -1930,7 +1930,19 @@ function arvMetaForTotal(localInd, lojas, days, periodo, subTpl) {
 
 /* Sistema */
 function getSystem(sellerId, fieldId, m = currentMonth) { const md = monthData(m); return (md.system[sellerId] && md.system[sellerId][fieldId] != null) ? Number(md.system[sellerId][fieldId]) : null; }
-function setSystem(sellerId, fieldId, val, m = currentMonth) { const md = monthData(m); md.system[sellerId] = md.system[sellerId] || {}; if (val === "" || val === null || isNaN(val)) delete md.system[sellerId][fieldId]; else md.system[sellerId][fieldId] = Number(val); save(); }
+function setSystem(sellerId, fieldId, val, m = currentMonth) {
+  const md = monthData(m);
+  md.system[sellerId] = md.system[sellerId] || {};
+  md.systemAt[sellerId] = md.systemAt[sellerId] || {};
+  if (val === "" || val === null || isNaN(val)) {
+    delete md.system[sellerId][fieldId];
+    delete md.systemAt[sellerId][fieldId];
+  } else {
+    md.system[sellerId][fieldId] = Number(val);
+    md.systemAt[sellerId][fieldId] = Date.now();
+  }
+  save();
+}
 function getSystemRate(sellerId, rateId, m = currentMonth) { const md = monthData(m); return (md.systemRate[sellerId] && md.systemRate[sellerId][rateId] != null) ? Number(md.systemRate[sellerId][rateId]) : null; }
 function setSystemRate(sellerId, rateId, val, m = currentMonth) { const md = monthData(m); md.systemRate[sellerId] = md.systemRate[sellerId] || {}; if (val === "" || val === null || isNaN(val)) delete md.systemRate[sellerId][rateId]; else md.systemRate[sellerId][rateId] = Number(val); save(); }
 
