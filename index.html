@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v30";
+  var BUILD = "v31";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -180,14 +180,15 @@
   .admin-loja-picker { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-soft); }
   .admin-loja-chips { margin-top: 6px; }
   .admin-loja-chip { font-size: 11px !important; }
-  #diarioTable th.dio-locked-day { color: var(--text-dim); }
+  #diarioTable th.dio-locked-day { background: color-mix(in srgb, var(--panel-2) 82%, var(--text-faint)) !important; color: var(--text-dim); }
   #diarioTable th .dio-day-head { display: flex; flex-direction: column; align-items: center; gap: 3px; }
   #diarioTable th .dio-today-tag { font-size: 8px; font-weight: 800; color: var(--accent-2); letter-spacing: .3px; text-transform: uppercase; }
   #diarioTable th .dio-unlock-day, #diarioTable th .dio-lock-day { cursor: pointer; pointer-events: auto; border: 1px dashed var(--border); background: transparent; color: var(--text-dim); border-radius: 6px; padding: 1px 6px; font-size: 9px; font-weight: 700; font-family: var(--font); line-height: 1.4; position: relative; z-index: 2; }
   #diarioTable th .dio-unlock-day:hover { border-color: var(--accent); color: var(--accent); }
   #diarioTable th .dio-lock-day:hover { border-color: var(--warn); color: var(--warn); }
   #diarioTable th .dio-unlocked-tag { font-size: 8px; color: var(--accent-2); font-weight: 700; }
-  #diarioTable td.dio-locked-day .dio-lbl { opacity: 0.55; }
+  #diarioTable td.dio-locked-day { background: color-mix(in srgb, var(--panel-2) 78%, var(--text-faint)) !important; }
+  #diarioTable td.dio-locked-day .dio-lbl { opacity: 0.4; color: var(--text-faint) !important; }
   #diarioTable td.dio-locked-day .cellinput { cursor: not-allowed; pointer-events: none; font-weight: 800; }
   #diarioTable td.dio-locked-day .cellinput.plan-cell { background: color-mix(in srgb, var(--panel-2) 70%, var(--border)) !important; border-color: color-mix(in srgb, var(--border) 90%, transparent) !important; color: var(--text-dim) !important; }
   #diarioTable td.dio-locked-day .cellinput.checkout-cell { background: color-mix(in srgb, var(--panel-2) 65%, var(--border)) !important; border-color: color-mix(in srgb, var(--border) 88%, transparent) !important; }
@@ -1617,7 +1618,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v30";
+const APP_BUILD = "v31";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
