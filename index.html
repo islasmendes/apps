@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v27";
+  var BUILD = "v28";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -162,7 +162,7 @@
   .dio-checkout .dio-lbl { color: var(--dio-out-lbl); }
   .prog-sum-hint { font-size: 9px; margin-top: 3px; line-height: 1.25; font-variant-numeric: tabular-nums; transition: opacity .12s ease; }
   .prog-sum-hint b { font-weight: 800; transition: color .15s ease, transform .15s ease; display: inline-block; }
-  .prog-sum-hint.prog-sum-pulse b { color: var(--accent-2) !important; transform: scale(1.08); }
+  .prog-sum-hint.prog-sum-pulse b { transform: scale(1.08); filter: brightness(1.15); }
   .daycell .cellinput { width: 100%; border-radius: 7px; padding: 6px 6px; font-weight: 800; font-size: 13px; text-align: center; transition: .15s; border: 1.5px solid; color: var(--text); }
   .daycell .cellinput.plan-cell { background: var(--dio-in-bg); border-color: var(--dio-in-bd); }
   .daycell .cellinput.checkout-cell { background: var(--dio-out-bg); border-color: var(--dio-out-bd); }
@@ -1617,7 +1617,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v27";
+const APP_BUILD = "v28";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3868,12 +3868,32 @@ function programacaoDiarioHintData(sellerId, ref, day, m = currentMonth, weekDay
   if (target == null || day !== target) return null;
   const acc = programacaoAcumulada(sellerId, ref, target, m);
   if (!acc) return null;
-  return { value: acc.value, target };
+  return { value: acc.value, target, meta: metaForDay(ref, m, target) };
+}
+function programacaoSumValueColor(cfg, targetDay, value, m = currentMonth) {
+  const meta = metaForDay(cfg, m, targetDay);
+  if (!meta || meta <= 0) return "var(--accent-2)";
+  const v = Number(value);
+  if (isNaN(v)) return "var(--text-faint)";
+  const hit = cfg.lowerBetter ? v <= meta : v >= meta;
+  return hit ? "var(--ok)" : "var(--danger)";
+}
+function programacaoDiarioHintInner(cfg, targetDay, value, m = currentMonth) {
+  const meta = metaForDay(cfg, m, targetDay);
+  const valColor = programacaoSumValueColor(cfg, targetDay, value, m);
+  const metaLbl = isSaturday(m, targetDay) ? "sáb" : (isSunday(m, targetDay) ? "dom" : "dia");
+  const title = meta > 0 ? `Meta ${metaLbl}: ${meta}` : "";
+  return {
+    html: `<span style="color:var(--text-dim)">Σ</span> <b style="color:${valColor}">${value}</b>`,
+    title
+  };
 }
 function programacaoDiarioCellHint(sellerId, ref, day, m = currentMonth) {
   const data = programacaoDiarioHintData(sellerId, ref, day, m);
   if (!data) return "";
-  return `<div class="prog-sum-hint" data-prog-day="${day}" style="color:var(--accent-2)">Σ <b>${data.value}</b></div>`;
+  const inner = programacaoDiarioHintInner(ref, day, data.value, m);
+  const titleAttr = inner.title ? ` title="${escapeHtml(inner.title)}"` : "";
+  return `<div class="prog-sum-hint" data-prog-day="${day}"${titleAttr}>${inner.html}</div>`;
 }
 function pulseProgSumHint(el) {
   if (!el) return;
@@ -3883,25 +3903,28 @@ function pulseProgSumHint(el) {
   clearTimeout(el._progPulseT);
   el._progPulseT = setTimeout(() => el.classList.remove("prog-sum-pulse"), 280);
 }
-function upsertProgramacaoDiarioHint(tr, targetDay, markup, value) {
+function upsertProgramacaoDiarioHint(tr, targetDay, cfg, value) {
   if (!tr) return;
   tr.querySelectorAll(".prog-sum-hint").forEach(el => {
     if (+el.dataset.progDay !== targetDay) el.remove();
   });
-  if (!markup) {
+  if (value == null || value === "") {
     tr.querySelectorAll(`.prog-sum-hint[data-prog-day="${targetDay}"]`).forEach(el => el.remove());
     return;
   }
   const daycell = tr.querySelector(`td[data-dio-day="${targetDay}"] .daycell`);
   if (!daycell) return;
+  const inner = programacaoDiarioHintInner(cfg, targetDay, value);
   let hint = daycell.querySelector(`.prog-sum-hint[data-prog-day="${targetDay}"]`);
   if (hint) {
     const prev = hint.querySelector("b")?.textContent;
-    hint.innerHTML = `Σ <b>${value}</b>`;
+    hint.title = inner.title;
+    hint.innerHTML = inner.html;
     if (prev !== String(value)) pulseProgSumHint(hint);
     return;
   }
-  daycell.insertAdjacentHTML("beforeend", markup);
+  const titleAttr = inner.title ? ` title="${escapeHtml(inner.title)}"` : "";
+  daycell.insertAdjacentHTML("beforeend", `<div class="prog-sum-hint" data-prog-day="${targetDay}"${titleAttr}>${inner.html}</div>`);
   pulseProgSumHint(daycell.querySelector(`.prog-sum-hint[data-prog-day="${targetDay}"]`));
 }
 function refreshProgramacaoDiarioRowHints(fieldId) {
@@ -3916,8 +3939,7 @@ function refreshProgramacaoDiarioRowHints(fieldId) {
   });
   if (!target) return;
   const data = programacaoDiarioHintData(diarioSeller, cfg, target);
-  const markup = data ? programacaoDiarioCellHint(diarioSeller, cfg, target) : "";
-  upsertProgramacaoDiarioHint(tr, target, markup, data?.value);
+  upsertProgramacaoDiarioHint(tr, target, cfg, data?.value);
 }
 function crossPlanValueFromCell(c) {
   if (!c || typeof c !== "object") return null;
