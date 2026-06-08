@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v34";
+  var BUILD = "v35";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -455,7 +455,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v34";
+const APP_BUILD = "v35";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -1633,16 +1633,16 @@ function renderResumo() {
       ${vendaCallout.html}
       <div class="resumo-chips">
         <div class="resumo-chip-item">
-          <span class="resumo-chip" style="color:${heatMatrizText(discipline.pct)}">Aderência ${pctTxt(discipline.pct)}</span>
-          <span class="resumo-chip-leg">Check-in e check-out completos${discipline.closed ? ` (${discipline.complete}/${discipline.closed})` : ""}.</span>
+          <span class="resumo-chip" style="color:${heatMatrizText(discipline.pct)}">Aderência ${pctTxt(discipline.pct)}${discipline.closed ? " · " + discipline.complete + "/" + discipline.closed + " dias" : ""}</span>
+          <span class="resumo-chip-leg">Dias da escala com check-in e check-out completos.</span>
         </div>
         <div class="resumo-chip-item">
           <span class="resumo-chip" style="color:${heatMatrizText(metrics.acc)}">Acurácia ${pctTxt(metrics.acc)}</span>
-          <span class="resumo-chip-leg">Seu check-out batendo com o gestor.</span>
+          <span class="resumo-chip-leg">Seu check-out batendo com o que o gestor lançou.</span>
         </div>
         <div class="resumo-chip-item">
           <span class="resumo-chip" style="color:var(--accent-2)">${vendaRankTxt}</span>
-          <span class="resumo-chip-leg">Ranking em vendas no mês.${vendaRank.note ? " " + vendaRank.note : ""}</span>
+          <span class="resumo-chip-leg">Score % (↓ no valor, maior % melhor) · empate: score, aderência, acurácia, projeção.</span>
         </div>
       </div>
       <div class="resumo-escala-line">${escText(consultorEscalaSummary(sid, m))}</div>
