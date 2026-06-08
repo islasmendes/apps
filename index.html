@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v43";
+  var BUILD = "v44";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -293,7 +293,10 @@
   .consultor-schedule-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   @media (max-width: 720px) { .consultor-schedule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .consultor-schedule-grid input[type="time"] { width: 100%; font-weight: 700; padding: 7px 8px; }
-  .sched-override-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+  .sched-override-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 14px; }
+  .sched-override-group { padding: 12px; border-radius: 12px; border: 1px solid var(--border-soft); background: var(--panel-2); }
+  .sched-override-group h3 { margin: 0 0 8px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .35px; color: var(--text-dim); }
+  .sched-override-actions { display: flex; flex-wrap: wrap; gap: 6px; }
   .sched-status-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; padding: 6px 12px; border-radius: 99px; border: 1px solid var(--border); }
   .sched-status-chip.open { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); background: color-mix(in srgb, var(--ok) 12%, var(--panel-2)); }
   .sched-status-chip.closed { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: color-mix(in srgb, var(--danger) 10%, var(--panel-2)); }
@@ -715,9 +718,22 @@
         <div class="mb"><label>Fechamento check-out<span>fim do dia</span></label><input type="time" id="schedCheckoutClose" step="60"></div>
       </div>
       <div class="sched-override-bar">
-        <button class="btn sec" type="button" id="schedOverrideOpen" title="Libera check-in e check-out agora, ignorando o horário">🔓 Liberar imediato</button>
-        <button class="btn danger sec" type="button" id="schedOverrideClosed" title="Bloqueia o portal agora, ignorando o horário">🔒 Travar imediato</button>
-        <button class="btn sec sm" type="button" id="schedOverrideClear" title="Volta a obedecer os horários acima">↺ Horário normal</button>
+        <div class="sched-override-group">
+          <h3>Check-in · urgência</h3>
+          <div class="sched-override-actions">
+            <button class="btn sec sm" type="button" id="schedCheckinOverrideOpen" title="Libera só o check-in agora">🔓 Liberar check-in</button>
+            <button class="btn danger sec sm" type="button" id="schedCheckinOverrideClosed" title="Trava só o check-in agora">🔒 Travar check-in</button>
+            <button class="btn sec sm" type="button" id="schedCheckinOverrideClear" title="Check-in volta ao horário configurado">↺ Normal</button>
+          </div>
+        </div>
+        <div class="sched-override-group">
+          <h3>Check-out · urgência</h3>
+          <div class="sched-override-actions">
+            <button class="btn sec sm" type="button" id="schedCheckoutOverrideOpen" title="Libera só o check-out agora">🔓 Liberar check-out</button>
+            <button class="btn danger sec sm" type="button" id="schedCheckoutOverrideClosed" title="Trava só o check-out agora">🔒 Travar check-out</button>
+            <button class="btn sec sm" type="button" id="schedCheckoutOverrideClear" title="Check-out volta ao horário configurado">↺ Normal</button>
+          </div>
+        </div>
       </div>
       <div class="hint" id="consultorScheduleHint" style="margin-top:10px; line-height:1.55;">—</div>
     </div>
@@ -923,7 +939,8 @@ function defaultState() {
       checkoutVisible: "12:30",
       checkoutOpen: "16:00",
       checkoutClose: "20:00",
-      override: null
+      checkinOverride: null,
+      checkoutOverride: null
     },
   };
 }
@@ -999,8 +1016,12 @@ const CONSULTOR_SCHEDULE_DEFAULTS = {
   checkoutVisible: "12:30",
   checkoutOpen: "16:00",
   checkoutClose: "20:00",
-  override: null
+  checkinOverride: null,
+  checkoutOverride: null
 };
+function normScheduleOverride(v) {
+  return v === "open" || v === "closed" ? v : null;
+}
 function parseScheduleHM(str) {
   const m = String(str || "").trim().match(/^(\d{1,2}):(\d{2})$/);
   if (!m) return null;
@@ -1019,8 +1040,24 @@ function normalizeConsultorSchedule(raw) {
     const p = parseScheduleHM(s[k]);
     s[k] = p != null ? fmtScheduleHM(p) : CONSULTOR_SCHEDULE_DEFAULTS[k];
   });
-  s.override = s.override === "open" || s.override === "closed" ? s.override : null;
+  if (raw && raw.override != null && raw.checkinOverride == null && raw.checkoutOverride == null) {
+    const leg = normScheduleOverride(raw.override);
+    s.checkinOverride = leg;
+    s.checkoutOverride = leg;
+  }
+  s.checkinOverride = normScheduleOverride(s.checkinOverride);
+  s.checkoutOverride = normScheduleOverride(s.checkoutOverride);
+  delete s.override;
   return s;
+}
+function scheduleOverrideSummary(s) {
+  s = s || consultorScheduleState();
+  const parts = [];
+  if (s.checkinOverride === "open") parts.push("check-in liberado");
+  else if (s.checkinOverride === "closed") parts.push("check-in travado");
+  if (s.checkoutOverride === "open") parts.push("check-out liberado");
+  else if (s.checkoutOverride === "closed") parts.push("check-out travado");
+  return parts;
 }
 function consultorScheduleState() { return normalizeConsultorSchedule(state.consultorSchedule); }
 function scheduleMinsFrom(s, key) {
@@ -1045,8 +1082,6 @@ function gestorNowMins() {
 }
 function gestorTimePhase(s) {
   s = s || consultorScheduleState();
-  if (s.override === "open") return "override-open";
-  if (s.override === "closed") return "override-closed";
   const m = gestorNowMins();
   if (m < scheduleMinsFrom(s, "checkinOpen")) return "pre-checkin";
   if (m < scheduleMinsFrom(s, "checkinClose")) return "checkin";
@@ -1062,9 +1097,7 @@ function consultorSchedulePhaseLabel(phase) {
     "checkin-grace": "Prorrogação do check-in",
     "pre-checkout": "Check-out visível · aguardando abertura",
     checkout: "Check-out aberto",
-    ended: "Encerrado",
-    "override-open": "Liberado imediato (gestor)",
-    "override-closed": "Travado imediato (gestor)"
+    ended: "Encerrado"
   })[phase] || phase;
 }
 
@@ -1740,7 +1773,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v43";
+const APP_BUILD = "v44";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4820,15 +4853,24 @@ function renderConsultorSchedulePanel() {
   const chip = document.getElementById("schedStatusChip");
   const hint = document.getElementById("consultorScheduleHint");
   const phase = gestorTimePhase(s);
+  const ovParts = scheduleOverrideSummary(s);
+  const hasOpen = s.checkinOverride === "open" || s.checkoutOverride === "open";
+  const hasClosed = s.checkinOverride === "closed" || s.checkoutOverride === "closed";
   if (chip) {
-    chip.className = "sched-status-chip " + (s.override === "open" ? "open" : s.override === "closed" ? "closed" : "normal");
-    chip.textContent = s.override === "open" ? "🔓 Liberado imediato" : s.override === "closed" ? "🔒 Travado imediato" : "⏱ " + consultorSchedulePhaseLabel(phase);
+    chip.className = "sched-status-chip " + (hasOpen ? "open" : hasClosed ? "closed" : "normal");
+    chip.textContent = ovParts.length
+      ? (hasOpen && !hasClosed ? "🔓 " : hasClosed && !hasOpen ? "🔒 " : "⚡ ") + ovParts.join(" · ")
+      : "⏱ " + consultorSchedulePhaseLabel(phase);
   }
   if (hint) {
     let extra = "";
-    if (s.override === "open") extra = `<br><b style="color:var(--ok)">Liberado imediato</b> — vendedores podem editar check-in e check-out agora. Use <b>Travar imediato</b> ou <b>Horário normal</b> quando terminar.`;
-    else if (s.override === "closed") extra = `<br><b style="color:var(--danger)">Travado imediato</b> — portal bloqueado até você liberar ou voltar ao horário normal.`;
-    else extra = `<br>Resumo: check-in <b>${s.checkinOpen}–${s.checkinGraceEnd}</b> (oficial ${s.checkinClose}) · check-out visível <b>${s.checkoutVisible}</b> · editável <b>${s.checkoutOpen}–${s.checkoutClose}</b>.`;
+    if (ovParts.length) {
+      extra = `<br><b>Urgência ativa:</b> ${ovParts.join(" · ")}. Use <b>Normal</b> em cada bloco para voltar ao horário configurado.`;
+      if (hasOpen) extra += ` <span style="color:var(--ok)">Liberado</span> ignora o relógio só naquele bloco.`;
+      if (hasClosed) extra += ` <span style="color:var(--danger)">Travado</span> bloqueia só aquele bloco.`;
+    } else {
+      extra = `<br>Resumo: check-in <b>${s.checkinOpen}–${s.checkinGraceEnd}</b> (oficial ${s.checkinClose}) · check-out visível <b>${s.checkoutVisible}</b> · editável <b>${s.checkoutOpen}–${s.checkoutClose}</b>.`;
+    }
     hint.innerHTML = `Fase atual no app: <b>${consultorSchedulePhaseLabel(phase)}</b>.${extra}`;
   }
   const bindTime = (id, key) => {
@@ -4847,18 +4889,25 @@ function renderConsultorSchedulePanel() {
     });
   };
   Object.entries(map).forEach(([id, key]) => bindTime(id, key));
-  const setOverride = mode => {
-    state.consultorSchedule = { ...consultorScheduleState(), override: mode };
-    save();
-    renderConsultorSchedulePanel();
-    toast(mode === "open" ? "Portal liberado imediatamente" : mode === "closed" ? "Portal travado imediatamente" : "Horário normal restaurado");
+  const bindOverrideBtn = (id, slot, mode) => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.schedBound) return;
+    el.dataset.schedBound = "1";
+    el.onclick = () => {
+      const key = slot === "checkin" ? "checkinOverride" : "checkoutOverride";
+      state.consultorSchedule = { ...consultorScheduleState(), [key]: mode };
+      save();
+      renderConsultorSchedulePanel();
+      const label = slot === "checkin" ? "Check-in" : "Check-out";
+      toast(mode === "open" ? `${label} liberado imediatamente` : mode === "closed" ? `${label} travado imediatamente` : `${label} no horário normal`);
+    };
   };
-  const oOpen = document.getElementById("schedOverrideOpen");
-  const oClosed = document.getElementById("schedOverrideClosed");
-  const oClear = document.getElementById("schedOverrideClear");
-  if (oOpen && !oOpen.dataset.schedBound) { oOpen.dataset.schedBound = "1"; oOpen.onclick = () => setOverride("open"); }
-  if (oClosed && !oClosed.dataset.schedBound) { oClosed.dataset.schedBound = "1"; oClosed.onclick = () => setOverride("closed"); }
-  if (oClear && !oClear.dataset.schedBound) { oClear.dataset.schedBound = "1"; oClear.onclick = () => setOverride(null); }
+  bindOverrideBtn("schedCheckinOverrideOpen", "checkin", "open");
+  bindOverrideBtn("schedCheckinOverrideClosed", "checkin", "closed");
+  bindOverrideBtn("schedCheckinOverrideClear", "checkin", null);
+  bindOverrideBtn("schedCheckoutOverrideOpen", "checkout", "open");
+  bindOverrideBtn("schedCheckoutOverrideClosed", "checkout", "closed");
+  bindOverrideBtn("schedCheckoutOverrideClear", "checkout", null);
   if (schedStatusTimer) clearInterval(schedStatusTimer);
   schedStatusTimer = setInterval(() => {
     if (document.getElementById("view-config")?.classList.contains("active")) renderConsultorSchedulePanel();

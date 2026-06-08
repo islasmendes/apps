@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v43";
+  var BUILD = "v44";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -493,7 +493,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v43";
+const APP_BUILD = "v44";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -507,8 +507,12 @@ const CONSULTOR_SCHEDULE_DEFAULTS = {
   checkoutVisible: "12:30",
   checkoutOpen: "16:00",
   checkoutClose: "20:00",
-  override: null
+  checkinOverride: null,
+  checkoutOverride: null
 };
+function normScheduleOverride(v) {
+  return v === "open" || v === "closed" ? v : null;
+}
 function parseScheduleHM(str) {
   const m = String(str || "").trim().match(/^(\d{1,2}):(\d{2})$/);
   if (!m) return null;
@@ -527,14 +531,22 @@ function normalizeConsultorSchedule(raw) {
     const p = parseScheduleHM(s[k]);
     s[k] = p != null ? fmtScheduleHM(p) : CONSULTOR_SCHEDULE_DEFAULTS[k];
   });
-  s.override = s.override === "open" || s.override === "closed" ? s.override : null;
+  if (raw && raw.override != null && raw.checkinOverride == null && raw.checkoutOverride == null) {
+    const leg = normScheduleOverride(raw.override);
+    s.checkinOverride = leg;
+    s.checkoutOverride = leg;
+  }
+  s.checkinOverride = normScheduleOverride(s.checkinOverride);
+  s.checkoutOverride = normScheduleOverride(s.checkoutOverride);
+  delete s.override;
   return s;
 }
 function consultorSchedule() { return normalizeConsultorSchedule(lojaData?.consultorSchedule); }
 function scheduleMins(key) {
   return parseScheduleHM(consultorSchedule()[key]) ?? parseScheduleHM(CONSULTOR_SCHEDULE_DEFAULTS[key]);
 }
-function scheduleOverride() { return consultorSchedule().override; }
+function scheduleCheckinOverride() { return consultorSchedule().checkinOverride; }
+function scheduleCheckoutOverride() { return consultorSchedule().checkoutOverride; }
 function scheduleTimeLabel(key) { return consultorSchedule()[key] || CONSULTOR_SCHEDULE_DEFAULTS[key]; }
 function nowMins() {
   const n = new Date();
@@ -546,46 +558,43 @@ function dateAtScheduleMins(mins) {
   return d;
 }
 function checkinWindowOpen() {
-  const ov = scheduleOverride();
+  const ov = scheduleCheckinOverride();
   if (ov === "open") return true;
   if (ov === "closed") return false;
   const m = nowMins();
   return m >= scheduleMins("checkinOpen") && m < scheduleMins("checkinGraceEnd");
 }
 function checkinGraceActive() {
-  if (scheduleOverride()) return false;
+  if (scheduleCheckinOverride()) return false;
   const m = nowMins();
   return m >= scheduleMins("checkinClose") && m < scheduleMins("checkinGraceEnd");
 }
 function checkinWindowEnded() {
-  const ov = scheduleOverride();
+  const ov = scheduleCheckinOverride();
   if (ov === "open") return false;
   if (ov === "closed") return true;
   return nowMins() >= scheduleMins("checkinGraceEnd");
 }
 function consultorCheckoutVisible() {
-  const ov = scheduleOverride();
+  const ov = scheduleCheckoutOverride();
   if (ov === "open") return true;
   if (ov === "closed") return false;
   return nowMins() >= scheduleMins("checkoutVisible");
 }
 function checkoutWindowOpen() {
-  const ov = scheduleOverride();
+  const ov = scheduleCheckoutOverride();
   if (ov === "open") return true;
   if (ov === "closed") return false;
   const m = nowMins();
   return m >= scheduleMins("checkoutOpen") && m < scheduleMins("checkoutClose");
 }
 function checkoutWindowEnded() {
-  const ov = scheduleOverride();
+  const ov = scheduleCheckoutOverride();
   if (ov === "open") return false;
   if (ov === "closed") return true;
   return nowMins() >= scheduleMins("checkoutClose");
 }
 function timePhase() {
-  const ov = scheduleOverride();
-  if (ov === "open") return "override-open";
-  if (ov === "closed") return "override-closed";
   const m = nowMins();
   if (m < scheduleMins("checkinOpen")) return "pre-checkin";
   if (m < scheduleMins("checkinClose")) return "checkin";
@@ -1930,15 +1939,7 @@ function tickUrgencyAndDay() {
   pill.classList.remove("show", "ended", "warmup", "urgent");
   if (onMain) {
     pill.classList.add("show");
-    if (phase === "override-open") {
-      pill.classList.add("warmup");
-      lbl.textContent = "🔓 LIBERADO";
-      txt.textContent = "GESTOR";
-    } else if (phase === "override-closed") {
-      pill.classList.add("ended");
-      lbl.textContent = "🔒 TRAVADO";
-      txt.textContent = "GESTOR";
-    } else if (phase === "pre-checkin") {
+    if (phase === "pre-checkin") {
       const start = dateAtScheduleMins(scheduleMins("checkinOpen"));
       pill.classList.add("warmup");
       lbl.textContent = "ABRE " + scheduleTimeLabel("checkinOpen");
