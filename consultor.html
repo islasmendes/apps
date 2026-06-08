@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v40";
+  var BUILD = "v41";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -365,7 +365,14 @@
   }
   .open-justif textarea:disabled, .open-qty input:disabled { opacity: .85; cursor: not-allowed; }
   .open-qty.hidden { display: none; }
-  .open-save { width: 100%; margin-top: 8px; padding: 10px; font-size: 13px; }
+  .open-save, .dio-save { width: 100%; margin-top: 8px; padding: 10px; font-size: 13px; }
+  .dio-save-hint { margin-top: 6px; font-size: 10px; font-weight: 600; line-height: 1.35; color: var(--text-faint); text-align: center; }
+  .dio-saved-row { margin-top: 8px; display: flex; justify-content: center; }
+  .dio-saved-chip {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 800; padding: 8px 14px; border-radius: 99px;
+    color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, var(--panel-2));
+    border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--border));
+  }
   .open-qty input.below-target { color: var(--danger) !important; border-color: var(--danger) !important; font-weight: 800; }
   .open-qty input.at-target { color: var(--ok) !important; border-color: var(--ok) !important; font-weight: 800; }
   .dio-box.open-q.locked .open-qty input:disabled.below-target { color: var(--danger) !important; border-color: var(--danger) !important; opacity: 1; -webkit-text-fill-color: var(--danger); }
@@ -486,7 +493,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v40";
+const APP_BUILD = "v41";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -593,7 +600,7 @@ function getCell(sellerId, fieldId, day, month) {
   const d = lojaData?.months?.[month]?.daily;
   return (d?.[sellerId]?.[fieldId]?.[day]) || {};
 }
-function setLocalCell(sellerId, fieldId, day, month, key, val) {
+function localCellRef(sellerId, fieldId, day, month) {
   if (!lojaData.months) lojaData.months = {};
   if (!lojaData.months[month]) lojaData.months[month] = { daily: {} };
   const md = lojaData.months[month];
@@ -601,7 +608,10 @@ function setLocalCell(sellerId, fieldId, day, month, key, val) {
   if (!md.daily[sellerId]) md.daily[sellerId] = {};
   if (!md.daily[sellerId][fieldId]) md.daily[sellerId][fieldId] = {};
   if (!md.daily[sellerId][fieldId][day]) md.daily[sellerId][fieldId][day] = {};
-  const cell = md.daily[sellerId][fieldId][day];
+  return md.daily[sellerId][fieldId][day];
+}
+function setLocalCell(sellerId, fieldId, day, month, key, val) {
+  const cell = localCellRef(sellerId, fieldId, day, month);
   if (val == null) {
     delete cell[key];
     delete cell[key + "By"];
@@ -611,6 +621,11 @@ function setLocalCell(sellerId, fieldId, day, month, key, val) {
     cell[key + "By"] = "consultor";
     cell[key + "At"] = Date.now();
   }
+}
+function setLocalCellFlag(sellerId, fieldId, day, month, flagKey, val) {
+  const cell = localCellRef(sellerId, fieldId, day, month);
+  if (val == null) delete cell[flagKey];
+  else cell[flagKey] = val;
 }
 function cellFilledFromDom(cfg, key, cell) {
   if (key === "plan" && cfgOpenQuestion(cfg)) {
@@ -1737,6 +1752,8 @@ function hasCellValue(cell, key) {
 function isViewingToday(day, month) {
   return month === todayISO() && day === todayDay();
 }
+function cellConfirmKey(key) { return key === "plan" ? "planConfirm" : "realConfirm"; }
+function cellIsConfirmed(cell, key) { return !!cell[cellConfirmKey(key)]; }
 /** Consultor: check-in 07:00–12:30 (prorrogação 30 min após 12:00) · check-out visível 12:30 · editável 16:00–20:00 */
 function cellLockedForConsultor(cell, key, day, month, cfg) {
   if (!isViewingToday(day, month)) return true;
@@ -1749,11 +1766,27 @@ function cellLockedForConsultor(cell, key, day, month, cfg) {
   }
   if (!hasCellValue(cell, key)) return false;
   if (cell[key + "By"] === "gestor") return true;
+  if (cell[key + "By"] === "consultor" && cellIsConfirmed(cell, key)) return true;
   return false;
 }
 function cellIsMine(cell, key, cfg) {
   if (key === "plan" && cfg && cfgOpenQuestion(cfg)) return isOpenPlanComplete(cell) && cell.planBy === "consultor";
   return hasCellValue(cell, key) && cell[key + "By"] === "consultor";
+}
+function dioSaveFooterHtml(cfg, c, key, day, month, slotLabel) {
+  const locked = cellLockedForConsultor(c, key, day, month, cfg);
+  if (locked && cellIsConfirmed(c, key)) {
+    return `<div class="dio-saved-row"><span class="dio-saved-chip">✓ ${slotLabel} salvo</span></div>`;
+  }
+  if (locked) return "";
+  return `<button type="button" class="btn dio-save" data-dio-save data-fid="${cfg.id}" data-key="${key}" data-slot="${slotLabel}" disabled>Salvar ${slotLabel.toLowerCase()}</button>` +
+    `<div class="dio-save-hint">Sincroniza ao digitar · toque em Salvar para confirmar e travar</div>`;
+}
+function refreshDioSaveBtn(box) {
+  const btn = box?.querySelector("[data-dio-save]");
+  const inp = box?.querySelector("input[data-fid][data-key]");
+  if (!btn || !inp) return;
+  btn.disabled = !inp.value.trim();
 }
 function fieldSoonKind(cell, key, day, month, cfg) {
   if (key === "plan" && !planWindowOpen(cfg, day, month)) {
@@ -1802,8 +1835,9 @@ function lockLabel(cell, key, day, month, cfg) {
   const by = cell[key + "By"];
   if (by === "gestor") return '<span class="lock-tag gestor">👔 Gestor</span>';
   if (by === "consultor") {
+    if (cellIsConfirmed(cell, key)) return '<span class="lock-tag">🔒 Salvo</span>';
     if (!isViewingToday(day, month)) return '<span class="lock-tag">🔒 Dia encerrado</span>';
-    return '<span class="lock-tag consultor">✎ Você · editável</span>';
+    return '<span class="lock-tag consultor">✎ Rascunho</span>';
   }
   return '<span class="lock-tag consultor">✎ Editável</span>';
 }
@@ -1963,7 +1997,7 @@ function renderFields() {
         html += `<div class="dio-box in${planLocked ? " locked" : ""}${planMine && !planLocked ? " mine" : ""}"><div class="dio-lbl">Check-in ${lockLabel(c, "plan", day, month, cfg)}</div>`;
         if (planSoon) html += soonBannerHtml(planSoon);
         else if (checkinGraceActive()) html += graceBannerHtml();
-        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="plan" data-day="${day}" value="${c.plan ?? ""}" placeholder="—" ${planLocked ? "disabled" : ""}>${progIn}</div>`;
+        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="plan" data-day="${day}" value="${c.plan ?? ""}" placeholder="—" ${planLocked ? "disabled" : ""}>${progIn}${dioSaveFooterHtml(cfg, c, "plan", day, month, "Check-in")}</div>`;
       }
     }
     if (showCheckout) {
@@ -1974,7 +2008,7 @@ function renderFields() {
         const realSoon = fieldSoonKind(c, "real", day, month, cfg);
         html += `<div class="dio-box out${realLocked ? " locked" : ""}${realMine && !realLocked ? " mine" : ""}"><div class="dio-lbl">Check-out ${lockLabel(c, "real", day, month, cfg)}</div>`;
         if (realSoon) html += soonBannerHtml(realSoon);
-        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="real" data-day="${day}" value="${c.real ?? ""}" placeholder="—" ${realLocked ? "disabled" : ""}>${progOut}</div>`;
+        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="real" data-day="${day}" value="${c.real ?? ""}" placeholder="—" ${realLocked ? "disabled" : ""}>${progOut}${dioSaveFooterHtml(cfg, c, "real", day, month, "Check-out")}</div>`;
       }
     }
     html += "</div></div>";
@@ -1983,10 +2017,15 @@ function renderFields() {
   root.querySelectorAll("input[data-fid]").forEach(inp => {
     inp.addEventListener("input", () => {
       updateProgramacaoRunningHint(inp);
+      refreshDioSaveBtn(inp.closest(".dio-box"));
       updateProgress();
     });
     inp.addEventListener("change", () => saveField(inp));
     inp.addEventListener("keydown", e => { if (e.key === "Enter") { inp.blur(); } });
+    refreshDioSaveBtn(inp.closest(".dio-box"));
+  });
+  root.querySelectorAll("[data-dio-save]").forEach(btn => {
+    btn.addEventListener("click", () => confirmField(btn));
   });
   root.querySelectorAll(".dio-box.open-q").forEach(box => {
     const qtyWrap = box.querySelector(".open-qty");
@@ -2068,7 +2107,17 @@ async function saveOpenPlan(box) {
     toast("Erro ao salvar. Verifique a conexão.", true);
   }
 }
-async function saveField(inp) {
+async function confirmField(btn) {
+  const box = btn.closest(".dio-box");
+  const fieldId = btn.dataset.fid, key = btn.dataset.key;
+  const slot = btn.dataset.slot || (key === "real" ? "Check-out" : "Check-in");
+  const inp = box?.querySelector(`input[data-fid="${fieldId}"][data-key="${key}"]`);
+  if (!inp) return;
+  if (!inp.value.trim()) { toast(`Informe o ${slot.toLowerCase()} antes de salvar`, true); return; }
+  await saveField(inp, { confirm: true, slotLabel: slot });
+}
+async function saveField(inp, opts) {
+  opts = opts || {};
   if (!fbReady || !seller) return;
   const fieldId = inp.dataset.fid, key = inp.dataset.key;
   const month = todayISO(), day = todayDay();
@@ -2093,6 +2142,7 @@ async function saveField(inp) {
       delete next[key];
       delete next[key + "By"];
       delete next[key + "At"];
+      delete next[cellConfirmKey(key)];
       const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
       const stillHas = (cfg && hasPlanValue(next, cfg)) || hasCellValue(next, "real") || next.planYes === true || next.planYes === false || (next.planJustif && String(next.planJustif).trim());
       if (!stillHas) await ref.remove();
@@ -2101,6 +2151,7 @@ async function saveField(inp) {
           ref.child(key).remove(),
           ref.child(key + "By").remove(),
           ref.child(key + "At").remove(),
+          ref.child(cellConfirmKey(key)).remove(),
         ]);
       }
       setLocalCell(seller.id, fieldId, day, month, key, null);
@@ -2108,6 +2159,7 @@ async function saveField(inp) {
         const md = lojaData.months?.[month];
         if (md?.daily?.[seller.id]?.[fieldId]) delete md.daily[seller.id][fieldId][day];
       }
+      setLocalCellFlag(seller.id, fieldId, day, month, cellConfirmKey(key), null);
       await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
       toast("Campo limpo");
       updateProgress();
@@ -2138,10 +2190,14 @@ async function saveField(inp) {
       renderFields();
       return;
     }
-    await ref.update({ [key]: num, [key + "By"]: "consultor", [key + "At"]: Date.now() });
+    const payload = { [key]: num, [key + "By"]: "consultor", [key + "At"]: Date.now() };
+    if (opts.confirm) payload[cellConfirmKey(key)] = true;
+    await ref.update(payload);
     setLocalCell(seller.id, fieldId, day, month, key, num);
+    if (opts.confirm) setLocalCellFlag(seller.id, fieldId, day, month, cellConfirmKey(key), true);
     await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
-    toast("Salvo · sincronizado");
+    const slot = opts.slotLabel || (key === "real" ? "Check-out" : "Check-in");
+    toast(opts.confirm ? `${slot} salvo · travado` : "Sincronizado");
     renderFields();
     if (key === "plan") refreshOpenCrossAll();
   } catch (e) {
