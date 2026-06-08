@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v40";
+  var BUILD = "v42";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -486,36 +486,105 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v40";
+const APP_BUILD = "v42";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
 let fbDb = null, fbReady = false, connected = false;
 let lojaData = null, lojaCode = "", seller = null, lojaListener = null;
 let tickTimer = null, lastRenderDay = null, lastTimePhase = null;
-const CHECKIN_OPEN = 7 * 60;           // 07:00
-const CHECKIN_CLOSE = 12 * 60;         // 12:00 — fim oficial
-const CHECKIN_GRACE_END = 12 * 60 + 30; // 12:30 — prorrogação check-in
-const CHECKOUT_VISIBLE = 12 * 60 + 30;  // 12:30 — check-out aparece
-const CHECKOUT_OPEN = 16 * 60;         // 16:00
-const CHECKOUT_CLOSE = 20 * 60;        // 20:00
+const CONSULTOR_SCHEDULE_DEFAULTS = {
+  checkinOpen: "07:00",
+  checkinClose: "12:00",
+  checkinGraceEnd: "12:30",
+  checkoutVisible: "12:30",
+  checkoutOpen: "16:00",
+  checkoutClose: "20:00",
+  override: null
+};
+function parseScheduleHM(str) {
+  const m = String(str || "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = +m[1], min = +m[2];
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  return h * 60 + min;
+}
+function fmtScheduleHM(mins) {
+  const h = Math.floor(mins / 60) % 24;
+  const m = Math.round(mins % 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+function normalizeConsultorSchedule(raw) {
+  const s = { ...CONSULTOR_SCHEDULE_DEFAULTS, ...(raw || {}) };
+  ["checkinOpen", "checkinClose", "checkinGraceEnd", "checkoutVisible", "checkoutOpen", "checkoutClose"].forEach(k => {
+    const p = parseScheduleHM(s[k]);
+    s[k] = p != null ? fmtScheduleHM(p) : CONSULTOR_SCHEDULE_DEFAULTS[k];
+  });
+  s.override = s.override === "open" || s.override === "closed" ? s.override : null;
+  return s;
+}
+function consultorSchedule() { return normalizeConsultorSchedule(lojaData?.consultorSchedule); }
+function scheduleMins(key) {
+  return parseScheduleHM(consultorSchedule()[key]) ?? parseScheduleHM(CONSULTOR_SCHEDULE_DEFAULTS[key]);
+}
+function scheduleOverride() { return consultorSchedule().override; }
+function scheduleTimeLabel(key) { return consultorSchedule()[key] || CONSULTOR_SCHEDULE_DEFAULTS[key]; }
 function nowMins() {
   const n = new Date();
   return n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60;
 }
-function checkinWindowOpen() { const m = nowMins(); return m >= CHECKIN_OPEN && m < CHECKIN_GRACE_END; }
-function checkinGraceActive() { const m = nowMins(); return m >= CHECKIN_CLOSE && m < CHECKIN_GRACE_END; }
-function checkinWindowEnded() { return nowMins() >= CHECKIN_GRACE_END; }
-function consultorCheckoutVisible() { return nowMins() >= CHECKOUT_VISIBLE; }
-function checkoutWindowOpen() { const m = nowMins(); return m >= CHECKOUT_OPEN && m < CHECKOUT_CLOSE; }
-function checkoutWindowEnded() { return nowMins() >= CHECKOUT_CLOSE; }
-function timePhase() {
+function dateAtScheduleMins(mins) {
+  const d = new Date();
+  d.setHours(Math.floor(mins / 60), Math.round(mins % 60), 0, 0);
+  return d;
+}
+function checkinWindowOpen() {
+  const ov = scheduleOverride();
+  if (ov === "open") return true;
+  if (ov === "closed") return false;
   const m = nowMins();
-  if (m < CHECKIN_OPEN) return "pre-checkin";
-  if (m < CHECKIN_CLOSE) return "checkin";
-  if (m < CHECKIN_GRACE_END) return "checkin-grace";
-  if (m < CHECKOUT_OPEN) return "pre-checkout";
-  if (m < CHECKOUT_CLOSE) return "checkout";
+  return m >= scheduleMins("checkinOpen") && m < scheduleMins("checkinGraceEnd");
+}
+function checkinGraceActive() {
+  if (scheduleOverride()) return false;
+  const m = nowMins();
+  return m >= scheduleMins("checkinClose") && m < scheduleMins("checkinGraceEnd");
+}
+function checkinWindowEnded() {
+  const ov = scheduleOverride();
+  if (ov === "open") return false;
+  if (ov === "closed") return true;
+  return nowMins() >= scheduleMins("checkinGraceEnd");
+}
+function consultorCheckoutVisible() {
+  const ov = scheduleOverride();
+  if (ov === "open") return true;
+  if (ov === "closed") return false;
+  return nowMins() >= scheduleMins("checkoutVisible");
+}
+function checkoutWindowOpen() {
+  const ov = scheduleOverride();
+  if (ov === "open") return true;
+  if (ov === "closed") return false;
+  const m = nowMins();
+  return m >= scheduleMins("checkoutOpen") && m < scheduleMins("checkoutClose");
+}
+function checkoutWindowEnded() {
+  const ov = scheduleOverride();
+  if (ov === "open") return false;
+  if (ov === "closed") return true;
+  return nowMins() >= scheduleMins("checkoutClose");
+}
+function timePhase() {
+  const ov = scheduleOverride();
+  if (ov === "open") return "override-open";
+  if (ov === "closed") return "override-closed";
+  const m = nowMins();
+  if (m < scheduleMins("checkinOpen")) return "pre-checkin";
+  if (m < scheduleMins("checkinClose")) return "checkin";
+  if (m < scheduleMins("checkinGraceEnd")) return "checkin-grace";
+  if (m < scheduleMins("checkoutOpen")) return "pre-checkout";
+  if (m < scheduleMins("checkoutClose")) return "checkout";
   return "ended";
 }
 function planUsesCheckoutWindow(cfg, day, month) {
@@ -981,6 +1050,7 @@ function normalizeCfgMeta(cfg) {
   return cfg;
 }
 function normalizeLojaIndicators() {
+  if (lojaData) lojaData.consultorSchedule = normalizeConsultorSchedule(lojaData.consultorSchedule);
   (lojaData?.indicators || []).forEach(ind => {
     normalizeCfgMeta(ind);
     if (ind.openQuestion == null) ind.openQuestion = false;
@@ -1737,7 +1807,7 @@ function hasCellValue(cell, key) {
 function isViewingToday(day, month) {
   return month === todayISO() && day === todayDay();
 }
-/** Consultor: check-in 07:00–12:30 (prorrogação 30 min após 12:00) · check-out visível 12:30 · editável 16:00–20:00 */
+/** Consultor: janelas definidas pelo gestor em Regras de Negócio (consultorSchedule) */
 function cellLockedForConsultor(cell, key, day, month, cfg) {
   if (!isViewingToday(day, month)) return true;
   if (key === "plan" && !planWindowOpen(cfg, day, month)) return true;
@@ -1759,12 +1829,12 @@ function fieldSoonKind(cell, key, day, month, cfg) {
   if (key === "plan" && !planWindowOpen(cfg, day, month)) {
     if (cell.planBy === "gestor" || cell[key + "By"] === "gestor") return null;
     if (planUsesCheckoutWindow(cfg, day, month)) {
-      if (nowMins() < CHECKOUT_OPEN) return "checkout";
-    } else if (nowMins() < CHECKIN_OPEN) return "checkin";
+      if (nowMins() < scheduleMins("checkoutOpen")) return "checkout";
+    } else if (nowMins() < scheduleMins("checkinOpen")) return "checkin";
   }
   if (key === "real" && !checkoutWindowOpen()) {
     if (cell[key + "By"] === "gestor") return null;
-    if (!checkoutWindowEnded() && nowMins() < CHECKOUT_OPEN) return "checkout";
+    if (!checkoutWindowEnded() && nowMins() < scheduleMins("checkoutOpen")) return "checkout";
   }
   return null;
 }
@@ -1773,7 +1843,7 @@ function soonBannerHtml(kind) {
   return `<div class="dio-soon-banner"><span class="hourglass" aria-hidden="true">⏳</span><span>${label} abre em breve — veja o cronômetro.</span></div>`;
 }
 function graceBannerHtml() {
-  return `<div class="dio-soon-banner"><span class="hourglass" aria-hidden="true">⏳</span><span>Prorrogação — check-in encerra às 12:30. Veja o cronômetro.</span></div>`;
+  return `<div class="dio-soon-banner"><span class="hourglass" aria-hidden="true">⏳</span><span>Prorrogação — check-in encerra às ${scheduleTimeLabel("checkinGraceEnd")}. Veja o cronômetro.</span></div>`;
 }
 function lockLabel(cell, key, day, month, cfg) {
   if (key === "plan" && !planWindowOpen(cfg, day, month)) {
@@ -1826,34 +1896,37 @@ function tickUrgencyAndDay() {
   pill.classList.remove("show", "ended", "warmup", "urgent");
   if (onMain) {
     pill.classList.add("show");
-    if (phase === "pre-checkin") {
-      const start = new Date(now);
-      start.setHours(7, 0, 0, 0);
+    if (phase === "override-open") {
       pill.classList.add("warmup");
-      lbl.textContent = "ABRE 07:00";
+      lbl.textContent = "🔓 LIBERADO";
+      txt.textContent = "GESTOR";
+    } else if (phase === "override-closed") {
+      pill.classList.add("ended");
+      lbl.textContent = "🔒 TRAVADO";
+      txt.textContent = "GESTOR";
+    } else if (phase === "pre-checkin") {
+      const start = dateAtScheduleMins(scheduleMins("checkinOpen"));
+      pill.classList.add("warmup");
+      lbl.textContent = "ABRE " + scheduleTimeLabel("checkinOpen");
       txt.textContent = formatCountdown(Math.max(0, start - now));
     } else if (phase === "checkin") {
-      const end = new Date(now);
-      end.setHours(12, 0, 0, 0);
+      const end = dateAtScheduleMins(scheduleMins("checkinClose"));
       pill.classList.add("urgent");
       lbl.textContent = "⏱ CHECK-IN";
       txt.textContent = formatCountdown(Math.max(0, end - now));
     } else if (phase === "checkin-grace") {
-      const end = new Date(now);
-      end.setHours(12, 30, 0, 0);
+      const end = dateAtScheduleMins(scheduleMins("checkinGraceEnd"));
       pill.classList.add("urgent");
       lbl.textContent = "⏱ PRORROGAÇÃO";
       txt.textContent = formatCountdown(Math.max(0, end - now));
     } else if (phase === "pre-checkout") {
-      const start = new Date(now);
-      start.setHours(16, 0, 0, 0);
+      const start = dateAtScheduleMins(scheduleMins("checkoutOpen"));
       pill.classList.add("warmup");
-      lbl.textContent = "ABRE 16:00";
+      lbl.textContent = "ABRE " + scheduleTimeLabel("checkoutOpen");
       txt.textContent = formatCountdown(Math.max(0, start - now));
     } else if (phase === "checkout") {
       pill.classList.add("urgent");
-      const end = new Date(now);
-      end.setHours(20, 0, 0, 0);
+      const end = dateAtScheduleMins(scheduleMins("checkoutClose"));
       lbl.textContent = "⏱ CHECK-OUT";
       txt.textContent = formatCountdown(Math.max(0, end - now));
     } else {
@@ -2022,8 +2095,8 @@ async function saveOpenPlan(box) {
   const month = todayISO(), day = todayDay();
   if (!planWindowOpen(cfg, day, month)) {
     toast(planUsesCheckoutWindow(cfg, day, month)
-      ? (checkoutWindowEnded() ? "Horário de check-out encerrado (20:00)" : "Check-out abre às 16:00 — veja o cronômetro")
-      : (checkinWindowEnded() ? "Horário de check-in encerrado (12:30)" : "Check-in abre às 07:00 — veja o cronômetro"), true);
+      ? (checkoutWindowEnded() ? "Horário de check-out encerrado (" + scheduleTimeLabel("checkoutClose") + ")" : "Check-out abre às " + scheduleTimeLabel("checkoutOpen") + " — veja o cronômetro")
+      : (checkinWindowEnded() ? "Horário de check-in encerrado (" + scheduleTimeLabel("checkinGraceEnd") + ")" : "Check-in abre às " + scheduleTimeLabel("checkinOpen") + " — veja o cronômetro"), true);
     return;
   }
   const yesBtn = box.querySelector('[data-yn="1"]');
@@ -2119,13 +2192,13 @@ async function saveField(inp) {
     const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
     if (key === "plan" && !planWindowOpen(cfg, day, month)) {
       toast(planUsesCheckoutWindow(cfg, day, month)
-        ? (checkoutWindowEnded() ? "Horário de check-out encerrado (20:00)" : "Check-out abre às 16:00 — veja o cronômetro")
-        : (checkinWindowEnded() ? "Horário de check-in encerrado (12:30)" : "Check-in abre às 07:00 — veja o cronômetro"), true);
+        ? (checkoutWindowEnded() ? "Horário de check-out encerrado (" + scheduleTimeLabel("checkoutClose") + ")" : "Check-out abre às " + scheduleTimeLabel("checkoutOpen") + " — veja o cronômetro")
+        : (checkinWindowEnded() ? "Horário de check-in encerrado (" + scheduleTimeLabel("checkinGraceEnd") + ")" : "Check-in abre às " + scheduleTimeLabel("checkinOpen") + " — veja o cronômetro"), true);
       renderFields();
       return;
     }
     if (key === "real" && !checkoutWindowOpen()) {
-      toast(checkoutWindowEnded() ? "Horário de check-out encerrado (20:00)" : "Check-out abre às 16:00 — veja o cronômetro", true);
+      toast(checkoutWindowEnded() ? "Horário de check-out encerrado (" + scheduleTimeLabel("checkoutClose") + ")" : "Check-out abre às " + scheduleTimeLabel("checkoutOpen") + " — veja o cronômetro", true);
       renderFields();
       return;
     }
