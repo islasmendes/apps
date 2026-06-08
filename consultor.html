@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v31";
+  var BUILD = "v32";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -448,21 +448,41 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v31";
+const APP_BUILD = "v32";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
 let fbDb = null, fbReady = false, connected = false;
 let lojaData = null, lojaCode = "", seller = null, lojaListener = null;
-let tickTimer = null, lastRenderDay = null, lastCheckoutOpen = null;
-const CHECKOUT_OPEN = 16 * 60 + 30; // 16:30
-const URGENCY_START = CHECKOUT_OPEN;
-const URGENCY_END = 19 * 60 + 15;   // 19:15
+let tickTimer = null, lastRenderDay = null, lastTimePhase = null;
+const CHECKIN_OPEN = 7 * 60;        // 07:00
+const CHECKIN_CLOSE = 12 * 60;      // 12:00
+const CHECKOUT_OPEN = 16 * 60;      // 16:00
+const CHECKOUT_CLOSE = 20 * 60;     // 20:00
 function nowMins() {
   const n = new Date();
   return n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60;
 }
-function checkoutWindowOpen() { return nowMins() >= CHECKOUT_OPEN; }
+function checkinWindowOpen() { const m = nowMins(); return m >= CHECKIN_OPEN && m < CHECKIN_CLOSE; }
+function checkinWindowEnded() { return nowMins() >= CHECKIN_CLOSE; }
+function checkoutWindowOpen() { const m = nowMins(); return m >= CHECKOUT_OPEN && m < CHECKOUT_CLOSE; }
+function checkoutWindowEnded() { return nowMins() >= CHECKOUT_CLOSE; }
+function timePhase() {
+  const m = nowMins();
+  if (m < CHECKIN_OPEN) return "pre-checkin";
+  if (m < CHECKIN_CLOSE) return "checkin";
+  if (m < CHECKOUT_OPEN) return "pre-checkout";
+  if (m < CHECKOUT_CLOSE) return "checkout";
+  return "ended";
+}
+function planUsesCheckoutWindow(cfg, day, month) {
+  if (!cfg || !cfgOpenQuestion(cfg)) return false;
+  const needs = consultorFieldNeeds(seller.id, cfg, day, month);
+  return openQuestionCheckoutOnly(cfg, needs);
+}
+function planWindowOpen(cfg, day, month) {
+  return planUsesCheckoutWindow(cfg, day, month) ? checkoutWindowOpen() : checkinWindowOpen();
+}
 
 const params = new URLSearchParams(location.search);
 if (params.get("loja")) document.getElementById("inLoja").value = params.get("loja").toUpperCase();
@@ -1608,9 +1628,10 @@ function hasCellValue(cell, key) {
 function isViewingToday(day, month) {
   return month === todayISO() && day === todayDay();
 }
-/** Consultor: gestor trava sempre; check-out só após 16:30; próprio valor editável até 00:00 */
+/** Consultor: check-in 07:00–12:00 · check-out 16:00–20:00 · gestor trava sempre */
 function cellLockedForConsultor(cell, key, day, month, cfg) {
   if (!isViewingToday(day, month)) return true;
+  if (key === "plan" && !planWindowOpen(cfg, day, month)) return true;
   if (key === "real" && !checkoutWindowOpen()) return true;
   if (key === "plan" && cfg && cfgOpenQuestion(cfg)) {
     if (cell.planBy === "gestor") return true;
@@ -1625,12 +1646,26 @@ function cellIsMine(cell, key, cfg) {
   if (key === "plan" && cfg && cfgOpenQuestion(cfg)) return isOpenPlanComplete(cell) && cell.planBy === "consultor";
   return hasCellValue(cell, key) && cell[key + "By"] === "consultor";
 }
+function checkinSoonLabel() {
+  return '<span class="lock-tag soon">⏳ Check-in abre em breve — veja o cronômetro</span>';
+}
 function checkoutSoonLabel() {
-  return '<span class="lock-tag soon">⏳ Libera em breve — veja o cronômetro</span>';
+  return '<span class="lock-tag soon">⏳ Check-out abre em breve — veja o cronômetro</span>';
 }
 function lockLabel(cell, key, day, month, cfg) {
+  if (key === "plan" && !planWindowOpen(cfg, day, month)) {
+    if (cell.planBy === "gestor" || cell[key + "By"] === "gestor") return '<span class="lock-tag gestor">👔 Gestor</span>';
+    if (planUsesCheckoutWindow(cfg, day, month)) {
+      if (nowMins() < CHECKOUT_OPEN) return checkoutSoonLabel();
+      if (checkoutWindowEnded()) return '<span class="lock-tag">🔒 Check-out encerrado</span>';
+    } else {
+      if (nowMins() < CHECKIN_OPEN) return checkinSoonLabel();
+      if (checkinWindowEnded()) return '<span class="lock-tag">🔒 Check-in encerrado</span>';
+    }
+  }
   if (key === "real" && !checkoutWindowOpen()) {
     if (cell[key + "By"] === "gestor") return '<span class="lock-tag gestor">👔 Gestor</span>';
+    if (checkoutWindowEnded()) return '<span class="lock-tag">🔒 Check-out encerrado</span>';
     return checkoutSoonLabel();
   }
   if (key === "plan" && cfg && cfgOpenQuestion(cfg)) {
@@ -1659,38 +1694,46 @@ function formatCountdown(ms) {
 }
 function tickUrgencyAndDay() {
   const now = new Date();
-  const mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
   const pill = document.getElementById("urgencyPill");
   const txt = document.getElementById("urgencyTxt");
   const lbl = document.getElementById("urgencyLbl");
   if (!pill || !txt || !lbl) return;
   const onMain = document.getElementById("screenMain").classList.contains("active");
+  const phase = timePhase();
   pill.classList.remove("show", "ended", "warmup");
   if (onMain) {
-    if (mins < URGENCY_START) {
+    pill.classList.add("show");
+    if (phase === "pre-checkin") {
       const start = new Date(now);
-      start.setHours(16, 30, 0, 0);
-      pill.classList.add("show", "warmup");
-      lbl.textContent = "ABRE 16:30";
+      start.setHours(7, 0, 0, 0);
+      pill.classList.add("warmup");
+      lbl.textContent = "ABRE 07:00";
       txt.textContent = formatCountdown(Math.max(0, start - now));
-    } else if (mins >= URGENCY_START && mins < URGENCY_END) {
+    } else if (phase === "checkin") {
       const end = new Date(now);
-      end.setHours(19, 15, 0, 0);
-      pill.classList.add("show");
+      end.setHours(12, 0, 0, 0);
+      lbl.textContent = "⏱ CHECK-IN";
+      txt.textContent = formatCountdown(Math.max(0, end - now));
+    } else if (phase === "pre-checkout") {
+      const start = new Date(now);
+      start.setHours(16, 0, 0, 0);
+      pill.classList.add("warmup");
+      lbl.textContent = "ABRE 16:00";
+      txt.textContent = formatCountdown(Math.max(0, start - now));
+    } else if (phase === "checkout") {
+      const end = new Date(now);
+      end.setHours(20, 0, 0, 0);
       lbl.textContent = "⏱ CHECK-OUT";
       txt.textContent = formatCountdown(Math.max(0, end - now));
     } else {
-      const midnight = new Date(now);
-      midnight.setHours(24, 0, 0, 0);
-      pill.classList.add("show", "ended");
+      pill.classList.add("ended");
       lbl.textContent = "ENCERRADO";
-      txt.textContent = formatCountdown(Math.max(0, midnight - now));
+      txt.textContent = "00:00:00";
     }
   }
   const d = todayDay();
-  const coOpen = checkoutWindowOpen();
-  if (onMain && lastCheckoutOpen !== null && coOpen !== lastCheckoutOpen) renderFields();
-  lastCheckoutOpen = coOpen;
+  if (onMain && lastTimePhase !== null && phase !== lastTimePhase) renderFields();
+  lastTimePhase = phase;
   if (lastRenderDay != null && d !== lastRenderDay && onMain) {
     renderFields();
     toast("Novo dia — ontem bloqueado");
@@ -1715,7 +1758,7 @@ function countProgress() {
       total++; cinT++;
       if (cellFilledFromDom(cfg, "plan", c)) { done++; cinD++; }
     }
-    if (needs.checkout) {
+    if (needs.checkout && checkinWindowEnded()) {
       total++; coutT++;
       if (cellFilledFromDom(cfg, "real", c)) { done++; coutD++; }
     }
@@ -1786,7 +1829,8 @@ function renderFields() {
         html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="plan" data-day="${day}" value="${c.plan ?? ""}" placeholder="—" ${planLocked ? "disabled" : ""}>${progIn}</div>`;
       }
     }
-    if (needs.checkout) {
+    const showCheckout = needs.checkout && checkinWindowEnded();
+    if (showCheckout) {
       if (openQuestionCheckoutOnly(cfg, needs)) {
         html += buildOpenQuestionBox(cfg, c, "out", day, month);
       } else {
@@ -1838,6 +1882,12 @@ async function saveOpenPlan(box) {
   const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
   if (!cfg) return;
   const month = todayISO(), day = todayDay();
+  if (!planWindowOpen(cfg, day, month)) {
+    toast(planUsesCheckoutWindow(cfg, day, month)
+      ? (checkoutWindowEnded() ? "Horário de check-out encerrado (20:00)" : "Check-out abre às 16:00 — veja o cronômetro")
+      : (checkinWindowEnded() ? "Horário de check-in encerrado (12:00)" : "Check-in abre às 07:00 — veja o cronômetro"), true);
+    return;
+  }
   const yesBtn = box.querySelector('[data-yn="1"]');
   const noBtn = box.querySelector('[data-yn="0"]');
   const planYes = yesBtn?.classList.contains("active") ? true : noBtn?.classList.contains("active") ? false : null;
@@ -1928,12 +1978,19 @@ async function saveField(inp) {
     }
     const num = Number(val);
     if (isNaN(num)) { toast("Valor inválido", true); return; }
-    if (key === "real" && !checkoutWindowOpen()) {
-      toast("Check-out libera em breve — veja o cronômetro", true);
+    const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
+    if (key === "plan" && !planWindowOpen(cfg, day, month)) {
+      toast(planUsesCheckoutWindow(cfg, day, month)
+        ? (checkoutWindowEnded() ? "Horário de check-out encerrado (20:00)" : "Check-out abre às 16:00 — veja o cronômetro")
+        : (checkinWindowEnded() ? "Horário de check-in encerrado (12:00)" : "Check-in abre às 07:00 — veja o cronômetro"), true);
       renderFields();
       return;
     }
-    const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
+    if (key === "real" && !checkoutWindowOpen()) {
+      toast(checkoutWindowEnded() ? "Horário de check-out encerrado (20:00)" : "Check-out abre às 16:00 — veja o cronômetro", true);
+      renderFields();
+      return;
+    }
     if (cellLockedForConsultor(cell, key, day, month, cfg) && (key === "plan" && cfg ? hasPlanValue(cell, cfg) : hasCellValue(cell, key))) {
       let msg = "Dia encerrado";
       if (cell[key + "By"] === "gestor") msg = "Preenchido pelo gestor — não pode alterar";
