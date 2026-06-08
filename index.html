@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v25";
+  var BUILD = "v26";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -160,6 +160,9 @@
   .dio-lbl { font-size: 9px; font-weight: 800; letter-spacing: .35px; text-transform: uppercase; line-height: 1.1; padding-left: 1px; }
   .dio-checkin .dio-lbl { color: var(--dio-in-lbl); }
   .dio-checkout .dio-lbl { color: var(--dio-out-lbl); }
+  .prog-sum-hint { font-size: 9px; margin-top: 3px; line-height: 1.25; font-variant-numeric: tabular-nums; transition: opacity .12s ease; }
+  .prog-sum-hint b { font-weight: 800; transition: color .15s ease, transform .15s ease; display: inline-block; }
+  .prog-sum-hint.prog-sum-pulse b { color: var(--accent-2) !important; transform: scale(1.08); }
   .daycell .cellinput { width: 100%; border-radius: 7px; padding: 6px 6px; font-weight: 800; font-size: 13px; text-align: center; transition: .15s; border: 1.5px solid; color: var(--text); }
   .daycell .cellinput.plan-cell { background: var(--dio-in-bg); border-color: var(--dio-in-bd); }
   .daycell .cellinput.checkout-cell { background: var(--dio-out-bg); border-color: var(--dio-out-bd); }
@@ -1614,7 +1617,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v25";
+const APP_BUILD = "v26";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3556,9 +3559,12 @@ function renderDiario() {
   table.querySelectorAll(".cellinput").forEach(inp => {
     inp.addEventListener("input", () => {
       if (inp.readOnly) return;
-      setCell(diarioSeller, inp.dataset.field, +inp.dataset.day, inp.dataset.key, inp.value === "" ? "" : Number(inp.value));
+      const raw = inp.value.trim();
+      const num = raw === "" || raw === "-" ? "" : Number(raw);
+      setCell(diarioSeller, inp.dataset.field, +inp.dataset.day, inp.dataset.key, num === "" || isNaN(num) ? "" : num);
       recolorDiarioCell(inp);
       updateDiarioSummary(inp.dataset.field);
+      refreshProgramacaoDiarioRowHints(inp.dataset.field);
       renderDiarioSellerBar(sellers);
     });
   });
@@ -3847,15 +3853,64 @@ function programacaoAcumulada(sellerId, ref, targetDay, m = currentMonth) {
   }
   return has ? { value: sum, parts, kind } : null;
 }
-function programacaoDiarioCellHint(sellerId, ref, day, m = currentMonth) {
+function programacaoDiarioHintData(sellerId, ref, day, m = currentMonth) {
   const kind = programacaoKind(ref);
-  if (kind !== "sabado" && kind !== "domingo") return "";
+  if (kind !== "sabado" && kind !== "domingo") return null;
   const target = programacaoTargetDay(sellerId, ref, m, day);
-  if (target == null || day > target) return "";
+  if (target == null || day > target) return null;
   const acc = programacaoAcumulada(sellerId, ref, target, m);
-  if (!acc) return "";
-  if (day === target) return `<div class="prog-sum-hint" style="font-size:9px;margin-top:3px;color:var(--accent-2)">Σ semana <b>${acc.value}</b></div>`;
-  return `<div class="prog-sum-hint" style="font-size:9px;margin-top:3px;color:var(--text-dim)">→Σ <b>${acc.value}</b></div>`;
+  if (!acc) return null;
+  return { value: acc.value, isTarget: day === target };
+}
+function programacaoDiarioCellHint(sellerId, ref, day, m = currentMonth) {
+  const data = programacaoDiarioHintData(sellerId, ref, day, m);
+  if (!data) return "";
+  const color = data.isTarget ? "var(--accent-2)" : "var(--text-dim)";
+  const label = data.isTarget ? "Σ semana" : "→Σ";
+  return `<div class="prog-sum-hint" data-prog-day="${day}" style="color:${color}">${label} <b>${data.value}</b></div>`;
+}
+function pulseProgSumHint(el) {
+  if (!el) return;
+  el.classList.remove("prog-sum-pulse");
+  void el.offsetWidth;
+  el.classList.add("prog-sum-pulse");
+  clearTimeout(el._progPulseT);
+  el._progPulseT = setTimeout(() => el.classList.remove("prog-sum-pulse"), 280);
+}
+function refreshProgramacaoDiarioRowHints(fieldId) {
+  const cfg = cfgById(fieldId);
+  if (!cfg || !programacaoKind(cfg) || !diarioSeller) return;
+  const tr = document.querySelector(`#diarioTable input.cellinput[data-field="${CSS.escape(fieldId)}"]`)?.closest("tr");
+  if (!tr) return;
+  const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
+  days.forEach(d => {
+    const data = programacaoDiarioHintData(diarioSeller, cfg, d);
+    const hints = tr.querySelectorAll(`.prog-sum-hint[data-prog-day="${d}"]`);
+    if (!data) {
+      hints.forEach(el => el.remove());
+      return;
+    }
+    const label = data.isTarget ? "Σ semana" : "→Σ";
+    const color = data.isTarget ? "var(--accent-2)" : "var(--text-dim)";
+    const markup = programacaoDiarioCellHint(diarioSeller, cfg, d);
+    if (hints.length) {
+      hints.forEach(el => {
+        const prev = el.querySelector("b")?.textContent;
+        el.style.color = color;
+        el.innerHTML = `${label} <b>${data.value}</b>`;
+        if (prev !== String(data.value)) pulseProgSumHint(el);
+      });
+      return;
+    }
+    if (!markup) return;
+    tr.querySelectorAll(`input.cellinput[data-field="${CSS.escape(fieldId)}"][data-day="${d}"]`).forEach(inp => {
+      const lbl = inp.closest(".dio-field");
+      if (lbl && !lbl.querySelector(".prog-sum-hint")) {
+        lbl.insertAdjacentHTML("beforeend", markup);
+        pulseProgSumHint(lbl.querySelector(".prog-sum-hint"));
+      }
+    });
+  });
 }
 function crossPlanValueFromCell(c) {
   if (!c || typeof c !== "object") return null;

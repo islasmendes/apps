@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v25";
+  var BUILD = "v26";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -335,8 +335,9 @@
   .open-cross-msg { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 12px; line-height: 1.45; font-weight: 600; }
   .open-cross-msg.bad { background: color-mix(in srgb, var(--danger) 14%, var(--panel-2)); border: 1.5px solid color-mix(in srgb, var(--danger) 55%, var(--border)); color: #ff8a94; }
   .open-cross-msg.good { background: color-mix(in srgb, var(--ok) 14%, var(--panel-2)); border: 1.5px solid color-mix(in srgb, var(--ok) 55%, var(--border)); color: var(--ok); }
-  .prog-run-hint { font-size: 11px; margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, var(--panel-2)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); color: var(--text-dim); line-height: 1.35; }
-  .prog-run-hint b { color: var(--accent-2); font-weight: 800; }
+  .prog-run-hint { font-size: 11px; margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, var(--panel-2)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); color: var(--text-dim); line-height: 1.35; transition: opacity .12s ease; }
+  .prog-run-hint b { color: var(--accent-2); font-weight: 800; transition: color .15s ease, transform .15s ease; display: inline-block; }
+  .prog-run-hint.prog-sum-pulse b { transform: scale(1.06); }
   .lock-tag {
     font-size: 9px; font-weight: 800; padding: 2px 7px; border-radius: 99px;
     background: color-mix(in srgb, var(--text-faint) 20%, transparent); color: var(--text-dim);
@@ -447,7 +448,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v25";
+const APP_BUILD = "v26";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -726,8 +727,18 @@ function programacaoAccumSourceDays(sellerId, ref, targetDay, month) {
   if (kind === "domingo") return week.filter(d => d < targetDay);
   return [];
 }
+function crossPlanValueLive(sellerId, fieldId, day, month, liveInp) {
+  const c = getCell(sellerId, fieldId, day, month);
+  if (!liveInp || liveInp.dataset.fid !== fieldId || +liveInp.dataset.day !== day) return crossPlanValueFromCell(c);
+  const key = liveInp.dataset.key;
+  const raw = liveInp.value.trim();
+  const merged = { ...c };
+  if (raw === "" || raw === "-" || isNaN(Number(raw))) delete merged[key];
+  else merged[key] = Number(raw);
+  return crossPlanValueFromCell(merged);
+}
 /** Soma declarações da semana para o dia-alvo (sábado ou domingo). */
-function programacaoAcumulada(sellerId, ref, targetDay, month) {
+function programacaoAcumulada(sellerId, ref, targetDay, month, liveInp) {
   const kind = programacaoKind(ref);
   if (kind !== "sabado" && kind !== "domingo") return null;
   const m = month || todayISO();
@@ -739,7 +750,7 @@ function programacaoAcumulada(sellerId, ref, targetDay, month) {
     if (!sellerWorks(sellerId, d, m)) continue;
     const needs = consultorFieldNeeds(sellerId, ref, d, m);
     if (!needs.checkin && !needs.checkout) continue;
-    const v = crossPlanValueFromCell(getCell(sellerId, ref.id, d, m));
+    const v = crossPlanValueLive(sellerId, ref.id, d, m, liveInp && +liveInp.dataset.day === d ? liveInp : null);
     if (v == null) continue;
     sum += v;
     has = true;
@@ -752,16 +763,45 @@ function programacaoAccumBreakdownText(hit) {
   const parts = hit.accumParts.map(p => `${p.label} ${p.value}`).join(" + ");
   return ` <span class="hint">(soma: ${parts} = ${hit.value})</span>`;
 }
-function programacaoRunningHint(sellerId, ref, month, day) {
+function programacaoRunningHint(sellerId, ref, month, day, liveInp) {
   const kind = programacaoKind(ref);
   if (kind !== "sabado" && kind !== "domingo") return "";
   const target = programacaoTargetDay(sellerId, ref, month, day);
   if (target == null || day >= target) return "";
-  const acc = programacaoAcumulada(sellerId, ref, target, month);
+  const acc = programacaoAcumulada(sellerId, ref, target, month, liveInp);
   if (!acc?.parts?.length) return "";
   const label = kind === "sabado" ? "sábado" : "domingo";
   const parts = acc.parts.map(p => `${p.label} ${p.value}`).join(" + ");
   return `<div class="prog-run-hint">Total p/ ${label}: <b>${acc.value}</b> <span class="hint">(${parts})</span></div>`;
+}
+function pulseProgRunHint(el) {
+  if (!el) return;
+  el.classList.remove("prog-sum-pulse");
+  void el.offsetWidth;
+  el.classList.add("prog-sum-pulse");
+  clearTimeout(el._progPulseT);
+  el._progPulseT = setTimeout(() => el.classList.remove("prog-sum-pulse"), 280);
+}
+function updateProgramacaoRunningHint(liveInp) {
+  if (!seller || !liveInp?.dataset.fid) return;
+  const cfg = fieldList().find(f => f.cfg.id === liveInp.dataset.fid)?.cfg;
+  if (!cfg || !programacaoKind(cfg)) return;
+  const month = todayISO(), day = todayDay();
+  const box = liveInp.closest(".dio-box");
+  if (!box) return;
+  const html = programacaoRunningHint(seller.id, cfg, month, day, liveInp);
+  let hint = box.querySelector(".prog-run-hint");
+  if (!html) { hint?.remove(); return; }
+  const prev = hint?.querySelector("b")?.textContent;
+  if (hint) {
+    hint.outerHTML = html;
+    hint = box.querySelector(".prog-run-hint");
+  } else {
+    liveInp.insertAdjacentHTML("afterend", html);
+    hint = box.querySelector(".prog-run-hint");
+  }
+  const next = hint?.querySelector("b")?.textContent;
+  if (prev !== next) pulseProgRunHint(hint);
 }
 /** plan (check-in) ou real (check-out) — gestor ou consultor. */
 function crossPlanValueFromCell(c) {
@@ -1743,7 +1783,7 @@ function renderFields() {
       } else {
         const progIn = programacaoRunningHint(seller.id, cfg, month, day);
         html += `<div class="dio-box in${planLocked ? " locked" : ""}${planMine && !planLocked ? " mine" : ""}"><div class="dio-lbl">Check-in ${lockLabel(c, "plan", day, month, cfg)}</div>`;
-        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="plan" value="${c.plan ?? ""}" placeholder="—" ${planLocked ? "disabled" : ""}>${progIn}</div>`;
+        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="plan" data-day="${day}" value="${c.plan ?? ""}" placeholder="—" ${planLocked ? "disabled" : ""}>${progIn}</div>`;
       }
     }
     if (needs.checkout) {
@@ -1752,14 +1792,17 @@ function renderFields() {
       } else {
         const progOut = programacaoRunningHint(seller.id, cfg, month, day);
         html += `<div class="dio-box out${realLocked ? " locked" : ""}${realMine && !realLocked ? " mine" : ""}"><div class="dio-lbl">Check-out ${lockLabel(c, "real", day, month, cfg)}</div>`;
-        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="real" value="${c.real ?? ""}" placeholder="—" ${realLocked ? "disabled" : ""}>${progOut}</div>`;
+        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="real" data-day="${day}" value="${c.real ?? ""}" placeholder="—" ${realLocked ? "disabled" : ""}>${progOut}</div>`;
       }
     }
     html += "</div></div>";
     return html;
   }).join("");
   root.querySelectorAll("input[data-fid]").forEach(inp => {
-    inp.addEventListener("input", () => updateProgress());
+    inp.addEventListener("input", () => {
+      updateProgramacaoRunningHint(inp);
+      updateProgress();
+    });
     inp.addEventListener("change", () => saveField(inp));
     inp.addEventListener("keydown", e => { if (e.key === "Enter") { inp.blur(); } });
   });
