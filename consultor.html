@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v32";
+  var BUILD = "v33";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -448,7 +448,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v32";
+const APP_BUILD = "v33";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -465,6 +465,7 @@ function nowMins() {
 }
 function checkinWindowOpen() { const m = nowMins(); return m >= CHECKIN_OPEN && m < CHECKIN_CLOSE; }
 function checkinWindowEnded() { return nowMins() >= CHECKIN_CLOSE; }
+function consultorCheckoutVisible() { return checkinWindowEnded(); }
 function checkoutWindowOpen() { const m = nowMins(); return m >= CHECKOUT_OPEN && m < CHECKOUT_CLOSE; }
 function checkoutWindowEnded() { return nowMins() >= CHECKOUT_CLOSE; }
 function timePhase() {
@@ -1053,7 +1054,9 @@ function consultorFieldNeeds(sellerId, cfg, day, m = todayISO()) {
 function activeFieldList(sellerId, day, month) {
   return fieldList().filter(({ cfg }) => {
     const n = consultorFieldNeeds(sellerId, cfg, day, month);
-    return n.checkin || n.checkout;
+    if (!n.checkin && !n.checkout) return false;
+    if (consultorCheckoutVisible()) return true;
+    return !!n.checkin;
   });
 }
 function parseMonth(m) { const [y, mo] = m.split("-").map(Number); return { y, mo }; }
@@ -1758,7 +1761,7 @@ function countProgress() {
       total++; cinT++;
       if (cellFilledFromDom(cfg, "plan", c)) { done++; cinD++; }
     }
-    if (needs.checkout && checkinWindowEnded()) {
+    if (needs.checkout && consultorCheckoutVisible()) {
       total++; coutT++;
       if (cellFilledFromDom(cfg, "real", c)) { done++; coutD++; }
     }
@@ -1819,8 +1822,11 @@ function renderFields() {
     const realLocked = cellLockedForConsultor(c, "real", day, month, cfg);
     const planMine = cellIsMine(c, "plan", cfg);
     const realMine = cellIsMine(c, "real", cfg);
+    const showCheckin = needs.checkin;
+    const showCheckout = needs.checkout && consultorCheckoutVisible();
+    if (!showCheckin && !showCheckout) return "";
     let html = `<div class="ind-card" style="--ic:${color}"><div class="ind-head"><div><b>${sub ? "↳ " : ""}${cfg.name}</b>${metaHtml ? `<div class="ind-meta">${metaHtml}</div>` : ""}</div></div><div class="dio-grid">`;
-    if (needs.checkin) {
+    if (showCheckin) {
       if (openQuestionCheckin(cfg, needs)) {
         html += buildOpenQuestionBox(cfg, c, "in", day, month);
       } else {
@@ -1829,7 +1835,6 @@ function renderFields() {
         html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="plan" data-day="${day}" value="${c.plan ?? ""}" placeholder="—" ${planLocked ? "disabled" : ""}>${progIn}</div>`;
       }
     }
-    const showCheckout = needs.checkout && checkinWindowEnded();
     if (showCheckout) {
       if (openQuestionCheckoutOnly(cfg, needs)) {
         html += buildOpenQuestionBox(cfg, c, "out", day, month);
@@ -1841,7 +1846,7 @@ function renderFields() {
     }
     html += "</div></div>";
     return html;
-  }).join("");
+  }).filter(Boolean).join("");
   root.querySelectorAll("input[data-fid]").forEach(inp => {
     inp.addEventListener("input", () => {
       updateProgramacaoRunningHint(inp);
