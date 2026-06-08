@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v36";
+  var BUILD = "v37";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -235,7 +235,7 @@
   .resumo-chip {
     font-size: 9px; font-weight: 800; padding: 5px 6px; border-radius: 99px; width: 100%; text-align: center;
     border: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 40%, transparent);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    white-space: normal; line-height: 1.3;
   }
   .resumo-chip-leg {
     font-size: 8px; font-weight: 600; line-height: 1.3; color: var(--text-faint);
@@ -479,7 +479,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v36";
+const APP_BUILD = "v37";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -1350,6 +1350,19 @@ function resumoCallout(cfg, sellerId, m = todayISO(), mini, parentInd = null) {
   }
   return { html: `<div class="resumo-callout ${tone}${mini ? " mini" : ""}">${text}</div>`, tone, perfRatio };
 }
+/** Dias na escala já encerrados (até ontem) — só lê sched do mês. */
+function sellerScaleClosedDays(sellerId, m = todayISO()) {
+  const n = daysInMonth(m);
+  const isCurrent = todayISO() === m;
+  const today = isCurrent ? todayDay() : n + 1;
+  let closed = 0;
+  for (let d = 1; d <= n; d++) {
+    if (!sellerWorks(sellerId, d, m)) continue;
+    if (isCurrent && d >= today) continue;
+    closed++;
+  }
+  return closed;
+}
 /** Aderência consultor: % de dias encerrados na escala com check-in e check-out completos. */
 function consultantDisciplineStats(sellerId, m = todayISO()) {
   const n = daysInMonth(m);
@@ -1357,20 +1370,21 @@ function consultantDisciplineStats(sellerId, m = todayISO()) {
   const today = isCurrent ? todayDay() : n + 1;
   const fields = fieldList();
   let scheduled = 0, closed = 0, complete = 0;
-  if (!fields.length) return { pct: null, complete: 0, closed: 0, scheduled: 0 };
+  if (!fields.length) return { pct: null, complete: 0, closed: sellerScaleClosedDays(sellerId, m), scheduled: 0 };
   for (let d = 1; d <= n; d++) {
     if (!sellerWorks(sellerId, d, m)) continue;
     scheduled++;
     if (isCurrent && d >= today) continue;
     closed++;
-    let req = 0, ok = 0;
+    const gaps = [];
     fields.forEach(({ cfg }) => {
       const needs = consultorFieldNeeds(sellerId, cfg, d, m);
+      if (!needs.checkin && !needs.checkout) return;
       const c = getCell(sellerId, cfg.id, d, m);
-      if (needs.checkin) { req++; if (hasPlanValue(c, cfg)) ok++; }
-      if (needs.checkout) { req++; if (hasCellValue(c, "real")) ok++; }
+      if (needs.checkin && !hasPlanValue(c, cfg)) gaps.push(1);
+      if (needs.checkout && !hasCellValue(c, "real")) gaps.push(1);
     });
-    if (req > 0 && ok === req) complete++;
+    if (!gaps.length) complete++;
   }
   return { pct: closed ? complete / closed : null, complete, closed, scheduled };
 }
@@ -1382,26 +1396,26 @@ function formatDayListPt(days) {
 /** Resumo da escala do CV (dados de monthData.sched no mês). */
 function consultorEscalaSummary(sellerId, m = todayISO()) {
   const n = daysInMonth(m);
-  const WD_SHORT = ["Dom.", "Seg.", "Ter.", "Qua.", "Qui.", "Sex.", "Sáb."];
+  const WD_FULL = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
   const workCount = sellerWorkedCount(sellerId, m);
-  const { complete } = consultantDisciplineStats(sellerId, m);
+  const closedDays = sellerScaleClosedDays(sellerId, m);
   const parts = [`Trabalha ${workCount} ${workCount === 1 ? "dia" : "dias"}`];
   const folgaBits = [];
   for (let wd = 0; wd <= 6; wd++) {
     const ds = [];
     for (let d = 1; d <= n; d++) if (weekday(m, d) === wd) ds.push(d);
     if (!ds.length || !ds.every(d => !sellerWorks(sellerId, d, m))) continue;
-    folgaBits.push(wd === 0 ? "toda Dom." : "toda " + WD_SHORT[wd]);
+    folgaBits.push(wd === 0 ? "todo domingo" : "toda " + WD_FULL[wd]);
   }
   const sunOff = [], sunOn = [];
   for (let d = 1; d <= n; d++) {
     if (!isSunday(m, d)) continue;
     (sellerWorks(sellerId, d, m) ? sunOn : sunOff).push(d);
   }
-  if (sunOff.length && sunOn.length) folgaBits.push("Dom. " + formatDayListPt(sunOff));
+  if (sunOff.length && sunOn.length) folgaBits.push("domingo " + formatDayListPt(sunOff));
   if (folgaBits.length) parts.push("Folga " + folgaBits.join(" + "));
-  if (sunOn.length && sunOff.length) parts.push("Trabalha Dom. " + formatDayListPt(sunOn));
-  parts.push(`Já foram ${complete} ${complete === 1 ? "dia completo" : "dias completos"}`);
+  if (sunOn.length && sunOff.length) parts.push("Trabalha domingo " + formatDayListPt(sunOn));
+  parts.push(`Já foram ${closedDays} ${closedDays === 1 ? "dia completo na escala" : "dias completos na escala"}`);
   return parts.join(" · ");
 }
 function sellerMetrics(sellerId, m = todayISO()) {
