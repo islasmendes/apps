@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v37";
+  var BUILD = "v38";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1618,7 +1618,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v37";
+const APP_BUILD = "v38";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -2484,6 +2484,20 @@ function matrizMetaForProj(cfg, ids, isTeam) {
   const cap = sellerMetaCapacity(cfg, ids[0]);
   return cap > 0 ? cap : null;
 }
+/** Nome curto na matriz: oculta sufixo após " - " (ex.: "Vendas - HOJE" → "Vendas"). Diário/check-in mantém nome completo. */
+function matrizDisplayName(name) {
+  const s = String(name || "").trim();
+  const i = s.search(/\s+-\s+/);
+  return i >= 0 ? s.slice(0, i).trim() : s;
+}
+function matrizBlockTitle(name, extra) {
+  const full = String(name || "").trim();
+  const short = matrizDisplayName(full);
+  const tips = [];
+  if (full && full !== short) tips.push(full);
+  if (extra) tips.push(extra);
+  return { short: escapeHtml(short), title: tips.length ? ` title="${escapeHtml(tips.join(" · "))}"` : "" };
+}
 function matrizSortMark(key) {
   const s = state.ui.matrizSort || {};
   if (s.key !== key) return '<span class="sort-mark muted">⇅</span>';
@@ -2492,7 +2506,10 @@ function matrizSortMark(key) {
 function matrizSortTh(key, label, style) {
   const active = (state.ui.matrizSort || {}).key === key ? " matriz-sort-active" : "";
   const st = style ? ` style="${style}"` : "";
-  return `<th class="matriz-sort${active}" data-sort="${key}"${st} title="Ordenar">${label}${matrizSortMark(key)}</th>`;
+  const disp = escapeHtml(matrizDisplayName(label));
+  const full = String(label || "").trim();
+  const tip = full !== matrizDisplayName(full) ? ` title="${escapeHtml(full)}"` : ` title="Ordenar"`;
+  return `<th class="matriz-sort${active}" data-sort="${key}"${st}${tip}>${disp}${matrizSortMark(key)}</th>`;
 }
 function matrizFilteredSellers(all) {
   const f = state.ui.matrizFilter;
@@ -2687,7 +2704,7 @@ function divisionalMetaRowHtml(cfg, lojas, isSub, color, parentInd) {
   const val = getMetaDivisional(cfg.id);
   const sum = sumLojasMetaForTpl(isSub ? parentInd : cfg, lojas, isSub ? cfg : null);
   const sumDisp = sum != null ? fmt(sum) : "—";
-  const name = (isSub ? '<span class="tag sub">↳</span> ' : '<b style="color:' + (color || cfg.color || "var(--accent)") + '">') + escapeHtml(cfg.name) + (isSub ? "" : "</b>");
+  const name = (isSub ? '<span class="tag sub">↳</span> ' : '<b style="color:' + (color || cfg.color || "var(--accent)") + '">') + escapeHtml(matrizDisplayName(cfg.name)) + (isSub ? "" : "</b>");
   return `<tr><td class="name" style="padding:8px 6px;border-bottom:1px solid var(--border-soft);">${name}</td>
     <td style="padding:6px;text-align:right;border-bottom:1px solid var(--border-soft);"><input type="number" class="cellinput div-meta-inp" data-field="${cfg.id}" value="${val ?? ''}" placeholder="—" style="max-width:110px;text-align:right;"></td>
     <td class="muted" style="padding:8px 6px;text-align:right;border-bottom:1px solid var(--border-soft);">${sumDisp}</td></tr>`;
@@ -2832,7 +2849,8 @@ function matrizBuildHeaders(inds, opts) {
     const subs = visibleSubs(ind), rates = visibleRates(ind);
     const exp = expandedBlocks[ind.id] !== false;
     const lbHead = cfgLowerBetter(ind) || (ind.subs || []).some(s => cfgLowerBetter(s)) || (ind.rates || []).some(r => rateLowerBetter(r, ind));
-    head1 += `<th colspan="${matrizColCount(ind, periodo)}" style="background:color-mix(in srgb, ${ind.color} 22%, var(--panel-2)); color:${ind.color}; border-left:3px solid ${ind.color};" class="block-head${lbHead ? " block-head-lower" : ""}" ${blockAttr}="${ind.id}" title="${lbHead ? "↓ Menor melhor: verde abaixo · amarelo alerta · vermelho estourou" : ""}">${moveOn ? '<span class="draghandle" draggable="true" data-dragind="' + ind.id + '">⋮⋮</span>' : ""}<span class="block-toggle">${ind.pctOnly ? "" : (exp ? "▾" : "▸")}</span>${ind.name}${lbHead ? " ↓" : ""}</th>`;
+    const indTitle = matrizBlockTitle(ind.name, lbHead ? "↓ Menor melhor: verde abaixo · amarelo alerta · vermelho estourou" : "");
+    head1 += `<th colspan="${matrizColCount(ind, periodo)}" style="background:color-mix(in srgb, ${ind.color} 22%, var(--panel-2)); color:${ind.color}; border-left:3px solid ${ind.color};" class="block-head${lbHead ? " block-head-lower" : ""}" ${blockAttr}="${ind.id}"${indTitle.title}>${moveOn ? '<span class="draghandle" draggable="true" data-dragind="' + ind.id + '">⋮⋮</span>' : ""}<span class="block-toggle">${ind.pctOnly ? "" : (exp ? "▾" : "▸")}</span>${indTitle.short}${lbHead ? " ↓" : ""}</th>`;
     if (ind.pctOnly) {
       rates.forEach(r => { head2 += matrizSortTh(`rate:${r.id}`, r.name, `border-left:3px solid ${ind.color}`); head2 += `<th>alvo</th>`; });
       return;
@@ -3149,7 +3167,11 @@ function renderAcuracidade() {
   if (!fields.length) {
     head += '<th class="muted" style="font-weight:600">—</th>';
   } else {
-    fields.forEach(f => head += `<th${f.sub?' style="color:var(--accent-2)"':''}${matrizTipData("Coluna visível: algum vendedor do filtro atual tem sistema ⚙ lançado.\nRelato / Sistema / Acuracidade", f.color)}>${f.sub?'↳ ':''}${f.name}<br><span class="muted" style="font-weight:600">relato · sis · %</span></th>`);
+    fields.forEach(f => {
+      const disp = escapeHtml(matrizDisplayName(f.name));
+      const tipExtra = f.name !== matrizDisplayName(f.name) ? f.name + "\n" : "";
+      head += `<th${f.sub?' style="color:var(--accent-2)"':''}${matrizTipData(tipExtra + "Coluna visível: algum vendedor do filtro atual tem sistema ⚙ lançado.\nRelato / Sistema / Acuracidade", f.color)}>${f.sub?'↳ ':''}${disp}<br><span class="muted" style="font-weight:600">relato · sis · %</span></th>`;
+    });
   }
   head += '<th>Acurac.</th><th>Aderência<br><span class="muted" style="font-weight:600">escala · dias</span></th></tr></thead>';
   let body = "<tbody>";
@@ -3321,7 +3343,11 @@ function renderArvoreAcuracidade() {
   const filterLbl = (state.ui.arvSellerFilter || []).length ? "(vendedor)" : hasLojaFilter ? "(loja)" : "";
   let head = '<thead><tr><th class="name">Loja / Vendedor</th>';
   if (!fields.length) head += '<th class="muted" style="font-weight:600">—</th>';
-  else fields.forEach(f => head += `<th${f.sub ? ' style="color:var(--accent-2)"' : ''}${matrizTipData("Coluna visível: algum vendedor do filtro atual tem sistema ⚙ lançado.\nRelato / Sistema / Acuracidade", f.color)}>${f.sub ? '↳ ' : ''}${f.name}<br><span class="muted" style="font-weight:600">relato · sis · %</span></th>`);
+  else fields.forEach(f => {
+    const disp = escapeHtml(matrizDisplayName(f.name));
+    const tipExtra = f.name !== matrizDisplayName(f.name) ? f.name + "\n" : "";
+    head += `<th${f.sub ? ' style="color:var(--accent-2)"' : ''}${matrizTipData(tipExtra + "Coluna visível: algum vendedor do filtro atual tem sistema ⚙ lançado.\nRelato / Sistema / Acuracidade", f.color)}>${f.sub ? '↳ ' : ''}${disp}<br><span class="muted" style="font-weight:600">relato · sis · %</span></th>`;
+  });
   head += '<th>Acurac.</th><th>Aderência<br><span class="muted" style="font-weight:600">escala · dias</span></th></tr></thead>';
   let body = "<tbody>";
   if (!lojas.length) {
@@ -3649,7 +3675,8 @@ function renderLancamentoCards(sellerId) {
     });
     if (!fields) return "";
     const exp = lancamentoExpanded[ind.id] !== false;
-    return `<div class="sysgroup ${exp?'':'collapsed'}" data-ind="${ind.id}" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head sys-toggle" style="color:${ind.color}" data-ind="${ind.id}"><span class="block-toggle">${exp?'▾':'▸'}</span> ${ind.name}</div><div class="sysgroup-fields">` + fields + `</div></div>`;
+    const sysTitle = matrizBlockTitle(ind.name);
+    return `<div class="sysgroup ${exp?'':'collapsed'}" data-ind="${ind.id}" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head sys-toggle" style="color:${ind.color}" data-ind="${ind.id}"${sysTitle.title}><span class="block-toggle">${exp?'▾':'▸'}</span> ${sysTitle.short}</div><div class="sysgroup-fields">` + fields + `</div></div>`;
   }).join("") || '<div class="empty">Nenhum indicador com lançamento de sistema.</div>';
   box.querySelectorAll(".sys-toggle").forEach(h => { h.onclick = () => { const id = h.dataset.ind; lancamentoExpanded[id] = lancamentoExpanded[id] === false; state.ui.lancamentoExpanded = lancamentoExpanded; save(); renderLancamentoCards(sellerId); }; });
   box.querySelectorAll(".syscell").forEach(inp => inp.addEventListener("input", () => { setSystem(sellerId, inp.dataset.field, inp.value); if (activeView === "matriz") { renderMatriz(); renderAcuracidade(); } }));
@@ -3687,7 +3714,7 @@ function renderAuditoriaModal(sellerId) {
     const acc = fieldAccuracy(sellerId, f.id, days);
     const accColor = acc != null ? heatText(acc) : "var(--text-dim)";
     const tip = acurTipRelato(f, rel, sys, acc);
-    body += `<tr${matrizTipData(tip, f.color)}><td class="name">${f.sub?'↳ ':''}${f.name}</td>` +
+    body += `<tr${matrizTipData(tip, f.color)}><td class="name">${f.sub?'↳ ':''}${escapeHtml(matrizDisplayName(f.name))}</td>` +
       `<td style="color:${accColor};font-weight:700">${rel==null?'—':fmt(rel)}</td>` +
       `<td><span class="heat matriz-from-sys matriz-real acur-sys">${fmt(sys)}</span></td>` +
       `<td style="color:${accColor};font-weight:700">${acc==null?'—':pctTxt(acc)}</td></tr>`;
