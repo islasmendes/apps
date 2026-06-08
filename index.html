@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v26";
+  var BUILD = "v27";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1617,7 +1617,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v26";
+const APP_BUILD = "v27";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3574,31 +3574,31 @@ function diarioRow(cfg, color, isSub) {
   const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
   const domTag = cfg.sundayOnly ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">dom · seg–sáb</span>` : (diarioIsSaturdaySub(cfg) ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">sáb · seg–sex</span>` : (cfgOpenQuestion(cfg) ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">perg. aberta</span>` : ""));
   const label = (isSub ? `<span class="tag sub">↳</span> ${cfg.name}` : `<b style="color:${color}">${cfg.name}</b>`) + domTag;
-  let row = `<tr class="${isSub?'dsub':'dgroup'}" style="--gc:${color}"><td class="name" style="border-left:3px solid ${color};">${label}</td>`;
+  let row = `<tr class="${isSub?'dsub':'dgroup'}" data-dio-field="${cfg.id}" style="--gc:${color}"><td class="name" style="border-left:3px solid ${color};">${label}</td>`;
   row += `<td><span class="neon">${fmt(cfg.metaDay)}</span>${Number(cfg.metaSat)?`<br><span class="muted" style="font-size:10px">sáb ${fmt(cfg.metaSat)}</span>`:''}${Number(cfg.metaSun)?`<br><span class="muted" style="font-size:10px">dom ${fmt(cfg.metaSun)}</span>`:''}</td>`;
   days.forEach(d => {
     const needs = diarioFieldNeeds(diarioSeller, cfg, d);
     const editable = diarioDayEditable(d);
     const ro = editable ? "" : ' readonly tabindex="-1"';
     const c = getCell(diarioSeller, cfg.id, d);
+    const progHint = programacaoDiarioCellHint(diarioSeller, cfg, d);
     let cell = '<div class="daycell">';
     if (needs.checkin) {
       if (cfgOpenQuestion(cfg)) {
         cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span>${openPlanDiarioHtml(cfg, c, diarioSeller, d)}</label>`;
       } else {
-        const progIn = programacaoDiarioCellHint(diarioSeller, cfg, d);
-        cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"${ro}>${progIn}</label>`;
+        cell += `<label class="dio-field dio-checkin"><span class="dio-lbl">Check-in${cellSourceTag(c, "plan")}</span><input class="cellinput plan-cell" data-field="${cfg.id}" data-day="${d}" data-key="plan" value="${c.plan ?? ''}" placeholder="—"${ro}></label>`;
       }
     }
     if (needs.checkout) {
       const metaD = metaForDay(cfg, currentMonth, d);
       const pct = metaD ? (c.real != null ? c.real / metaD : null) : null;
-      const progOut = programacaoDiarioCellHint(diarioSeller, cfg, d);
-      cell += `<label class="dio-field dio-checkout"><span class="dio-lbl">Check-out${cellSourceTag(c, "real")}</span><input class="cellinput checkout-cell" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${c.real ?? ''}" placeholder="—" style="color:${c.real != null ? heatText(pct) : 'var(--text)'};"${ro}>${progOut}</label>`;
+      cell += `<label class="dio-field dio-checkout"><span class="dio-lbl">Check-out${cellSourceTag(c, "real")}</span><input class="cellinput checkout-cell" data-field="${cfg.id}" data-day="${d}" data-key="real" value="${c.real ?? ''}" placeholder="—" style="color:${c.real != null ? heatText(pct) : 'var(--text)'};"${ro}></label>`;
     }
     if (!needs.checkin && !needs.checkout) cell += `<span class="muted" style="font-size:10px;opacity:.45">—</span>`;
+    cell += progHint;
     cell += '</div>';
-    row += `<td class="${dayCls(d)}${editable ? "" : " dio-locked-day"}">${cell}</td>`;
+    row += `<td class="${dayCls(d)}${editable ? "" : " dio-locked-day"}" data-dio-day="${d}">${cell}</td>`;
   });
   const realSum = accum(diarioSeller, cfg.id, "real", days) ?? 0;
   const metaSum = weekMeta(cfg, days);
@@ -3853,21 +3853,27 @@ function programacaoAcumulada(sellerId, ref, targetDay, m = currentMonth) {
   }
   return has ? { value: sum, parts, kind } : null;
 }
-function programacaoDiarioHintData(sellerId, ref, day, m = currentMonth) {
+function programacaoDiarioTargetDay(sellerId, ref, weekDays, m = currentMonth) {
   const kind = programacaoKind(ref);
   if (kind !== "sabado" && kind !== "domingo") return null;
-  const target = programacaoTargetDay(sellerId, ref, m, day);
-  if (target == null || day > target) return null;
+  const anchor = (weekDays && weekDays.length) ? weekDays[0] : 1;
+  const target = programacaoTargetDay(sellerId, ref, m, anchor);
+  return target != null && weekDays.includes(target) ? target : null;
+}
+function programacaoDiarioHintData(sellerId, ref, day, m = currentMonth, weekDays) {
+  const kind = programacaoKind(ref);
+  if (kind !== "sabado" && kind !== "domingo") return null;
+  const days = weekDays || (weeksOf(m)[diarioWeekIdx] || []);
+  const target = programacaoDiarioTargetDay(sellerId, ref, days, m);
+  if (target == null || day !== target) return null;
   const acc = programacaoAcumulada(sellerId, ref, target, m);
   if (!acc) return null;
-  return { value: acc.value, isTarget: day === target };
+  return { value: acc.value, target };
 }
 function programacaoDiarioCellHint(sellerId, ref, day, m = currentMonth) {
   const data = programacaoDiarioHintData(sellerId, ref, day, m);
   if (!data) return "";
-  const color = data.isTarget ? "var(--accent-2)" : "var(--text-dim)";
-  const label = data.isTarget ? "Σ semana" : "→Σ";
-  return `<div class="prog-sum-hint" data-prog-day="${day}" style="color:${color}">${label} <b>${data.value}</b></div>`;
+  return `<div class="prog-sum-hint" data-prog-day="${day}" style="color:var(--accent-2)">Σ <b>${data.value}</b></div>`;
 }
 function pulseProgSumHint(el) {
   if (!el) return;
@@ -3877,40 +3883,41 @@ function pulseProgSumHint(el) {
   clearTimeout(el._progPulseT);
   el._progPulseT = setTimeout(() => el.classList.remove("prog-sum-pulse"), 280);
 }
+function upsertProgramacaoDiarioHint(tr, targetDay, markup, value) {
+  if (!tr) return;
+  tr.querySelectorAll(".prog-sum-hint").forEach(el => {
+    if (+el.dataset.progDay !== targetDay) el.remove();
+  });
+  if (!markup) {
+    tr.querySelectorAll(`.prog-sum-hint[data-prog-day="${targetDay}"]`).forEach(el => el.remove());
+    return;
+  }
+  const daycell = tr.querySelector(`td[data-dio-day="${targetDay}"] .daycell`);
+  if (!daycell) return;
+  let hint = daycell.querySelector(`.prog-sum-hint[data-prog-day="${targetDay}"]`);
+  if (hint) {
+    const prev = hint.querySelector("b")?.textContent;
+    hint.innerHTML = `Σ <b>${value}</b>`;
+    if (prev !== String(value)) pulseProgSumHint(hint);
+    return;
+  }
+  daycell.insertAdjacentHTML("beforeend", markup);
+  pulseProgSumHint(daycell.querySelector(`.prog-sum-hint[data-prog-day="${targetDay}"]`));
+}
 function refreshProgramacaoDiarioRowHints(fieldId) {
   const cfg = cfgById(fieldId);
   if (!cfg || !programacaoKind(cfg) || !diarioSeller) return;
-  const tr = document.querySelector(`#diarioTable input.cellinput[data-field="${CSS.escape(fieldId)}"]`)?.closest("tr");
+  const tr = document.querySelector(`#diarioTable tr[data-dio-field="${CSS.escape(fieldId)}"]`);
   if (!tr) return;
   const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
-  days.forEach(d => {
-    const data = programacaoDiarioHintData(diarioSeller, cfg, d);
-    const hints = tr.querySelectorAll(`.prog-sum-hint[data-prog-day="${d}"]`);
-    if (!data) {
-      hints.forEach(el => el.remove());
-      return;
-    }
-    const label = data.isTarget ? "Σ semana" : "→Σ";
-    const color = data.isTarget ? "var(--accent-2)" : "var(--text-dim)";
-    const markup = programacaoDiarioCellHint(diarioSeller, cfg, d);
-    if (hints.length) {
-      hints.forEach(el => {
-        const prev = el.querySelector("b")?.textContent;
-        el.style.color = color;
-        el.innerHTML = `${label} <b>${data.value}</b>`;
-        if (prev !== String(data.value)) pulseProgSumHint(el);
-      });
-      return;
-    }
-    if (!markup) return;
-    tr.querySelectorAll(`input.cellinput[data-field="${CSS.escape(fieldId)}"][data-day="${d}"]`).forEach(inp => {
-      const lbl = inp.closest(".dio-field");
-      if (lbl && !lbl.querySelector(".prog-sum-hint")) {
-        lbl.insertAdjacentHTML("beforeend", markup);
-        pulseProgSumHint(lbl.querySelector(".prog-sum-hint"));
-      }
-    });
+  const target = programacaoDiarioTargetDay(diarioSeller, cfg, days);
+  tr.querySelectorAll(".prog-sum-hint").forEach(el => {
+    if (!target || +el.dataset.progDay !== target) el.remove();
   });
+  if (!target) return;
+  const data = programacaoDiarioHintData(diarioSeller, cfg, target);
+  const markup = data ? programacaoDiarioCellHint(diarioSeller, cfg, target) : "";
+  upsertProgramacaoDiarioHint(tr, target, markup, data?.value);
 }
 function crossPlanValueFromCell(c) {
   if (!c || typeof c !== "object") return null;
@@ -3975,11 +3982,7 @@ function openPlanDiarioHtml(cfg, c, sellerId, day, m = currentMonth) {
   const hit = c.planYes === true ? crossPlanHit(sellerId, cfg, day, m) : null;
   const target = hit?.value ?? null;
   if (confirmed != null && !isNaN(confirmed) && target != null) cls = confirmed < target ? "neg" : "pos";
-  let html = `<div class="open-plan-cell ${cls}" title="${escapeHtml(disp)}">${escapeHtml(disp)}</div>`;
-  if (confirmed != null && !isNaN(confirmed) && target != null) {
-    html += `<div class="open-cross-mini">${openCrossFeedbackHtml(confirmed, target, hit?.ref?.name, hit)}</div>`;
-  }
-  return html;
+  return `<div class="open-plan-cell ${cls}" title="${escapeHtml(disp)}">${escapeHtml(disp)}</div>`;
 }
 function hasCellValue(cell, key) {
   return cell[key] != null && cell[key] !== "";
