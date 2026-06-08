@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v46";
+  var BUILD = "v47";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -502,7 +502,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v46";
+const APP_BUILD = "v47";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -1412,6 +1412,15 @@ function sellerMetaFor(cfg, sellerId, m = todayISO()) {
   const cap = sellerMetaCapacity(cfg, sellerId, m);
   return cap > 0 ? cap : null;
 }
+function rateIsFunnelConversion(rate) {
+  return !!(rate && !rate.manual && !rate.absolute && /\s+p\/\s+/i.test(String(rate.name || "")));
+}
+function rateABFromSums(rate, numSum, denSum) {
+  let A = numSum, B = denSum;
+  if (rateIsFunnelConversion(rate)) { const t = A; A = B; B = t; }
+  else if (rate.invert) { const t = A; A = B; B = t; }
+  return { A, B };
+}
 function rateValueForSeller(rate, sellerId, m = todayISO()) {
   if (rate.manual) return getSystemRate(sellerId, rate.id, m);
   const days = monthDays(m);
@@ -1421,8 +1430,7 @@ function rateValueForSeller(rate, sellerId, m = todayISO()) {
   if (a != null) { num = a; hasN = true; }
   if (b != null) { den = b; hasD = true; }
   if (!hasN && !hasD) return null;
-  let A = num, B = den;
-  if (rate.invert) { const t = A; A = B; B = t; }
+  const { A, B } = rateABFromSums(rate, num, den);
   if (!B) return null;
   if (rate.absolute) return A;
   return (A / B) * 100;

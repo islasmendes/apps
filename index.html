@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v46";
+  var BUILD = "v47";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1773,7 +1773,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v46";
+const APP_BUILD = "v47";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -1946,14 +1946,28 @@ function setSystem(sellerId, fieldId, val, m = currentMonth) {
 function getSystemRate(sellerId, rateId, m = currentMonth) { const md = monthData(m); return (md.systemRate[sellerId] && md.systemRate[sellerId][rateId] != null) ? Number(md.systemRate[sellerId][rateId]) : null; }
 function setSystemRate(sellerId, rateId, val, m = currentMonth) { const md = monthData(m); md.systemRate[sellerId] = md.systemRate[sellerId] || {}; if (val === "" || val === null || isNaN(val)) delete md.systemRate[sellerId][rateId]; else md.systemRate[sellerId][rateId] = Number(val); save(); }
 
-/* Taxa A÷B */
+/* Taxa A÷B — taxas "X p/ Y" = conversão de funil: Y ÷ X (ex.: Agendamentos ÷ Leads) */
+function rateIsFunnelConversion(rate) {
+  return !!(rate && !rate.manual && !rate.absolute && /\s+p\/\s+/i.test(String(rate.name || "")));
+}
+function rateABFromSums(rate, numSum, denSum) {
+  let A = numSum, B = denSum;
+  if (rateIsFunnelConversion(rate)) { const t = A; A = B; B = t; }
+  else if (rate.invert) { const t = A; A = B; B = t; }
+  return { A, B };
+}
+function rateValueFromSums(rate, numSum, denSum, hasN, hasD) {
+  if (!hasN && !hasD) return null;
+  const { A, B } = rateABFromSums(rate, numSum, denSum);
+  if (!B) return null;
+  if (rate.absolute) return A;
+  return (A / B) * 100;
+}
 function rateValue(rate, sellerIds, m = currentMonth) {
   if (rate.manual) { let s = 0, c = 0; sellerIds.forEach(id => { const v = getSystemRate(id, rate.id, m); if (v != null) { s += v; c++; } }); return c ? s / c : null; }
   let num = 0, den = 0, hasN = false, hasD = false;
   sellerIds.forEach(id => { const a = getSystem(id, rate.numId, m); if (a != null) { num += a; hasN = true; } const b = getSystem(id, rate.denId, m); if (b != null) { den += b; hasD = true; } });
-  if (!hasN && !hasD) return null; let A = num, B = den; if (rate.invert) { const t = A; A = B; B = t; } if (!B) return null;
-  if (rate.absolute) return A;
-  return (A / B) * 100;
+  return rateValueFromSums(rate, num, den, hasN, hasD);
 }
 
 /* Cores */
@@ -2189,6 +2203,13 @@ function matrizRateTarget(rate) {
   const t = Number(rate.target) || 0;
   return ml != null && ml > 0 ? ml : t;
 }
+function rateHasAlvo(rate) {
+  const tgt = matrizRateTarget(rate);
+  return tgt != null && tgt > 0;
+}
+function matrizRateColCount(rate) {
+  return 1 + (rateHasAlvo(rate) ? 1 : 0);
+}
 /** Até 2 casas; arredonda só a 3ª (ex.: 2,6 → 2,6%; 2,555 → 2,56%). */
 function matrizPctRound(n) {
   if (n == null || isNaN(n)) return null;
@@ -2282,8 +2303,13 @@ function matrizTipRate(rate, rv, tgt, ids, days, periodo, ind, isTeam) {
     });
     const numN = cfgById(rate.numId)?.name || "A";
     const denN = cfgById(rate.denId)?.name || "B";
-    lines.push("Fórmula: " + numN + " ÷ " + denN + (rate.invert ? " (invertida)" : ""));
-    lines.push("Numerador: " + fmt(num) + " · Denominador: " + fmt(den));
+    if (rateIsFunnelConversion(rate)) {
+      lines.push("Conversão: " + denN + " ÷ " + numN);
+      lines.push("% de " + numN + " que virou " + denN);
+    } else {
+      lines.push("Fórmula: " + numN + " ÷ " + denN + (rate.invert ? " (invertida)" : ""));
+    }
+    lines.push(numN + ": " + fmt(num) + " · " + denN + ": " + fmt(den));
   }
   return lines.join("\n");
 }
@@ -2296,7 +2322,8 @@ function matrizRateCells(rate, ids, days, periodo, ind, isTeam, rvOverride) {
   const color = lb && rv != null && tgt ? heatMatrizLowerBetterColor(rv, tgt, rateIsPercent(rate)) : heatMatrizText(rp);
   const valDisp = rateFmtValue(rate, rv, ind);
   const tgtDisp = rateFmtTarget(rate, tgt, ind);
-  return `<td style="border-left:3px solid ${ind.color}; color:${color}; font-weight:700;"${matrizTipData(tip, ind.color)}>${valDisp}</td><td class="muted">${tgtDisp}</td>`;
+  const alvoTd = rateHasAlvo(rate) ? `<td class="muted">${tgtDisp}</td>` : "";
+  return `<td style="border-left:3px solid ${ind.color}; color:${color}; font-weight:700;"${matrizTipData(tip, ind.color)}>${valDisp}</td>${alvoTd}`;
 }
 function matrizTipArvTotalReal(ind, real, lojaCount) {
   const lines = [ind.name || "Indicador", "Real consolidado: " + fmt(real), "Soma do realizado de " + lojaCount + " loja(s) no filtro"];
@@ -2593,12 +2620,7 @@ function rateValueForMatriz(rate, sellerIds, days, periodo, m = currentMonth) {
     if (a != null) { num += a; hasN = true; }
     if (b != null) { den += b; hasD = true; }
   });
-  if (!hasN && !hasD) return null;
-  let A = num, B = den;
-  if (rate.invert) { const t = A; A = B; B = t; }
-  if (!B) return null;
-  if (rate.absolute) return A;
-  return (A / B) * 100;
+  return rateValueFromSums(rate, num, den, hasN, hasD);
 }
 function sellerMetaCapacity(cfg, sellerId, m = currentMonth) {
   let s = 0;
@@ -2948,10 +2970,10 @@ function bindMatrizSort(tbl, moveOn) {
 
 function matrizColCount(ind, periodo) {
   const subs = visibleSubs(ind), rates = visibleRates(ind);
-  if (ind.pctOnly) return Math.max(1, rates.length) * 2;
+  if (ind.pctOnly) return Math.max(1, rates.reduce((s, r) => s + matrizRateColCount(r), 0));
   const exp = expandedBlocks[ind.id] !== false;
   let c = matrizItemColCount(ind, periodo);
-  if (exp) c += subs.reduce((s, sub) => s + matrizItemColCount(sub, periodo), 0) + rates.length * 2;
+  if (exp) c += subs.reduce((s, sub) => s + matrizItemColCount(sub, periodo), 0) + rates.reduce((s, r) => s + matrizRateColCount(r), 0);
   return c;
 }
 function matrizEmptyBlockCells(ind, periodo) {
@@ -3040,7 +3062,7 @@ function matrizBuildHeaders(inds, opts) {
     const indTitle = matrizBlockTitle(ind.name, lbHead ? "↓ Menor melhor: verde abaixo · amarelo alerta · vermelho estourou" : "");
     head1 += `<th colspan="${matrizColCount(ind, periodo)}" style="background:color-mix(in srgb, ${ind.color} 22%, var(--panel-2)); color:${ind.color}; border-left:3px solid ${ind.color};" class="block-head${lbHead ? " block-head-lower" : ""}" ${blockAttr}="${ind.id}"${indTitle.title}>${moveOn ? '<span class="draghandle" draggable="true" data-dragind="' + ind.id + '">⋮⋮</span>' : ""}<span class="block-toggle">${ind.pctOnly ? "" : (exp ? "▾" : "▸")}</span>${indTitle.short}${lbHead ? " ↓" : ""}</th>`;
     if (ind.pctOnly) {
-      rates.forEach(r => { head2 += matrizSortTh(`rate:${r.id}`, r.name, `border-left:3px solid ${ind.color}`); head2 += `<th>alvo</th>`; });
+      rates.forEach(r => { head2 += matrizSortTh(`rate:${r.id}`, r.name, `border-left:3px solid ${ind.color}`); if (rateHasAlvo(r)) head2 += `<th>alvo</th>`; });
       return;
     }
     head2 += matrizSortTh(`ind:${ind.id}:real`, "Real", `border-left:3px solid ${ind.color}`);
@@ -3052,7 +3074,7 @@ function matrizBuildHeaders(inds, opts) {
         if (matrizShowPct(s)) head2 += matrizSortTh(`sub:${s.id}:pct`, "%", "color:var(--accent-2)");
         if (periodo === "mes") head2 += matrizSortTh(`sub:${s.id}:proj`, "Proj.", "color:var(--accent-2)");
       });
-      rates.forEach(r => { head2 += matrizSortTh(`rate:${r.id}`, r.name, "color:var(--accent)"); head2 += `<th>alvo</th>`; });
+      rates.forEach(r => { head2 += matrizSortTh(`rate:${r.id}`, r.name, "color:var(--accent)"); if (rateHasAlvo(r)) head2 += `<th>alvo</th>`; });
     }
   });
   head1 += "</tr>"; head2 += "</tr>";
