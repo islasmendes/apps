@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v64";
+  var BUILD = "v65";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -1130,15 +1130,18 @@ function migrate(s) {
       if (sub.metaSun == null) sub.metaSun = 0;
       if (sub.lowerBetter == null) sub.lowerBetter = false;
       if (sub.openQuestion == null) sub.openQuestion = false;
+      if (sub.showInMatriz == null) sub.showInMatriz = true;
       if (sub.planCrossId == null) sub.planCrossId = "";
       if (!Array.isArray(sub.planCrossIds)) sub.planCrossIds = sub.planCrossId ? [sub.planCrossId] : [];
     });
     if (i.openQuestion == null) i.openQuestion = false;
+    if (i.showInMatriz == null) i.showInMatriz = true;
     if (i.planCrossId == null) i.planCrossId = "";
     if (!Array.isArray(i.planCrossIds)) i.planCrossIds = i.planCrossId ? [i.planCrossId] : [];
     (i.rates || []).forEach(r => {
       if (r.lowerBetter == null) r.lowerBetter = false;
       if (r.absolute == null) r.absolute = false;
+      if (r.showInMatriz == null) r.showInMatriz = true;
     });
   });
   (s.sellers || []).forEach(seller => {
@@ -1399,6 +1402,7 @@ function extractOperationalConfig(st) {
     pctOnly: !!ind.pctOnly,
     lowerBetter: !!ind.lowerBetter,
     openQuestion: !!ind.openQuestion,
+    showInMatriz: ind.showInMatriz !== false,
     planCrossNames: normalizePlanCrossIds(ind).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean),
     subs: (ind.subs || []).map(s => ({
       name: s.name,
@@ -1407,6 +1411,7 @@ function extractOperationalConfig(st) {
       lowerBetter: !!s.lowerBetter,
       sundayOnly: !!s.sundayOnly,
       openQuestion: !!s.openQuestion,
+      showInMatriz: s.showInMatriz !== false,
       planCrossNames: normalizePlanCrossIds(s).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean)
     })),
     rates: (ind.rates || []).map(r => ({
@@ -1416,7 +1421,8 @@ function extractOperationalConfig(st) {
       invert: !!r.invert,
       manual: !!r.manual,
       lowerBetter: !!r.lowerBetter,
-      absolute: !!r.absolute
+      absolute: !!r.absolute,
+      showInMatriz: r.showInMatriz !== false
     }))
   }));
   const idToName = Object.fromEntries((st.indicators || []).map(i => [i.id, i.name]));
@@ -1450,6 +1456,7 @@ function applyOperationalConfig(st, tpl, opts) {
       pctOnly: tInd.pctOnly,
       lowerBetter: tInd.lowerBetter != null ? tInd.lowerBetter : !!local?.lowerBetter,
       openQuestion: !!tInd.openQuestion,
+      showInMatriz: tInd.showInMatriz != null ? !!tInd.showInMatriz : local?.showInMatriz !== false,
       planCrossId: local?.planCrossId || "",
       planCrossIds: Array.isArray(local?.planCrossIds) ? local.planCrossIds.slice() : (local?.planCrossId ? [local.planCrossId] : []),
       metaDay: local?.metaDay ?? 0,
@@ -1470,6 +1477,7 @@ function applyOperationalConfig(st, tpl, opts) {
         lowerBetter: ts.lowerBetter != null ? ts.lowerBetter : !!ls?.lowerBetter,
         sundayOnly: !!ts.sundayOnly,
         openQuestion: !!ts.openQuestion,
+        showInMatriz: ts.showInMatriz != null ? !!ts.showInMatriz : ls?.showInMatriz !== false,
         planCrossId: ls?.planCrossId || "",
         planCrossIds: Array.isArray(ls?.planCrossIds) ? ls.planCrossIds.slice() : (ls?.planCrossId ? [ls.planCrossId] : []),
         metaDay: ls?.metaDay ?? 0,
@@ -1489,6 +1497,7 @@ function applyOperationalConfig(st, tpl, opts) {
         lowerBetter: !!ls.lowerBetter,
         sundayOnly: !!ls.sundayOnly,
         openQuestion: !!ls.openQuestion,
+        showInMatriz: ls.showInMatriz !== false,
         planCrossId: ls.planCrossId || "",
         planCrossIds: Array.isArray(ls.planCrossIds) ? ls.planCrossIds.slice() : (ls.planCrossId ? [ls.planCrossId] : []),
         metaDay: ls.metaDay ?? 0,
@@ -1509,6 +1518,7 @@ function applyOperationalConfig(st, tpl, opts) {
         manual: tr.manual,
         lowerBetter: tr.lowerBetter,
         absolute: lr?.absolute ?? !!tr.absolute,
+        showInMatriz: tr.showInMatriz != null ? !!tr.showInMatriz : lr?.showInMatriz !== false,
         target: lr?.target ?? 0
       };
     });
@@ -2202,7 +2212,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v64"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v65"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3000,6 +3010,16 @@ function cfgHasMeta(cfg) {
   return false;
 }
 function matrizShowPct(cfg) { return cfgHasMeta(cfg); }
+function cfgShowInMatriz(cfg) { return cfg && cfg.showInMatriz !== false; }
+function indHasMatrizContent(ind) {
+  if (!ind) return false;
+  if (ind.pctOnly) return (ind.rates || []).some(r => cfgShowInMatriz(r));
+  if (cfgShowInMatriz(ind)) return true;
+  return (ind.subs || []).some(s => cfgShowInMatriz(s)) || (ind.rates || []).some(r => cfgShowInMatriz(r));
+}
+function matrizIndicators() {
+  return orderedIndicators().filter(ind => indShowInSemana(ind) && indHasMatrizContent(ind));
+}
 function matrizItemColCount(cfg, periodo) {
   let c = 1;
   if (matrizShowPct(cfg)) c++;
@@ -3014,12 +3034,12 @@ function indShowInSemana(ind) {
   return false;
 }
 function visibleSubs(ind) {
-  const subs = ind.subs || [];
+  let subs = (ind.subs || []).filter(cfgShowInMatriz);
   if (matrizPeriodo !== "semana") return subs;
   return subs.filter(cfgHasDiario);
 }
 function visibleRates(ind) {
-  const rates = ind.rates || [];
+  let rates = (ind.rates || []).filter(cfgShowInMatriz);
   if (matrizPeriodo !== "semana") return rates;
   if (!indShowInSemana(ind)) return [];
   return rates.filter(r => !r.manual);
@@ -3409,9 +3429,9 @@ function bindMatrizSort(tbl, moveOn) {
 
 function matrizColCount(ind, periodo) {
   const subs = visibleSubs(ind), rates = visibleRates(ind);
-  if (ind.pctOnly) return Math.max(1, rates.reduce((s, r) => s + matrizRateColCount(r), 0));
+  if (ind.pctOnly) return rates.reduce((s, r) => s + matrizRateColCount(r), 0);
   const exp = expandedBlocks[ind.id] !== false;
-  let c = matrizItemColCount(ind, periodo);
+  let c = cfgShowInMatriz(ind) ? matrizItemColCount(ind, periodo) : 0;
   if (exp) c += subs.reduce((s, sub) => s + matrizItemColCount(sub, periodo), 0) + rates.reduce((s, r) => s + matrizRateColCount(r), 0);
   return c;
 }
@@ -3446,32 +3466,35 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
     rates.forEach(r => { html += matrizRateCells(r, ids, days, periodo, ind, isTeam); });
     return html;
   }
-  const { real, has, fromSystem } = matrizRealForSellers(ids, ind.id, days, periodo);
-  const meta = metaForMatriz(ind, ids, days, periodo, isTeam);
-  const dailyFb = metaUsesDailyFallback(ind, periodo);
-  const realCls = fromSystem ? "heat matriz-from-sys matriz-real" : "matriz-real";
-  const divMeta = isTeam ? getMetaDivisional(ind.id) : null;
-  const cellOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days, lowerBetter: cfgLowerBetter(ind), divisionalMeta: !!(isTeam && divMeta) };
-  html += `<td style="border-left:3px solid ${ind.color};"><span class="${realCls}"${matrizTipData(matrizTipReal(fromSystem), ind.color)}>${has ? fmt(real) : "—"}</span></td>`;
-  if (matrizShowPct(ind)) html += matrizPctCellHtml(has ? real : null, meta, dailyFb, cellOpts);
-  if (periodo === "mes") {
-    const proj = has && real != null ? (isTeam ? matrizProjEquipe(real) : matrizProjConsultor(ids, ind.id)) : null;
-    const metaProj = matrizMetaForProj(ind, ids, isTeam);
-    const lbProj = cfgLowerBetter(ind);
-    const pp = metaProj && proj != null ? matrizProjPerfRatio(proj, metaProj, lbProj) : null;
-    const projTip = matrizTipProj({ isTeam, sellerId: isTeam ? null : ids[0], real: has ? real : null, proj, metaProj: metaProj || 0, ind: { ...ind, sub: false, lowerBetter: ind.lowerBetter }, divisionalTotal: !!(isTeam && divMeta), sumMetasLojas: isTeam ? getMetaLoja(ind.id) : null });
-    const projColor = lbProj && metaProj && proj != null ? heatMatrizLowerBetterColor(proj, metaProj, false) : (pp != null ? heatMatrizText(pp) : "var(--text-dim)");
-    html += `<td style="color:${projColor}; font-weight:${proj != null ? 700 : 400};"${matrizTipData(projTip, ind.color)}>${proj == null ? "—" : fmt(proj)}</td>`;
+  if (cfgShowInMatriz(ind)) {
+    const { real, has, fromSystem } = matrizRealForSellers(ids, ind.id, days, periodo);
+    const meta = metaForMatriz(ind, ids, days, periodo, isTeam);
+    const dailyFb = metaUsesDailyFallback(ind, periodo);
+    const realCls = fromSystem ? "heat matriz-from-sys matriz-real" : "matriz-real";
+    const divMeta = isTeam ? getMetaDivisional(ind.id) : null;
+    const cellOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days, lowerBetter: cfgLowerBetter(ind), divisionalMeta: !!(isTeam && divMeta) };
+    html += `<td style="border-left:3px solid ${ind.color};"><span class="${realCls}"${matrizTipData(matrizTipReal(fromSystem), ind.color)}>${has ? fmt(real) : "—"}</span></td>`;
+    if (matrizShowPct(ind)) html += matrizPctCellHtml(has ? real : null, meta, dailyFb, cellOpts);
+    if (periodo === "mes") {
+      const proj = has && real != null ? (isTeam ? matrizProjEquipe(real) : matrizProjConsultor(ids, ind.id)) : null;
+      const metaProj = matrizMetaForProj(ind, ids, isTeam);
+      const lbProj = cfgLowerBetter(ind);
+      const pp = metaProj && proj != null ? matrizProjPerfRatio(proj, metaProj, lbProj) : null;
+      const projTip = matrizTipProj({ isTeam, sellerId: isTeam ? null : ids[0], real: has ? real : null, proj, metaProj: metaProj || 0, ind: { ...ind, sub: false, lowerBetter: ind.lowerBetter }, divisionalTotal: !!(isTeam && divMeta), sumMetasLojas: isTeam ? getMetaLoja(ind.id) : null });
+      const projColor = lbProj && metaProj && proj != null ? heatMatrizLowerBetterColor(proj, metaProj, false) : (pp != null ? heatMatrizText(pp) : "var(--text-dim)");
+      html += `<td style="color:${projColor}; font-weight:${proj != null ? 700 : 400};"${matrizTipData(projTip, ind.color)}>${proj == null ? "—" : fmt(proj)}</td>`;
+    }
   }
   if (expandedBlocks[ind.id] !== false) {
-    subs.forEach(s => {
+    subs.forEach((s, si) => {
       const { real: sr, has: h, fromSystem: fs } = matrizRealForSellers(ids, s.id, days, periodo);
       const subMeta = metaForMatriz(s, ids, days, periodo, isTeam);
       const subDailyFb = metaUsesDailyFallback(s, periodo);
       const subDivMeta = isTeam ? getMetaDivisional(s.id) : null;
       const subOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days, lowerBetter: cfgLowerBetter(s), divisionalMeta: !!(isTeam && subDivMeta) };
       const subCls = fs ? "heat matriz-from-sys matriz-real" : "matriz-real";
-      html += `<td style="border-left:1px solid var(--border-soft);"><span class="${subCls}"${matrizTipData(matrizTipReal(fs), ind.color)}>${h ? fmt(sr) : "—"}</span></td>`;
+      const subBorder = !cfgShowInMatriz(ind) && si === 0 ? `border-left:3px solid ${ind.color}` : "border-left:1px solid var(--border-soft)";
+      html += `<td style="${subBorder};"><span class="${subCls}"${matrizTipData(matrizTipReal(fs), ind.color)}>${h ? fmt(sr) : "—"}</span></td>`;
       if (matrizShowPct(s)) html += matrizPctCellHtml(h ? sr : null, subMeta, subDailyFb, subOpts);
       if (periodo === "mes") {
         const subProj = h && sr != null ? (isTeam ? matrizProjEquipe(sr) : matrizProjConsultor(ids, s.id)) : null;
@@ -3504,12 +3527,15 @@ function matrizBuildHeaders(inds, opts) {
       rates.forEach(r => { head2 += matrizSortTh(`rate:${r.id}`, r.name, `border-left:3px solid ${ind.color}`); if (rateHasAlvo(r)) head2 += `<th>alvo</th>`; });
       return;
     }
-    head2 += matrizSortTh(`ind:${ind.id}:real`, "Real", `border-left:3px solid ${ind.color}`);
-    if (matrizShowPct(ind)) head2 += matrizSortTh(`ind:${ind.id}:pct`, "%");
-    if (periodo === "mes") head2 += matrizSortTh(`ind:${ind.id}:proj`, "Proj.");
+    if (cfgShowInMatriz(ind)) {
+      head2 += matrizSortTh(`ind:${ind.id}:real`, "Real", `border-left:3px solid ${ind.color}`);
+      if (matrizShowPct(ind)) head2 += matrizSortTh(`ind:${ind.id}:pct`, "%");
+      if (periodo === "mes") head2 += matrizSortTh(`ind:${ind.id}:proj`, "Proj.");
+    }
     if (exp) {
-      subs.forEach(s => {
-        head2 += matrizSortTh(`sub:${s.id}:real`, s.name, "color:var(--accent-2); border-left:1px solid var(--border-soft)");
+      subs.forEach((s, si) => {
+        const subHeadBorder = !cfgShowInMatriz(ind) && si === 0 ? `color:var(--accent-2); border-left:3px solid ${ind.color}` : "color:var(--accent-2); border-left:1px solid var(--border-soft)";
+        head2 += matrizSortTh(`sub:${s.id}:real`, s.name, subHeadBorder);
         if (matrizShowPct(s)) head2 += matrizSortTh(`sub:${s.id}:pct`, "%", "color:var(--accent-2)");
         if (periodo === "mes") head2 += matrizSortTh(`sub:${s.id}:proj`, "Proj.", "color:var(--accent-2)");
       });
@@ -3640,7 +3666,7 @@ function renderMatriz() {
   const tbl = document.getElementById("matrizTable");
   if (!tbl) return;
   try {
-  const inds = orderedIndicators().filter(ind => indShowInSemana(ind)), allSellers = orderedSellers(), days = daysForPeriod();
+  const inds = matrizIndicators(), allSellers = orderedSellers(), days = daysForPeriod();
   const sellers = matrizApplySellerOrder(matrizFilteredSellers(allSellers), days);
   const moveOn = document.body.classList.contains("moveon");
   const reorderBtn = document.getElementById("matrizReorder");
@@ -5586,6 +5612,7 @@ function renderIndicatorConfig() {
     const lbMode = indHasLowerBetterMode(ind);
     let html = `<div class="ind-card${lbMode ? " lower-better-mode" : ""}" data-ind="${ind.id}" style="border-color:${ind.color}; box-shadow:0 0 0 1px color-mix(in srgb, ${ind.color} 50%, transparent), 0 0 18px color-mix(in srgb, ${ind.color} 24%, transparent);"><div class="head">
       <span class="kpi-draghandle" draggable="true" data-drag-kpi-ind="${ind.id}" title="Arrastar para reordenar">⋮⋮</span>
+      <label class="switch" title="Exibir colunas na Matriz / Painel e RSCEN+"><input type="checkbox" class="ind-field" data-k="showInMatriz" ${ind.showInMatriz!==false?'checked':''}><span class="track"></span>Matriz</label>
       <span class="swatch" style="background:${ind.color}"></span>
       <input type="text" value="${escapeHtml(ind.name)}" data-k="name" class="ind-field" style="font-weight:700; min-width:150px;">
       <input type="color" value="${ind.color}" data-k="color" class="ind-field" style="width:42px; height:34px; padding:2px;">
@@ -5602,7 +5629,7 @@ function renderIndicatorConfig() {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
       (ind.subs||[]).forEach(s => {
         const subLb = cfgLowerBetter(s) || cfgLowerBetter(ind);
-        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-promote-sub="${s.id}" title="Subir para principal (pode trocar lugar com um principal)">↑</button><button class="iconbtn" data-del-sub="${s.id}">✕</button>${s.openQuestion ? openCrossPickerHtml(s) : ""}</div>`;
+        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><label class="switch" title="Exibir na Matriz"><input type="checkbox" class="sub-field" data-sk="showInMatriz" ${s.showInMatriz!==false?'checked':''}><span class="track"></span>Matriz</label><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-promote-sub="${s.id}" title="Subir para principal (pode trocar lugar com um principal)">↑</button><button class="iconbtn" data-del-sub="${s.id}">✕</button>${s.openQuestion ? openCrossPickerHtml(s) : ""}</div>`;
       });
       html += `</div>`;
     }
@@ -5891,6 +5918,7 @@ function subShapeFromMain(ind) {
     metaMonth: ind.metaMonth ?? 0,
     lowerBetter: !!ind.lowerBetter,
     openQuestion: !!ind.openQuestion,
+    showInMatriz: ind.showInMatriz !== false,
     planCrossId: ind.planCrossId || "",
     planCrossIds: ind.planCrossIds || [],
     sundayOnly: !!ind.sundayOnly
@@ -5929,6 +5957,7 @@ function mainShapeFromSub(sub, parentInd) {
     metaMonth: pickMainMetaField(sub, parentInd, "metaMonth"),
     lowerBetter: !!sub.lowerBetter,
     openQuestion: !!sub.openQuestion,
+    showInMatriz: sub.showInMatriz !== false,
     planCrossId: sub.planCrossId || "",
     planCrossIds: sub.planCrossIds || [],
     subs: [],
@@ -6191,7 +6220,7 @@ function rateConfigRowHtml(r, ind, optsHtml) {
   const tgtLbl = rateIsAbsolute(r) ? "alvo" : "alvo %";
   const lojaLbl = rateIsAbsolute(r) ? "loja" : "loja %";
   const formula = r.manual ? "" : `<select data-rk="numId" class="rate-field">${optsHtml}</select><b>÷</b><select data-rk="denId" class="rate-field">${optsHtml}</select><label class="switch"><input type="checkbox" class="rate-field" data-rk="invert" ${r.invert ? "checked" : ""}><span class="track"></span>Inverter</label>`;
-  return `<div class="rate-row${rLb ? " lower-better-row" : ""}" data-rate="${r.id}"><span class="kpi-draghandle" draggable="true" data-drag-kpi-rate="${r.id}" title="Arrastar taxa">⋮⋮</span><span class="tag">${unitTag}</span><input type="text" value="${escapeHtml(r.name)}" data-rk="name" class="rate-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="rate-field" data-rk="lowerBetter" ${r.lowerBetter ? "checked" : ""}><span class="track"></span>↓ menor</label><label class="switch" title="Valor em quantidade (ex.: oportunidades NPS), não em %"><input type="checkbox" class="rate-field" data-rk="absolute" ${r.absolute ? "checked" : ""}><span class="track"></span>Nº absoluto</label><label class="switch"><input type="checkbox" class="rate-field" data-rk="manual" ${r.manual ? "checked" : ""}><span class="track"></span>Manual</label>${formula}<span class="hint">${tgtLbl}</span><input type="number" value="${r.target}" data-rk="target" class="rate-field" style="width:56px;" title="Meta do consultor"><span class="hint">${lojaLbl}</span><input type="number" class="rate-field metaloja-inp" data-field="${r.id}" value="${getMetaLoja(r.id) ?? ""}" placeholder="—" style="width:56px;" title="Meta da loja"><button class="iconbtn" data-del-rate="${r.id}">✕</button></div>`;
+  return `<div class="rate-row${rLb ? " lower-better-row" : ""}" data-rate="${r.id}"><span class="kpi-draghandle" draggable="true" data-drag-kpi-rate="${r.id}" title="Arrastar taxa">⋮⋮</span><label class="switch" title="Exibir na Matriz"><input type="checkbox" class="rate-field" data-rk="showInMatriz" ${r.showInMatriz!==false?'checked':''}><span class="track"></span>Matriz</label><span class="tag">${unitTag}</span><input type="text" value="${escapeHtml(r.name)}" data-rk="name" class="rate-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="rate-field" data-rk="lowerBetter" ${r.lowerBetter ? "checked" : ""}><span class="track"></span>↓ menor</label><label class="switch" title="Valor em quantidade (ex.: oportunidades NPS), não em %"><input type="checkbox" class="rate-field" data-rk="absolute" ${r.absolute ? "checked" : ""}><span class="track"></span>Nº absoluto</label><label class="switch"><input type="checkbox" class="rate-field" data-rk="manual" ${r.manual ? "checked" : ""}><span class="track"></span>Manual</label>${formula}<span class="hint">${tgtLbl}</span><input type="number" value="${r.target}" data-rk="target" class="rate-field" style="width:56px;" title="Meta do consultor"><span class="hint">${lojaLbl}</span><input type="number" class="rate-field metaloja-inp" data-field="${r.id}" value="${getMetaLoja(r.id) ?? ""}" placeholder="—" style="width:56px;" title="Meta da loja"><button class="iconbtn" data-del-rate="${r.id}">✕</button></div>`;
 }
 function findIndByRate(rid){ return state.indicators.find(i => (i.rates||[]).some(r=>r.id===rid)); }
 function findIndBySub(sid){ return state.indicators.find(i => (i.subs||[]).some(s=>s.id===sid)); }
@@ -6207,6 +6236,7 @@ function bindIndicatorEvents() {
         renderMatrizLegend("arvoreLegend", "arvoreLegendHint");
         matrizUiRerender();
       }
+      if (k === "showInMatriz") matrizUiRerender();
       save();
       renderIndicatorConfig();
     }));
@@ -6215,23 +6245,25 @@ function bindIndicatorEvents() {
   list.querySelectorAll("[data-demote-ind]").forEach(b => b.addEventListener("click", () => openDemoteModal(b.dataset.demoteInd)));
   list.querySelectorAll("[data-promote-sub]").forEach(b => b.addEventListener("click", () => openPromoteModal(b.dataset.promoteSub)));
   list.querySelectorAll("[data-del-ind]").forEach(b => b.addEventListener("click", () => { if(confirm("Excluir este indicador?")){ const id = b.dataset.delInd; state.indicators = state.indicators.filter(i=>i.id!==id); if (state.order.indicators) state.order.indicators = state.order.indicators.filter(x => x !== id); save(); renderIndicatorConfig(); } }));
-  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false, openQuestion:false, planCrossId:"", planCrossIds:[] }); save(); renderIndicatorConfig(); }));
+  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false, openQuestion:false, showInMatriz:true, planCrossId:"", planCrossIds:[] }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".sub-row").forEach(row => { const ind = findIndBySub(row.dataset.sub); const s = ind && ind.subs.find(x=>x.id===row.dataset.sub); if(!s) return;
     row.querySelectorAll(".sub-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => {
       const k = f.dataset.sk;
       s[k] = f.type === "checkbox" ? f.checked : (["metaDay", "metaSat", "metaSun", "metaMonth"].includes(k) ? Number(f.value) || 0 : f.value);
       if (k === "lowerBetter") { renderMatrizLegend(); renderMatrizLegend("arvoreLegend", "arvoreLegendHint"); matrizUiRerender(); }
+      if (k === "showInMatriz") matrizUiRerender();
       save(); renderIndicatorConfig();
     }));
     row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
   list.querySelectorAll("[data-del-sub]").forEach(b => b.addEventListener("click", () => { const ind = findIndBySub(b.dataset.delSub); ind.subs = ind.subs.filter(s=>s.id!==b.dataset.delSub); save(); renderIndicatorConfig(); }));
-  list.querySelectorAll("[data-add-rate]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addRate); const f = allFields(); ind.rates = ind.rates||[]; ind.rates.push({ id:uid(), name:"Nova taxa", numId:(f[0]&&f[0].id)||"", denId:(f[1]&&f[1].id)||(f[0]&&f[0].id)||"", invert:false, target:0, manual:false, lowerBetter:false, absolute:false }); save(); renderIndicatorConfig(); }));
+  list.querySelectorAll("[data-add-rate]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addRate); const f = allFields(); ind.rates = ind.rates||[]; ind.rates.push({ id:uid(), name:"Nova taxa", numId:(f[0]&&f[0].id)||"", denId:(f[1]&&f[1].id)||(f[0]&&f[0].id)||"", invert:false, target:0, manual:false, lowerBetter:false, absolute:false, showInMatriz:true }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".rate-row").forEach(row => { const ind = findIndByRate(row.dataset.rate); const r = ind && ind.rates.find(x=>x.id===row.dataset.rate); if(!r) return;
     row.querySelectorAll(".rate-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => {
       const k = f.dataset.rk;
       r[k] = f.type === "checkbox" ? f.checked : (k === "target" ? Number(f.value) || 0 : f.value);
       if (k === "absolute" && r.absolute) r.manual = true;
       if (k === "lowerBetter" || k === "absolute") { renderMatrizLegend(); renderMatrizLegend("arvoreLegend", "arvoreLegendHint"); matrizUiRerender(); }
+      if (k === "showInMatriz") matrizUiRerender();
       save(); renderIndicatorConfig();
     }));
     row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
@@ -6665,7 +6697,7 @@ function renderArvore() {
   const tbl = document.getElementById("arvoreTable");
   if (!tbl) return;
   try {
-    const localInds = orderedIndicators();
+    const localInds = matrizIndicators();
     const lojaFilter = state.ui.arvLojaFilter || [];
     const sellerFilter = state.ui.arvSellerFilter || [];
     const hasLojaFilter = lojaFilter.length > 0;
@@ -7677,7 +7709,7 @@ function init() {
   document.getElementById("newSeller").addEventListener("keydown", e => { if(e.key==="Enter") document.getElementById("addSeller").click(); });
   document.getElementById("addIndicator").onclick = () => {
     const id = uid();
-    state.indicators.push({ id, name:"Novo indicador", abbr:"NOVO", color:nextIndicatorColor(), checkin:true, checkout:true, role:"", pctOnly:false, lowerBetter:false, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, subs:[], rates:[] });
+    state.indicators.push({ id, name:"Novo indicador", abbr:"NOVO", color:nextIndicatorColor(), checkin:true, checkout:true, role:"", pctOnly:false, lowerBetter:false, showInMatriz:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, subs:[], rates:[] });
     if (!state.order.indicators) state.order.indicators = orderedIndicators().map(i => i.id).filter(x => x !== id);
     state.order.indicators.push(id);
     save();
