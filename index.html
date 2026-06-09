@@ -8,16 +8,22 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v59";
+  var BUILD = "v60";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
+  function failKey(b) { return b + "@" + BUILD; }
   function norm(b) {
     var u = new URL(location.href);
     if (u.searchParams.get("v") !== b) { u.searchParams.set("v", b); history.replaceState(null, "", u.toString()); }
   }
   function jump(b) {
-    if (sessionStorage.getItem("gc_build_fail") === b) return;
-    sessionStorage.setItem("gc_build_fail", b);
+    if (sessionStorage.getItem("gc_force_reload")) {
+      sessionStorage.removeItem("gc_force_reload");
+    } else if (sessionStorage.getItem("gc_build_fail") === failKey(b)) {
+      return;
+    } else {
+      sessionStorage.setItem("gc_build_fail", failKey(b));
+    }
     var u = new URL(location.href);
     u.searchParams.set("v", b);
     u.searchParams.set("_", String(Date.now()));
@@ -2116,7 +2122,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v59";
+const APP_BUILD = "v60"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -7147,6 +7153,9 @@ function buildNum(v) {
   const m = String(v || "").match(/(\d+)/);
   return m ? parseInt(m[1], 10) : 0;
 }
+function buildFailKey(remoteBuild) {
+  return `${remoteBuild}@${APP_BUILD}`;
+}
 function normalizeAppUrl(build = APP_BUILD) {
   const u = new URL(location.href);
   if (u.searchParams.get("v") !== build) {
@@ -7154,7 +7163,11 @@ function normalizeAppUrl(build = APP_BUILD) {
     history.replaceState(null, "", u.toString());
   }
 }
-function redirectToAppBuild(remoteBuild) {
+function redirectToAppBuild(remoteBuild, opts = {}) {
+  if (opts.force) {
+    sessionStorage.removeItem("gc_build_fail");
+    sessionStorage.setItem("gc_force_reload", "1");
+  }
   const u = new URL(location.href);
   u.searchParams.set("v", remoteBuild);
   u.searchParams.set("_", String(Date.now()));
@@ -7169,10 +7182,7 @@ function showStaleBanner(remoteBuild) {
     document.body.prepend(b);
   }
   b.innerHTML = `Nova versão disponível (${remoteBuild})<button type="button">Atualizar agora</button>`;
-  b.querySelector("button").onclick = () => {
-    sessionStorage.removeItem("gc_build_fail");
-    redirectToAppBuild(remoteBuild);
-  };
+  b.querySelector("button").onclick = () => redirectToAppBuild(remoteBuild, { force: true });
 }
 function applyRemoteAppBuild(remoteBuild) {
   if (!remoteBuild || buildNum(remoteBuild) <= buildNum(APP_BUILD)) {
@@ -7181,11 +7191,11 @@ function applyRemoteAppBuild(remoteBuild) {
     document.getElementById("appStaleBanner")?.remove();
     return;
   }
-  if (sessionStorage.getItem("gc_build_fail") === remoteBuild) {
+  if (sessionStorage.getItem("gc_build_fail") === buildFailKey(remoteBuild)) {
     showStaleBanner(remoteBuild);
     return;
   }
-  sessionStorage.setItem("gc_build_fail", remoteBuild);
+  sessionStorage.setItem("gc_build_fail", buildFailKey(remoteBuild));
   redirectToAppBuild(remoteBuild);
 }
 function watchAppBuild() {
@@ -7284,7 +7294,7 @@ function renderSync(){
     ).join("")}</div></div>`;
   }
   if (!div) {
-    html += `<div class="hint" style="margin-top:6px;">Versão do app: <b>${typeof APP_BUILD !== "undefined" ? APP_BUILD : "—"}</b> · Links antigos do consultor (sem <code>?v=</code>) atualizam sozinhos ao abrir. Ao publicar HTML novo, abra o gestor uma vez para gravar a versão no Firebase.</div>`;
+    html += `<div class="hint" style="margin-top:6px;">Versão do app: <b>${typeof APP_BUILD !== "undefined" ? APP_BUILD : "—"}</b> · Ao publicar, suba <b>index.html</b> e <b>consultor.html</b> com o mesmo <code>APP_BUILD</code>. Abra o gestor uma vez para gravar no Firebase. O botão <b>Atualizar agora</b> força o recarregamento nos dois apps.</div>`;
     html += `<div class="hint" style="margin-top:4px;">Qualquer aparelho que abrir e digitar <b>${escapeHtml(lojaCode||'')}</b> carrega esta mesma configuração (a última sincronizada).</div>`;
     html += `<div class="row" style="margin-top:10px; flex-wrap:wrap; gap:8px;"><button class="btn sec" id="reloadCloud">↻ Baixar da nuvem agora</button><button class="btn sec" id="recoverKpiBtn">🔧 Recuperar dados de KPI</button><button class="btn danger" id="clearMine">🗑 Apagar e recomeçar esta loja</button></div>`;
   } else {
