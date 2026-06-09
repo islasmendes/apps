@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v47";
+  var BUILD = "v48";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1692,7 +1692,7 @@ function cellSourceTag(cell, key) {
 function mergeCellFromRemote(lc, rc) {
   if (!rc || typeof rc !== "object") return false;
   let cellChanged = false;
-  ["plan", "real", "planYes", "planJustif", "planBy", "realBy", "planAt", "realAt"].forEach(k => {
+  ["plan", "real", "planYes", "planJustif", "planBy", "realBy", "planAt", "realAt", "planConfirm", "realConfirm"].forEach(k => {
     const remoteHas = Object.prototype.hasOwnProperty.call(rc, k);
     if (remoteHas) {
       if (rc[k] === null || rc[k] === "") {
@@ -1773,7 +1773,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v47";
+const APP_BUILD = "v48";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -6335,7 +6335,20 @@ function publishAppBuild() {
 function fbPush(){
   if (!fbReady || !fbDb || !lojaCode || divisionalMode()) return;
   clearTimeout(fbPushTimer);
-  fbPushTimer = setTimeout(()=>{ try{ fbDb.ref("lojas/"+lojaCode).set({ name: state.storeName || lojaCode, code: lojaCode, updatedAt: Date.now(), data: JSON.parse(JSON.stringify(state)) }); publishAppBuild(); }catch(e){ console.warn("push falhou", e); } }, 1200);
+  fbPushTimer = setTimeout(async () => {
+    try {
+      const snap = await fbDb.ref("lojas/" + lojaCode + "/data/months").once("value");
+      const remoteMonths = snap.val();
+      if (remoteMonths) mergeDailyFromRemote(remoteMonths);
+      fbDb.ref("lojas/" + lojaCode).set({
+        name: state.storeName || lojaCode,
+        code: lojaCode,
+        updatedAt: Date.now(),
+        data: JSON.parse(JSON.stringify(state))
+      });
+      publishAppBuild();
+    } catch (e) { console.warn("push falhou", e); }
+  }, 1200);
 }
 function pullDivisional() {
   if (!fbReady || !fbDb || !divisionalCode) return;

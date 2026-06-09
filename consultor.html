@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v47";
+  var BUILD = "v48";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -502,7 +502,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v47";
+const APP_BUILD = "v48";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -512,6 +512,9 @@ const FB_CONNECT_BASE_MS = 1200;
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 let lojaData = null, lojaCode = "", seller = null, lojaListener = null;
 let tickTimer = null, lastRenderDay = null, lastTimePhase = null;
+let fieldsEditDepth = 0, renderFieldsQueued = false, lojaListenerTimer = null;
+let confirmsRestored = false;
+const CONFIRM_LS_PREFIX = "gc_cell_confirm_";
 const CONSULTOR_SCHEDULE_DEFAULTS = {
   checkinOpen: "07:00",
   checkinClose: "12:00",
@@ -2129,10 +2132,10 @@ function tickUrgencyAndDay() {
     }
   }
   const d = todayDay();
-  if (onMain && lastTimePhase !== null && phase !== lastTimePhase) renderFields();
+  if (onMain && lastTimePhase !== null && phase !== lastTimePhase) scheduleRenderFields();
   lastTimePhase = phase;
   if (lastRenderDay != null && d !== lastRenderDay && onMain) {
-    renderFields();
+    scheduleRenderFields();
     toast("Novo dia — ontem bloqueado");
   }
   lastRenderDay = d;
@@ -2200,7 +2203,84 @@ function updateProgress() {
   if (lbl) lbl.textContent = wd.toUpperCase();
   if (txt) txt.textContent = dayMo;
 }
-function renderFields() {
+function isFieldsEditing() { return fieldsEditDepth > 0; }
+function beginFieldsEdit() { fieldsEditDepth++; }
+function endFieldsEdit() {
+  fieldsEditDepth = Math.max(0, fieldsEditDepth - 1);
+  if (fieldsEditDepth === 0 && renderFieldsQueued) scheduleRenderFields();
+}
+function initFieldsEditGuard() {
+  const root = document.getElementById("fieldsRoot");
+  if (!root || root.dataset.editGuard) return;
+  root.dataset.editGuard = "1";
+  const editSel = "input[data-fid], textarea[data-open-justif], input[data-open-qty]";
+  root.addEventListener("focusin", e => { if (e.target.matches(editSel)) beginFieldsEdit(); });
+  root.addEventListener("focusout", e => {
+    if (!e.target.matches(editSel)) return;
+    requestAnimationFrame(() => {
+      const ae = document.activeElement;
+      if (root.contains(ae) && ae.matches(editSel)) return;
+      endFieldsEdit();
+    });
+  });
+}
+function confirmLsKey(sellerId, fieldId, day, month, key) {
+  return `${CONFIRM_LS_PREFIX}${lojaCode}|${sellerId}|${fieldId}|${day}|${month}|${cellConfirmKey(key)}`;
+}
+function persistConfirmLocal(sellerId, fieldId, day, month, key) {
+  try { localStorage.setItem(confirmLsKey(sellerId, fieldId, day, month, key), String(Date.now())); } catch (e) {}
+}
+function clearConfirmLocal(sellerId, fieldId, day, month, key) {
+  try { localStorage.removeItem(confirmLsKey(sellerId, fieldId, day, month, key)); } catch (e) {}
+}
+async function restoreMissingConfirms() {
+  if (!fbReady || !seller || !lojaCode) return;
+  const month = todayISO(), day = todayDay();
+  for (const { cfg } of activeFieldList(seller.id, day, month)) {
+    for (const key of ["plan", "real"]) {
+      if (!localStorage.getItem(confirmLsKey(seller.id, cfg.id, day, month, key))) continue;
+      const c = getCell(seller.id, cfg.id, day, month);
+      if (cellIsConfirmed(c, key)) continue;
+      const hasVal = key === "plan" ? hasPlanValue(c, cfg) : hasCellValue(c, key);
+      if (!hasVal) continue;
+      try {
+        await fbDb.ref(`lojas/${lojaCode}/data/months/${month}/daily/${seller.id}/${cfg.id}/${day}`).update({ [cellConfirmKey(key)]: true });
+        setLocalCellFlag(seller.id, cfg.id, day, month, cellConfirmKey(key), true);
+      } catch (e) { console.warn("restore confirm", e); }
+    }
+  }
+}
+async function ensureConfirmsRestored() {
+  if (confirmsRestored) return;
+  confirmsRestored = true;
+  await restoreMissingConfirms();
+}
+function scheduleRenderFields() {
+  if (isFieldsEditing()) { renderFieldsQueued = true; return; }
+  renderFieldsNow();
+}
+function renderFields() { scheduleRenderFields(); }
+function patchDioBoxAfterConfirm(fieldId, key, day, month) {
+  const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
+  const inp = document.querySelector(`input[data-fid="${fieldId}"][data-key="${key}"]`);
+  if (!cfg || !inp) { scheduleRenderFields(); return; }
+  const c = getCell(seller.id, fieldId, day, month);
+  const box = inp.closest(".dio-box");
+  if (!box) { scheduleRenderFields(); return; }
+  const locked = cellLockedForConsultor(c, key, day, month, cfg);
+  inp.disabled = locked;
+  box.classList.toggle("locked", locked);
+  box.classList.toggle("mine", cellIsMine(c, key, cfg) && !locked);
+  const slotLabel = key === "real" ? "Check-out" : "Check-in";
+  const lbl = box.querySelector(".dio-lbl");
+  if (lbl) lbl.innerHTML = `${slotLabel} ${lockLabel(c, key, day, month, cfg)}`;
+  box.querySelectorAll("[data-dio-save], .dio-save-hint, .dio-saved-row").forEach(el => el.remove());
+  const footerHtml = dioSaveFooterHtml(cfg, c, key, day, month, slotLabel);
+  if (footerHtml) box.insertAdjacentHTML("beforeend", footerHtml);
+  updateProgress();
+}
+function renderFieldsNow() {
+  renderFieldsQueued = false;
   const root = document.getElementById("fieldsRoot");
   const month = todayISO(), day = todayDay();
   const fields = activeFieldList(seller.id, day, month);
@@ -2391,11 +2471,11 @@ async function saveField(inp, opts) {
         const md = lojaData.months?.[month];
         if (md?.daily?.[seller.id]?.[fieldId]) delete md.daily[seller.id][fieldId][day];
       }
+      clearConfirmLocal(seller.id, fieldId, day, month, key);
       setLocalCellFlag(seller.id, fieldId, day, month, cellConfirmKey(key), null);
       await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
       toast("Campo limpo");
-      updateProgress();
-      renderFields();
+      scheduleRenderFields();
       return;
     }
     const num = Number(val);
@@ -2426,12 +2506,20 @@ async function saveField(inp, opts) {
     if (opts.confirm) payload[cellConfirmKey(key)] = true;
     await ref.update(payload);
     setLocalCell(seller.id, fieldId, day, month, key, num);
-    if (opts.confirm) setLocalCellFlag(seller.id, fieldId, day, month, cellConfirmKey(key), true);
+    if (opts.confirm) {
+      setLocalCellFlag(seller.id, fieldId, day, month, cellConfirmKey(key), true);
+      persistConfirmLocal(seller.id, fieldId, day, month, key);
+    }
     await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
     const slot = opts.slotLabel || (key === "real" ? "Check-out" : "Check-in");
     toast(opts.confirm ? `${slot} salvo · travado` : "Sincronizado");
-    renderFields();
-    if (key === "plan") refreshOpenCrossAll();
+    if (opts.confirm) {
+      patchDioBoxAfterConfirm(fieldId, key, day, month);
+      if (key === "plan") refreshOpenCrossAll();
+    } else {
+      refreshDioSaveBtn(inp.closest(".dio-box"));
+      updateProgress();
+    }
   } catch (e) {
     console.warn(e);
     toast("Erro ao salvar. Verifique a conexão.", true);
@@ -2446,10 +2534,14 @@ function attachLojaListener() {
       normalizeLojaIndicators();
       const s = (lojaData.sellers || []).find(x => x.id === seller.id);
       if (s) seller = s;
-      if (document.getElementById("screenMain").classList.contains("active")) {
-        renderFields();
-        if (document.getElementById("resumoOverlay").classList.contains("show")) renderResumo();
-      }
+      ensureConfirmsRestored().then(() => {
+        clearTimeout(lojaListenerTimer);
+        lojaListenerTimer = setTimeout(() => {
+          if (!document.getElementById("screenMain").classList.contains("active")) return;
+          scheduleRenderFields();
+          if (document.getElementById("resumoOverlay").classList.contains("show")) renderResumo();
+        }, 400);
+      });
     }
   };
   fbDb.ref("lojas/" + lojaCode).on("value", lojaListener);
@@ -2493,7 +2585,9 @@ async function doLogin(loja, mat, pin) {
     if (!ok) { err.textContent = "PIN incorreto."; return; }
     seller = found;
     saveSession();
+    initFieldsEditGuard();
     attachLojaListener();
+    await ensureConfirmsRestored();
     showScreen("screenMain");
     startTickLoop();
     renderFields();
@@ -2515,7 +2609,9 @@ async function tryRestore() {
     normalizeLojaIndicators();
     seller = (lojaData.sellers || []).find(x => x.id === s.sellerId);
     if (!seller) return false;
+    initFieldsEditGuard();
     attachLojaListener();
+    await ensureConfirmsRestored();
     showScreen("screenMain");
     startTickLoop();
     renderFields();
@@ -2597,11 +2693,12 @@ document.getElementById("btnLogout").onclick = () => {
   if (lojaListener) { fbDb.ref("lojas/" + lojaCode).off("value", lojaListener); lojaListener = null; }
   stopTickLoop();
   closeResumo();
-  clearSession(); seller = null; lojaData = null;
+  clearSession(); seller = null; lojaData = null; confirmsRestored = false;
   document.getElementById("inPin").value = "";
   showScreen("screenLogin");
   toast("Sessão encerrada");
 };
+initFieldsEditGuard();
 fbInit();
 </script>
 </body>
