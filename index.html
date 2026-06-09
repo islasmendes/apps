@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v63";
+  var BUILD = "v64";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -245,19 +245,12 @@
   th.today, td.today { background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)) !important; }
   th.col-sun, td.col-sun { opacity: .5; }
   #diarioTable { width: 100%; table-layout: fixed; }
-  #diarioTable col.dio-col-name, #diarioTable col.dio-col-meta, #diarioTable col.dio-col-week { width: 1%; }
-  #diarioTable col.dio-col-day { width: 140px; }
   #diarioTable th.name, #diarioTable td.name,
   #diarioTable th.dio-meta-col, #diarioTable td.dio-meta-col,
   #diarioTable th.dio-week-col, #diarioTable td.dio-week-col {
-    width: 1%;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   #diarioTable th.dio-day-col, #diarioTable td[data-dio-day] {
-    width: 140px;
-    max-width: 140px;
     white-space: normal;
     overflow: hidden;
   }
@@ -2209,7 +2202,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v63"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v64"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4279,6 +4272,51 @@ function renderDiario() {
   });
   attachGridNav(table);
   attachOpenPlanScrollHandles(table);
+  balanceDiarioTableLayout(table, days.length);
+}
+let dioBalanceTimer = null;
+function scheduleDiarioTableBalance() {
+  clearTimeout(dioBalanceTimer);
+  dioBalanceTimer = setTimeout(() => {
+    const table = document.getElementById("diarioTable");
+    const dayCount = table?.querySelectorAll("col.dio-col-day").length || 0;
+    if (table && dayCount) balanceDiarioTableLayout(table, dayCount);
+  }, 60);
+}
+function balanceDiarioTableLayout(table, dayCount) {
+  if (!table || !dayCount) return;
+  const cg = table.querySelector("colgroup");
+  if (!cg) return;
+  const nameCol = cg.querySelector(".dio-col-name");
+  const metaCol = cg.querySelector(".dio-col-meta");
+  const weekCols = [...cg.querySelectorAll(".dio-col-week")];
+  const dayCols = [...cg.querySelectorAll(".dio-col-day")];
+  if (!nameCol || !metaCol || !dayCols.length) return;
+  table.style.tableLayout = "auto";
+  const maxCellW = sels => {
+    let m = 0;
+    (Array.isArray(sels) ? sels : [sels]).forEach(sel => {
+      table.querySelectorAll(sel).forEach(el => { m = Math.max(m, el.offsetWidth); });
+    });
+    return Math.ceil(m);
+  };
+  const nameW = Math.max(maxCellW(["thead th.name", "tbody td.name"]), 72);
+  const metaW = Math.max(maxCellW(["thead th.dio-meta-col", "tbody td.dio-meta-col"]), 48);
+  const weekW = Math.max(maxCellW(["thead th.dio-week-col", "tbody td.dio-week-col"]), 56);
+  nameCol.style.width = nameW + "px";
+  metaCol.style.width = metaW + "px";
+  weekCols.forEach(c => { c.style.width = weekW + "px"; });
+  table.style.tableLayout = "fixed";
+  const wrap = table.closest(".table-wrap");
+  const tableW = Math.max((wrap && wrap.clientWidth) || table.clientWidth || 0, 480);
+  const dayW = Math.max(88, Math.floor((tableW - nameW - metaW - weekW * 2) / dayCount));
+  dayCols.forEach(c => { c.style.width = dayW + "px"; });
+}
+if (!window._dioBalanceResize) {
+  window._dioBalanceResize = true;
+  window.addEventListener("resize", () => {
+    if (activeView === "diario") scheduleDiarioTableBalance();
+  });
 }
 function attachOpenPlanScrollHandles(root) {
   root.querySelectorAll(".open-plan-scroll").forEach(wrap => {
