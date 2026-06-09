@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v60";
+  var BUILD = "v61";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -274,7 +274,24 @@
   .matriz-filter-chip { cursor: pointer; border: 1px solid var(--border); background: var(--cell); color: var(--text-dim); border-radius: 99px; padding: 5px 12px; font-size: 12px; font-weight: 600; font-family: var(--font); transition: .15s; }
   .matriz-filter-chip:hover { border-color: var(--accent); color: var(--text); }
   .matriz-filter-chip.active { background: color-mix(in srgb, var(--accent) 22%, var(--cell)); border-color: var(--accent); color: var(--text); font-weight: 700; }
-  .diario-seller-bar .matriz-filter-chip.active { background: color-mix(in srgb, var(--accent) 28%, var(--cell)); border-color: var(--accent); color: var(--text); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .diario-seller-bar .matriz-filter-chip {
+    --dio-ci-bd: var(--border);
+    --dio-co-bd: var(--border);
+    border: 2px solid transparent;
+    background:
+      linear-gradient(var(--cell), var(--cell)) padding-box,
+      conic-gradient(from 90deg, var(--dio-ci-bd) 0deg 180deg, var(--dio-co-bd) 180deg 360deg) border-box;
+  }
+  .diario-seller-bar .matriz-filter-chip.active {
+    background:
+      linear-gradient(color-mix(in srgb, var(--accent) 28%, var(--cell)), color-mix(in srgb, var(--accent) 28%, var(--cell))) padding-box,
+      conic-gradient(from 90deg, var(--dio-ci-bd) 0deg 180deg, var(--dio-co-bd) 180deg 360deg) border-box;
+    border-color: transparent;
+    color: var(--text);
+    box-shadow: none;
+  }
+  .diario-seller-bar .matriz-filter-chip.dio-ci-done { --dio-ci-bd: var(--accent); }
+  .diario-seller-bar .matriz-filter-chip.dio-co-done { --dio-co-bd: var(--ok); }
   .diario-seller-bar .matriz-filter-chip.dio-co-done { color: var(--ok); font-weight: 700; }
   .diario-seller-bar .matriz-filter-chip.dio-co-pending { color: var(--danger); font-weight: 700; }
   html[data-theme="light"] .diario-seller-bar .matriz-filter-chip.active { color: var(--text); }
@@ -424,10 +441,57 @@
   .kpi-draghandle:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
   .ind-card.dragging, .sub-row.dragging, .rate-row.dragging { opacity: .45; }
   .ind-card.drag-over, .sub-row.drag-over, .rate-row.drag-over { outline: 2px dashed var(--accent); outline-offset: -2px; border-radius: 8px; }
-  .open-plan-read { display: block; width: 100%; cursor: default; pointer-events: none; overflow-x: auto; white-space: nowrap; text-align: center; scrollbar-width: thin; line-height: 1.35; }
-  .open-plan-read.is-empty { color: var(--text-faint); opacity: .45; font-weight: 600; }
+  .open-plan-scroll {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    border-radius: 7px;
+    overflow: hidden;
+    border: 1.5px solid var(--dio-in-bd);
+    background: var(--dio-in-bg);
+  }
+  .open-plan-scroll .open-plan-read {
+    flex: 1;
+    min-width: 0;
+    max-width: 100%;
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    text-align: left;
+    scrollbar-width: none;
+    line-height: 1.35;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    pointer-events: auto;
+    cursor: default;
+    padding-right: 2px;
+  }
+  .open-plan-scroll .open-plan-read::-webkit-scrollbar { display: none; }
+  .open-plan-drag {
+    flex: none;
+    width: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    color: var(--text-faint);
+    background: color-mix(in srgb, var(--dio-in-bd) 22%, var(--dio-in-bg));
+    border-left: 1px solid var(--dio-in-bd);
+    user-select: none;
+    touch-action: none;
+    font-size: 12px;
+    letter-spacing: -2px;
+    line-height: 1;
+  }
+  .open-plan-drag:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--dio-in-bg)); }
+  .open-plan-drag:active { cursor: grabbing; }
+  .open-plan-read.is-empty { color: var(--text-faint); opacity: .45; font-weight: 600; text-align: center; }
   .open-plan-read.pos { color: var(--ok) !important; }
   .open-plan-read.neg { color: var(--danger) !important; }
+  #diarioTable td[data-dio-day] { max-width: 148px; width: 1%; }
   .open-cross-mini { margin-top: 4px; max-height: 80px; overflow-y: auto; scrollbar-width: thin; }
   .open-cross-mini .open-cross-msg { margin-top: 0; padding: 6px 8px; font-size: 9px; line-height: 1.35; border-radius: 7px; font-weight: 600; }
   .open-cross-mini .open-cross-msg.bad { background: color-mix(in srgb, var(--danger) 14%, var(--panel-2)); border: 1px solid color-mix(in srgb, var(--danger) 50%, var(--border)); color: #ff8a94; }
@@ -709,7 +773,7 @@
       <div id="diarioSellerBar" class="matriz-toolbar diario-seller-bar" style="margin-top:10px;"></div>
       <div id="diarioLockBar" class="dio-lock-bar"></div>
       <div class="table-wrap" style="margin-top:12px;"><table id="diarioTable"></table></div>
-      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Só o <b>dia de hoje</b> fica liberado; demais dias exigem <b>Desbloquear</b> na coluna ou nos botões acima (reset à 00:00). <b>Limpar semana/dia:</b> desbloqueie o cadeado 🔒 — escolha dia, vendedor e <b>Indicadores</b> (vários com ☑); apaga <b>check-in e check-out do consultor e do gestor</b> na nuvem. Marque <b>⚙ sistema</b> se o erro estiver na matriz (Real do gestor). <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar. Nome <b style="color:var(--ok)">verde</b> = check-out de hoje finalizado · <b style="color:var(--danger)">vermelho</b> = pendente.</div>
+      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Só o <b>dia de hoje</b> fica liberado; demais dias exigem <b>Desbloquear</b> na coluna ou nos botões acima (reset à 00:00). <b>Limpar semana/dia:</b> desbloqueie o cadeado 🔒 — escolha dia, vendedor e <b>Indicadores</b> (vários com ☑); apaga <b>check-in e check-out do consultor e do gestor</b> na nuvem. Marque <b>⚙ sistema</b> se o erro estiver na matriz (Real do gestor). <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar. Nome <b style="color:var(--ok)">verde</b> = check-out de hoje ok · <b style="color:var(--danger)">vermelho</b> = pendente · borda <b style="color:var(--accent)">esquerda</b> = check-in ok · borda <b style="color:var(--ok)">direita</b> = check-out ok. Justificativas longas: arraste <b>⋮⋮</b> na lateral.</div>
     </div>
   </section>
 
@@ -2122,7 +2186,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v60"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v61"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4055,6 +4119,19 @@ function diarioRowNeedsAnyDay(sellerId, cfg, days) {
     return n.checkin || n.checkout;
   });
 }
+function diarioCheckinFieldIds(sellerId, day) {
+  const ids = [];
+  orderedIndicators().forEach(ind => {
+    if (ind.pctOnly) return;
+    const add = cfg => {
+      if (!diarioFieldNeeds(sellerId, cfg, day).checkin) return;
+      ids.push(cfg.id);
+    };
+    if (cfgHasDiario(ind)) add(ind);
+    (ind.subs || []).filter(cfgHasDiario).forEach(add);
+  });
+  return ids;
+}
 function diarioCheckoutFieldIds(sellerId, day) {
   const ids = [];
   orderedIndicators().forEach(ind => {
@@ -4067,6 +4144,14 @@ function diarioCheckoutFieldIds(sellerId, day) {
     (ind.subs || []).filter(cfgHasDiario).forEach(add);
   });
   return ids;
+}
+function diarioSellerCheckinDone(sellerId, day) {
+  const fields = diarioCheckinFieldIds(sellerId, day);
+  if (!fields.length) return null;
+  return fields.every(fid => {
+    const c = getCell(sellerId, fid, day);
+    return hasPlanValue(c, cfgById(fid));
+  });
 }
 function diarioSellerCheckoutDone(sellerId, day) {
   const fields = diarioCheckoutFieldIds(sellerId, day);
@@ -4102,9 +4187,11 @@ function renderDiarioSellerBar(sellers) {
   const today = diarioTodayDay();
   bar.innerHTML = `<span class="hint">Vendedor</span>
     <div class="matriz-filter-chips">${sellers.map(s => {
+      const ci = today != null ? diarioSellerCheckinDone(s.id, today) : null;
       const co = today != null ? diarioSellerCheckoutDone(s.id, today) : null;
+      const ciCls = ci === true ? " dio-ci-done" : "";
       const coCls = co === true ? " dio-co-done" : co === false ? " dio-co-pending" : "";
-      return `<button type="button" class="matriz-filter-chip diario-seller-chip${s.id === diarioSeller ? " active" : ""}${coCls}" data-sid="${s.id}">${escapeHtml(s.name)}</button>`;
+      return `<button type="button" class="matriz-filter-chip diario-seller-chip${s.id === diarioSeller ? " active" : ""}${ciCls}${coCls}" data-sid="${s.id}">${escapeHtml(s.name)}</button>`;
     }).join("")}</div>`;
   bar.querySelectorAll(".diario-seller-chip").forEach(btn => {
     btn.onclick = () => {
@@ -4165,6 +4252,53 @@ function renderDiario() {
     });
   });
   attachGridNav(table);
+  attachOpenPlanScrollHandles(table);
+}
+function attachOpenPlanScrollHandles(root) {
+  root.querySelectorAll(".open-plan-scroll").forEach(wrap => {
+    const scroller = wrap.querySelector(".open-plan-read");
+    const handle = wrap.querySelector(".open-plan-drag");
+    if (!scroller || !handle || handle._openPlanBound) return;
+    handle._openPlanBound = true;
+    handle.addEventListener("mousedown", e => {
+      e.preventDefault();
+      const x0 = e.clientX;
+      const s0 = scroller.scrollLeft;
+      handle.style.cursor = "grabbing";
+      const onMove = ev => {
+        scroller.scrollLeft = s0 - (ev.clientX - x0);
+        ev.preventDefault();
+      };
+      const onUp = () => {
+        handle.style.cursor = "";
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    });
+    handle.addEventListener("touchstart", e => {
+      const t = e.touches[0];
+      if (!t) return;
+      e.preventDefault();
+      const x0 = t.clientX;
+      const s0 = scroller.scrollLeft;
+      const onMove = ev => {
+        const tx = ev.touches[0];
+        if (!tx) return;
+        scroller.scrollLeft = s0 - (tx.clientX - x0);
+        ev.preventDefault();
+      };
+      const onUp = () => {
+        window.removeEventListener("touchmove", onMove);
+        window.removeEventListener("touchend", onUp);
+        window.removeEventListener("touchcancel", onUp);
+      };
+      window.addEventListener("touchmove", onMove, { passive: false });
+      window.addEventListener("touchend", onUp);
+      window.addEventListener("touchcancel", onUp);
+    }, { passive: false });
+  });
 }
 function diarioRow(cfg, color, isSub) {
   const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
@@ -4602,7 +4736,7 @@ function openPlanDiarioHtml(cfg, c, sellerId, day, m = currentMonth) {
   const hit = c.planYes === true ? crossPlanHit(sellerId, cfg, day, m) : null;
   const target = hit?.value ?? null;
   if (confirmed != null && !isNaN(confirmed) && target != null) cls = confirmed < target ? "neg" : "pos";
-  return `<div class="cellinput plan-cell open-plan-read ${cls}" title="${escapeHtml(disp)}" aria-readonly="true">${escapeHtml(disp)}</div>`;
+  return `<div class="open-plan-scroll"><div class="cellinput plan-cell open-plan-read ${cls}" title="${escapeHtml(disp)}" aria-readonly="true">${escapeHtml(disp)}</div><span class="open-plan-drag" role="button" tabindex="0" title="Arraste para ver o texto" aria-label="Arrastar justificativa">⋮⋮</span></div>`;
 }
 function hasCellValue(cell, key) {
   return cell[key] != null && cell[key] !== "";
