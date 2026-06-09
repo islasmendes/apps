@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v49";
+  var BUILD = "v50";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -786,7 +786,7 @@
   <section class="view" id="view-kpis">
     <div class="panel">
       <div class="flex-between">
-        <div><h2>KPIs · Indicadores</h2><div class="sub">Principal → sub-indicadores (qtd) e taxas (%). Use <b>↳</b> / <b>↑</b> para mover entre principal e sub <b>sem perder preenchimentos</b> (só muda a organização e o nome, se quiser). <b>⋮⋮</b> define a ordem no app do CV, diário e matriz.</div></div>
+        <div><h2>KPIs · Indicadores</h2><div class="sub">Principal → sub-indicadores (qtd) e taxas (%). <b>↳</b> desce o principal (pode <b>trocar lugar</b> com um sub) · <b>↑</b> sobe o sub (pode trocar com um principal). Preenchimentos preservados. <b>⋮⋮</b> define a ordem no app do CV, diário e matriz.</div></div>
         <button class="btn" id="addIndicator">+ Indicador principal</button>
       </div>
       <div id="indicatorList" style="margin-top:14px;"></div>
@@ -1783,7 +1783,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v49";
+const APP_BUILD = "v50";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -5048,14 +5048,14 @@ function renderIndicatorConfig() {
       <label class="switch"><input type="checkbox" class="ind-field" data-k="checkout" ${ind.checkout?'checked':''}><span class="track"></span>Check-out</label>
       <label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="ind-field" data-k="openQuestion" ${ind.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label>`}
       <span class="spacer" style="flex:1"></span>
-      ${ind.pctOnly ? "" : `<button class="iconbtn" data-demote-ind="${ind.id}" title="Tornar subindicador de… (preserva preenchimentos)">↳</button>`}
+      ${ind.pctOnly ? "" : `<button class="iconbtn" data-demote-ind="${ind.id}" title="Descer para subindicador (pode trocar lugar com um sub)">↳</button>`}
       <button class="iconbtn" data-del-ind="${ind.id}" title="Excluir">✕</button></div>${ind.openQuestion && !ind.pctOnly ? openCrossPickerHtml(ind) : ""}${lowerBetterPanelHtml(ind)}`;
     if (!ind.pctOnly) html += metaGoalsQtyHtml(ind, ind.id);
     if (!ind.pctOnly) {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
       (ind.subs||[]).forEach(s => {
         const subLb = cfgLowerBetter(s) || cfgLowerBetter(ind);
-        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-promote-sub="${s.id}" title="Tornar indicador principal (preserva preenchimentos)">↑</button><button class="iconbtn" data-del-sub="${s.id}">✕</button>${s.openQuestion ? openCrossPickerHtml(s) : ""}</div>`;
+        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-promote-sub="${s.id}" title="Subir para principal (pode trocar lugar com um principal)">↑</button><button class="iconbtn" data-del-sub="${s.id}">✕</button>${s.openQuestion ? openCrossPickerHtml(s) : ""}</div>`;
       });
       html += `</div>`;
     }
@@ -5173,21 +5173,48 @@ function mainShapeFromSub(sub, parentInd) {
     rates: []
   };
 }
+function mainCanBecomeSub(ind) {
+  if (!ind || ind.pctOnly) return "Indicadores só-taxa não podem virar sub.";
+  if ((ind.subs || []).length) return "Este indicador tem sub-indicadores. Reorganize-os antes.";
+  if ((ind.rates || []).length) return "Este indicador tem taxas. Mova-as para outro indicador antes.";
+  return null;
+}
 function demoteIndicatorToSub(indId, parentIndId) {
   if (!indId || !parentIndId || indId === parentIndId) return false;
   const idx = state.indicators.findIndex(i => i.id === indId);
   if (idx < 0) return false;
   const ind = state.indicators[idx];
-  if (ind.pctOnly) { toast("Indicadores só-taxa não podem virar sub.", true); return false; }
+  const block = mainCanBecomeSub(ind);
+  if (block) { toast(block, true); return false; }
   const parent = state.indicators.find(i => i.id === parentIndId);
   if (!parent || parent.pctOnly) { toast("Indicador pai inválido.", true); return false; }
-  if ((ind.subs || []).length) { toast("Este indicador tem sub-indicadores. Reorganize-os antes.", true); return false; }
-  if ((ind.rates || []).length) { toast("Este indicador tem taxas. Mova-as para outro indicador antes.", true); return false; }
   parent.subs = parent.subs || [];
   if (parent.subs.some(s => s.id === indId)) return false;
   parent.subs.push(subShapeFromMain(ind));
   state.indicators.splice(idx, 1);
   if (state.order.indicators) state.order.indicators = state.order.indicators.filter(id => id !== indId);
+  save();
+  queueConfigPush();
+  return true;
+}
+function swapMainWithSub(mainId, parentIndId, subId) {
+  if (!mainId || !parentIndId || !subId || mainId === subId) return false;
+  const mainIdx = state.indicators.findIndex(i => i.id === mainId);
+  if (mainIdx < 0) return false;
+  const main = state.indicators[mainIdx];
+  const block = mainCanBecomeSub(main);
+  if (block) { toast(block, true); return false; }
+  const parent = state.indicators.find(i => i.id === parentIndId);
+  if (!parent || parent.pctOnly) { toast("Indicador pai inválido.", true); return false; }
+  const subIdx = (parent.subs || []).findIndex(s => s.id === subId);
+  if (subIdx < 0) { toast("Sub-indicador não encontrado neste pai.", true); return false; }
+  const sub = parent.subs[subIdx];
+  state.indicators[mainIdx] = mainShapeFromSub(sub, parent);
+  parent.subs[subIdx] = subShapeFromMain(main);
+  if (state.order.indicators) {
+    const oi = state.order.indicators.indexOf(mainId);
+    if (oi >= 0) state.order.indicators[oi] = subId;
+  }
   save();
   queueConfigPush();
   return true;
@@ -5215,6 +5242,34 @@ function promoteSubToMain(subId) {
   queueConfigPush();
   return true;
 }
+function swapSubWithMain(subId, targetMainId) {
+  if (!subId || !targetMainId || subId === targetMainId) return false;
+  let parentInd = null, sub = null, subIdx = -1;
+  for (const ind of state.indicators) {
+    const i = (ind.subs || []).findIndex(s => s.id === subId);
+    if (i >= 0) {
+      parentInd = ind;
+      sub = ind.subs[i];
+      subIdx = i;
+      break;
+    }
+  }
+  if (!sub || !parentInd) return false;
+  const mainIdx = state.indicators.findIndex(i => i.id === targetMainId);
+  if (mainIdx < 0) return false;
+  const main = state.indicators[mainIdx];
+  const block = mainCanBecomeSub(main);
+  if (block) { toast("O principal escolhido para troca: " + block.toLowerCase(), true); return false; }
+  parentInd.subs[subIdx] = subShapeFromMain(main);
+  state.indicators[mainIdx] = mainShapeFromSub(sub, parentInd);
+  if (state.order.indicators) {
+    const oi = state.order.indicators.indexOf(targetMainId);
+    if (oi >= 0) state.order.indicators[oi] = subId;
+  }
+  save();
+  queueConfigPush();
+  return true;
+}
 let kpiMoveCtx = null;
 function closeKpiMoveModal() {
   document.getElementById("kpiMoveModal")?.classList.remove("show");
@@ -5224,6 +5279,42 @@ function kpiMoveStatsHtml(stats) {
   if (!stats.cells) return "";
   return `<br><span class="hint" style="margin-top:6px;display:block;">${stats.cells} registro(s) · ${stats.days} dia(s) · ${stats.sellers} vendedor(es) — <b>permanecem iguais</b> (mesmo ID interno).</span>`;
 }
+function kpiMoveSelectStyle() {
+  return "width:100%;margin-top:6px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--cell);color:var(--text);font-family:var(--font);";
+}
+function updateDemoteModalSwapList() {
+  const wrap = document.getElementById("kpiMoveSwapWrap");
+  if (!wrap || !kpiMoveCtx || kpiMoveCtx.mode !== "demote") return;
+  const parentId = document.getElementById("kpiMoveParent")?.value;
+  const parent = state.indicators.find(i => i.id === parentId);
+  const subs = (parent?.subs || []).filter(s => s.id !== kpiMoveCtx.fieldId);
+  if (!subs.length) {
+    wrap.innerHTML = `<div class="hint" style="margin-top:12px;line-height:1.5;">Este pai ainda não tem subs — <b>${escapeHtml(kpiMoveCtx.name)}</b> será adicionado como novo sub no final.</div>`;
+    return;
+  }
+  wrap.innerHTML = `<label class="field" style="display:block;width:100%;margin-top:12px;"><span>Trocar lugar com qual sub-indicador?</span>
+    <select id="kpiMoveSwapSub" style="${kpiMoveSelectStyle()}">
+      ${subs.map(s => `<option value="${s.id}">↳ ${escapeHtml(s.name)}</option>`).join("")}
+      <option value="">— Inserir no final (sem trocar)</option>
+    </select></label>
+    <div class="hint" style="margin-top:8px;line-height:1.5;">Com <b>troca</b>: o sub escolhido <b>sobe</b> para principal no lugar de <b>${escapeHtml(kpiMoveCtx.name)}</b>, e este <b>desce</b> na posição dele. Os dois mantêm todos os preenchimentos.</div>`;
+}
+function updatePromoteModalSwapList() {
+  const wrap = document.getElementById("kpiMoveSwapWrap");
+  if (!wrap || !kpiMoveCtx || kpiMoveCtx.mode !== "promote") return;
+  const parentInd = findIndBySub(kpiMoveCtx.fieldId);
+  const mains = orderedIndicators().filter(i => !i.pctOnly && i.id !== kpiMoveCtx.fieldId && i.id !== parentInd?.id);
+  if (!mains.length) {
+    wrap.innerHTML = `<div class="hint" style="margin-top:12px;line-height:1.5;">Não há outro principal para trocar — <b>${escapeHtml(kpiMoveCtx.name)}</b> será promovido logo após <b>${escapeHtml(parentInd?.name || "o pai")}</b>.</div>`;
+    return;
+  }
+  wrap.innerHTML = `<label class="field" style="display:block;width:100%;margin-top:12px;"><span>Trocar lugar com qual indicador principal?</span>
+    <select id="kpiMoveSwapMain" style="${kpiMoveSelectStyle()}">
+      ${mains.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join("")}
+      <option value="">— Promover após o pai (sem trocar)</option>
+    </select></label>
+    <div class="hint" style="margin-top:8px;line-height:1.5;">Com <b>troca</b>: <b>${escapeHtml(kpiMoveCtx.name)}</b> sobe para o lugar do principal escolhido, e ele <b>desce</b> para sub na posição deste. Dados dos dois preservados.</div>`;
+}
 function openDemoteModal(indId) {
   const ind = state.indicators.find(i => i.id === indId);
   if (!ind || ind.pctOnly) return;
@@ -5231,13 +5322,15 @@ function openDemoteModal(indId) {
   if (!parents.length) { toast("Cadastre outro indicador principal para receber este sub.", true); return; }
   const stats = countFieldDataEntries(indId);
   kpiMoveCtx = { mode: "demote", fieldId: indId, name: ind.name };
-  document.getElementById("kpiMoveTitle").textContent = "Tornar subindicador";
-  document.getElementById("kpiMoveSub").innerHTML = `Mover <b>${escapeHtml(ind.name)}</b> para dentro de um indicador principal. Check-in, check-out e histórico do diário <b>não mudam</b> — só a posição na árvore.${kpiMoveStatsHtml(stats)}`;
+  document.getElementById("kpiMoveTitle").textContent = "Descer para subindicador";
+  document.getElementById("kpiMoveSub").innerHTML = `Descer <b>${escapeHtml(ind.name)}</b> para dentro de um indicador principal — pode <b>trocar de lugar</b> com um sub que já exista.${kpiMoveStatsHtml(stats)}`;
   document.getElementById("kpiMoveBody").innerHTML = `<label class="field" style="display:block;width:100%;"><span>Indicador principal (pai)</span>
-    <select id="kpiMoveParent" style="width:100%;margin-top:6px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--cell);color:var(--text);font-family:var(--font);">
+    <select id="kpiMoveParent" style="${kpiMoveSelectStyle()}">
       ${parents.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("")}
     </select></label>
-    <div class="hint" style="margin-top:10px;line-height:1.5;">Ex.: renomeie o pai para <b>Agendamento</b> e mantenha este como <b>Agendamento - Hoje</b> no check-out. Os valores de ontem continuam na mesma linha.</div>`;
+    <div id="kpiMoveSwapWrap"></div>`;
+  document.getElementById("kpiMoveParent").onchange = updateDemoteModalSwapList;
+  updateDemoteModalSwapList();
   document.getElementById("kpiMoveModal").classList.add("show");
 }
 function openPromoteModal(subId) {
@@ -5246,9 +5339,10 @@ function openPromoteModal(subId) {
   if (!sub || !parentInd) return;
   const stats = countFieldDataEntries(subId);
   kpiMoveCtx = { mode: "promote", fieldId: subId, name: sub.name };
-  document.getElementById("kpiMoveTitle").textContent = "Tornar indicador principal";
-  document.getElementById("kpiMoveSub").innerHTML = `Promover <b>${escapeHtml(sub.name)}</b> (hoje sub de <b>${escapeHtml(parentInd.name)}</b>) para indicador principal.${kpiMoveStatsHtml(stats)}`;
-  document.getElementById("kpiMoveBody").innerHTML = `<div class="hint" style="line-height:1.5;">Aparecerá como linha principal no diário, matriz e app do consultor. Cor herdada de <b>${escapeHtml(parentInd.name)}</b>. Nenhum preenchimento é apagado.</div>`;
+  document.getElementById("kpiMoveTitle").textContent = "Subir para indicador principal";
+  document.getElementById("kpiMoveSub").innerHTML = `Subir <b>${escapeHtml(sub.name)}</b> (hoje sub de <b>${escapeHtml(parentInd.name)}</b>) — pode <b>trocar de lugar</b> com um principal.${kpiMoveStatsHtml(stats)}`;
+  document.getElementById("kpiMoveBody").innerHTML = `<div id="kpiMoveSwapWrap"></div>`;
+  updatePromoteModalSwapList();
   document.getElementById("kpiMoveModal").classList.add("show");
 }
 function confirmKpiMove() {
@@ -5256,11 +5350,25 @@ function confirmKpiMove() {
   let ok = false;
   if (kpiMoveCtx.mode === "demote") {
     const parentId = document.getElementById("kpiMoveParent")?.value;
-    ok = demoteIndicatorToSub(kpiMoveCtx.fieldId, parentId);
-    if (ok) toast(`"${kpiMoveCtx.name}" agora é subindicador · dados preservados`);
+    const swapSubId = document.getElementById("kpiMoveSwapSub")?.value;
+    if (swapSubId) {
+      const subName = state.indicators.find(i => i.id === parentId)?.subs?.find(s => s.id === swapSubId)?.name || "sub";
+      ok = swapMainWithSub(kpiMoveCtx.fieldId, parentId, swapSubId);
+      if (ok) toast(`Troca feita: "${kpiMoveCtx.name}" desceu · "${subName}" subiu para principal`);
+    } else {
+      ok = demoteIndicatorToSub(kpiMoveCtx.fieldId, parentId);
+      if (ok) toast(`"${kpiMoveCtx.name}" agora é subindicador · dados preservados`);
+    }
   } else {
-    ok = promoteSubToMain(kpiMoveCtx.fieldId);
-    if (ok) toast(`"${kpiMoveCtx.name}" agora é indicador principal · dados preservados`);
+    const swapMainId = document.getElementById("kpiMoveSwapMain")?.value;
+    if (swapMainId) {
+      const mainName = state.indicators.find(i => i.id === swapMainId)?.name || "principal";
+      ok = swapSubWithMain(kpiMoveCtx.fieldId, swapMainId);
+      if (ok) toast(`Troca feita: "${kpiMoveCtx.name}" subiu · "${mainName}" desceu para sub`);
+    } else {
+      ok = promoteSubToMain(kpiMoveCtx.fieldId);
+      if (ok) toast(`"${kpiMoveCtx.name}" agora é indicador principal · dados preservados`);
+    }
   }
   if (ok) {
     closeKpiMoveModal();
