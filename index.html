@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v50";
+  var BUILD = "v51";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1783,7 +1783,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v50";
+const APP_BUILD = "v51";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -5219,7 +5219,8 @@ function swapMainWithSub(mainId, parentIndId, subId) {
   queueConfigPush();
   return true;
 }
-function promoteSubToMain(subId) {
+/** Sub sobe no lugar do pai no mesmo bloco; pai desce para a posição do sub. Preserva taxas e demais subs. */
+function promoteSubReplacingParent(subId) {
   let parentInd = null, sub = null, subIdx = -1;
   for (const ind of state.indicators) {
     const i = (ind.subs || []).findIndex(s => s.id === subId);
@@ -5231,16 +5232,30 @@ function promoteSubToMain(subId) {
     }
   }
   if (!sub || !parentInd) return false;
-  parentInd.subs.splice(subIdx, 1);
-  state.indicators.push(mainShapeFromSub(sub, parentInd));
-  const ord = state.order.indicators ? [...state.order.indicators] : state.indicators.map(i => i.id);
-  const pi = ord.indexOf(parentInd.id);
-  if (pi >= 0) ord.splice(pi + 1, 0, subId);
-  else if (!ord.includes(subId)) ord.push(subId);
-  state.order.indicators = ord;
+  const parentIdx = state.indicators.findIndex(i => i.id === parentInd.id);
+  if (parentIdx < 0) return false;
+  const parentId = parentInd.id;
+  const otherSubs = (parentInd.subs || []).filter(s => s.id !== subId);
+  const parentAsSub = subShapeFromMain(parentInd);
+  const newMain = mainShapeFromSub(sub, parentInd);
+  newMain.abbr = parentInd.abbr || newMain.abbr;
+  newMain.color = parentInd.color || newMain.color;
+  newMain.role = parentInd.role || "";
+  newMain.pctOnly = !!parentInd.pctOnly;
+  if (parentInd.lowerBetter != null) newMain.lowerBetter = !!parentInd.lowerBetter;
+  newMain.rates = parentInd.rates || [];
+  newMain.subs = [...otherSubs.slice(0, subIdx), parentAsSub, ...otherSubs.slice(subIdx)];
+  state.indicators[parentIdx] = newMain;
+  if (state.order.indicators) {
+    const oi = state.order.indicators.indexOf(parentId);
+    if (oi >= 0) state.order.indicators[oi] = subId;
+  }
   save();
   queueConfigPush();
   return true;
+}
+function promoteSubToMain(subId) {
+  return promoteSubReplacingParent(subId);
 }
 function swapSubWithMain(subId, targetMainId) {
   if (!subId || !targetMainId || subId === targetMainId) return false;
@@ -5303,17 +5318,17 @@ function updatePromoteModalSwapList() {
   const wrap = document.getElementById("kpiMoveSwapWrap");
   if (!wrap || !kpiMoveCtx || kpiMoveCtx.mode !== "promote") return;
   const parentInd = findIndBySub(kpiMoveCtx.fieldId);
-  const mains = orderedIndicators().filter(i => !i.pctOnly && i.id !== kpiMoveCtx.fieldId && i.id !== parentInd?.id);
-  if (!mains.length) {
-    wrap.innerHTML = `<div class="hint" style="margin-top:12px;line-height:1.5;">Não há outro principal para trocar — <b>${escapeHtml(kpiMoveCtx.name)}</b> será promovido logo após <b>${escapeHtml(parentInd?.name || "o pai")}</b>.</div>`;
-    return;
+  const otherMains = orderedIndicators().filter(i => !i.pctOnly && i.id !== kpiMoveCtx.fieldId && i.id !== parentInd?.id);
+  let html = `<div class="hint" style="margin-top:4px;line-height:1.55;">Padrão: <b>${escapeHtml(kpiMoveCtx.name)}</b> substitui <b>${escapeHtml(parentInd?.name || "o pai")}</b> no <b>mesmo bloco</b>. O pai desce para sub na posição dele. Taxas e outros subs permanecem no bloco.</div>`;
+  if (otherMains.length) {
+    html += `<label class="field" style="display:block;width:100%;margin-top:12px;"><span>Ou trocar com principal de outro bloco</span>
+      <select id="kpiMoveSwapMain" style="${kpiMoveSelectStyle()}">
+        <option value="">— Substituir o pai neste bloco (padrão)</option>
+        ${otherMains.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join("")}
+      </select></label>
+      <div class="hint" style="margin-top:8px;line-height:1.5;">Troca com outro bloco: o principal escolhido desce para sub aqui; este sobe para o lugar dele lá.</div>`;
   }
-  wrap.innerHTML = `<label class="field" style="display:block;width:100%;margin-top:12px;"><span>Trocar lugar com qual indicador principal?</span>
-    <select id="kpiMoveSwapMain" style="${kpiMoveSelectStyle()}">
-      ${mains.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join("")}
-      <option value="">— Promover após o pai (sem trocar)</option>
-    </select></label>
-    <div class="hint" style="margin-top:8px;line-height:1.5;">Com <b>troca</b>: <b>${escapeHtml(kpiMoveCtx.name)}</b> sobe para o lugar do principal escolhido, e ele <b>desce</b> para sub na posição deste. Dados dos dois preservados.</div>`;
+  wrap.innerHTML = html;
 }
 function openDemoteModal(indId) {
   const ind = state.indicators.find(i => i.id === indId);
@@ -5340,7 +5355,7 @@ function openPromoteModal(subId) {
   const stats = countFieldDataEntries(subId);
   kpiMoveCtx = { mode: "promote", fieldId: subId, name: sub.name };
   document.getElementById("kpiMoveTitle").textContent = "Subir para indicador principal";
-  document.getElementById("kpiMoveSub").innerHTML = `Subir <b>${escapeHtml(sub.name)}</b> (hoje sub de <b>${escapeHtml(parentInd.name)}</b>) — pode <b>trocar de lugar</b> com um principal.${kpiMoveStatsHtml(stats)}`;
+  document.getElementById("kpiMoveSub").innerHTML = `Subir <b>${escapeHtml(sub.name)}</b> no lugar de <b>${escapeHtml(parentInd.name)}</b> no mesmo bloco.${kpiMoveStatsHtml(stats)}`;
   document.getElementById("kpiMoveBody").innerHTML = `<div id="kpiMoveSwapWrap"></div>`;
   updatePromoteModalSwapList();
   document.getElementById("kpiMoveModal").classList.add("show");
@@ -5366,8 +5381,10 @@ function confirmKpiMove() {
       ok = swapSubWithMain(kpiMoveCtx.fieldId, swapMainId);
       if (ok) toast(`Troca feita: "${kpiMoveCtx.name}" subiu · "${mainName}" desceu para sub`);
     } else {
-      ok = promoteSubToMain(kpiMoveCtx.fieldId);
-      if (ok) toast(`"${kpiMoveCtx.name}" agora é indicador principal · dados preservados`);
+      const parentInd = findIndBySub(kpiMoveCtx.fieldId);
+      const parentName = parentInd?.name || "pai";
+      ok = promoteSubReplacingParent(kpiMoveCtx.fieldId);
+      if (ok) toast(`"${kpiMoveCtx.name}" substituiu "${parentName}" no bloco · dados preservados`);
     }
   }
   if (ok) {
