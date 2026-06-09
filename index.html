@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v51";
+  var BUILD = "v54";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1016,7 +1016,42 @@ function migrate(s) {
     if (seller.matricula == null) seller.matricula = "";
   });
   s.consultorSchedule = normalizeConsultorSchedule(s.consultorSchedule);
+  repairBlockMetasFromSubsInState(s);
   return s;
+}
+function consultorMetaScore(cfg) {
+  if (!cfg) return 0;
+  return (Number(cfg.metaMonth) || 0) + (Number(cfg.metaDay) || 0) + (Number(cfg.metaSat) || 0) + (Number(cfg.metaSun) || 0);
+}
+/** Corrige blocos após pai↔sub: metas do consultor e meta loja ficam no sub antigo (ex-pai). */
+function repairBlockMetasFromSubsInState(s) {
+  (s.indicators || []).forEach(ind => {
+    if (!ind || ind.pctOnly) return;
+    const subs = ind.subs || [];
+    const metaKeys = ["metaDay", "metaSat", "metaSun", "metaMonth"];
+    if (consultorMetaScore(ind) <= 0 && subs.length) {
+      const donor = subs.filter(sub => consultorMetaScore(sub) > 0).sort((a, b) => consultorMetaScore(b) - consultorMetaScore(a))[0];
+      if (donor) {
+        metaKeys.forEach(k => {
+          if ((Number(ind[k]) || 0) <= 0 && (Number(donor[k]) || 0) > 0) ind[k] = donor[k];
+        });
+      }
+    }
+    Object.keys(s.months || {}).forEach(m => {
+      const md = s.months[m];
+      if (!md) return;
+      if (!md.metaLoja) md.metaLoja = {};
+      const cur = md.metaLoja[ind.id];
+      if (cur != null && cur !== "" && Number(cur) > 0) return;
+      for (const sub of subs) {
+        const v = md.metaLoja[sub.id];
+        if (v != null && v !== "" && Number(v) > 0) {
+          md.metaLoja[ind.id] = Number(v);
+          break;
+        }
+      }
+    });
+  });
 }
 
 const CONSULTOR_SCHEDULE_DEFAULTS = {
@@ -1783,7 +1818,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v51";
+const APP_BUILD = "v54";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -2576,6 +2611,8 @@ function cfgHasMeta(cfg) {
   if ((Number(cfg.metaDay) || 0) > 0) return true;
   if ((Number(cfg.metaSat) || 0) > 0) return true;
   if ((Number(cfg.metaSun) || 0) > 0) return true;
+  const ml = getMetaLoja(cfg.id);
+  if (ml != null && ml > 0) return true;
   return false;
 }
 function matrizShowPct(cfg) { return cfgHasMeta(cfg); }
@@ -2665,7 +2702,14 @@ function metaForMatriz(cfg, ids, days, periodo, isTeam) {
     return s > 0 ? s : null;
   }
   const cap = sellerMetaCapacity(cfg, ids[0]);
-  return cap > 0 ? cap : null;
+  if (cap > 0) return cap;
+  return metaLojaTargetForMatriz(cfg, ids, false);
+}
+function metaLojaTargetForMatriz(cfg, ids, isTeam) {
+  const ml = getMetaLoja(cfg.id);
+  if (ml == null || ml <= 0) return null;
+  if (isTeam) return ml;
+  return ml / Math.max(1, activeSellerCount());
 }
 function metaUsesDailyFallback(cfg, periodo) {
   return periodo === "mes" && !(metaMonthFor(cfg) > 0);
@@ -2702,7 +2746,8 @@ function matrizMetaForProj(cfg, ids, isTeam) {
   const mm = metaMonthFor(cfg);
   if (mm > 0) return mm;
   const cap = sellerMetaCapacity(cfg, ids[0]);
-  return cap > 0 ? cap : null;
+  if (cap > 0) return cap;
+  return metaLojaTargetForMatriz(cfg, ids, false);
 }
 /** Nome curto na matriz: oculta sufixo após " - " (ex.: "Vendas - HOJE" → "Vendas"). Diário/check-in mantém nome completo. */
 function matrizDisplayName(name) {
@@ -5150,6 +5195,22 @@ function subShapeFromMain(ind) {
     sundayOnly: !!ind.sundayOnly
   };
 }
+function pickMainMetaField(sub, parentInd, key) {
+  const sv = Number(sub?.[key]) || 0;
+  const pv = Number(parentInd?.[key]) || 0;
+  if (sv > 0) return sub[key];
+  if (pv > 0) return parentInd[key];
+  return sub?.[key] ?? parentInd?.[key] ?? 0;
+}
+function syncMetaLojaOnBlockPromote(fromParentId, newMainId) {
+  if (!fromParentId || !newMainId || fromParentId === newMainId) return;
+  Object.keys(state.months || {}).forEach(m => {
+    const md = monthData(m);
+    const src = md.metaLoja?.[fromParentId];
+    if (src == null || src === "") return;
+    if (md.metaLoja[newMainId] == null || md.metaLoja[newMainId] === "") md.metaLoja[newMainId] = src;
+  });
+}
 function mainShapeFromSub(sub, parentInd) {
   const abbrev = String(sub.name || "KPI").replace(/[^a-zA-Z0-9]/g, "").slice(0, 4).toUpperCase() || "KPI";
   return {
@@ -5161,10 +5222,10 @@ function mainShapeFromSub(sub, parentInd) {
     checkout: !!sub.checkout,
     role: "",
     pctOnly: false,
-    metaDay: sub.metaDay ?? 0,
-    metaSat: sub.metaSat ?? 0,
-    metaSun: sub.metaSun ?? 0,
-    metaMonth: sub.metaMonth ?? 0,
+    metaDay: pickMainMetaField(sub, parentInd, "metaDay"),
+    metaSat: pickMainMetaField(sub, parentInd, "metaSat"),
+    metaSun: pickMainMetaField(sub, parentInd, "metaSun"),
+    metaMonth: pickMainMetaField(sub, parentInd, "metaMonth"),
     lowerBetter: !!sub.lowerBetter,
     openQuestion: !!sub.openQuestion,
     planCrossId: sub.planCrossId || "",
@@ -5211,6 +5272,7 @@ function swapMainWithSub(mainId, parentIndId, subId) {
   const sub = parent.subs[subIdx];
   state.indicators[mainIdx] = mainShapeFromSub(sub, parent);
   parent.subs[subIdx] = subShapeFromMain(main);
+  syncMetaLojaOnBlockPromote(mainId, subId);
   if (state.order.indicators) {
     const oi = state.order.indicators.indexOf(mainId);
     if (oi >= 0) state.order.indicators[oi] = subId;
@@ -5246,6 +5308,7 @@ function promoteSubReplacingParent(subId) {
   newMain.rates = parentInd.rates || [];
   newMain.subs = [...otherSubs.slice(0, subIdx), parentAsSub, ...otherSubs.slice(subIdx)];
   state.indicators[parentIdx] = newMain;
+  syncMetaLojaOnBlockPromote(parentId, subId);
   if (state.order.indicators) {
     const oi = state.order.indicators.indexOf(parentId);
     if (oi >= 0) state.order.indicators[oi] = subId;
@@ -5277,6 +5340,7 @@ function swapSubWithMain(subId, targetMainId) {
   if (block) { toast("O principal escolhido para troca: " + block.toLowerCase(), true); return false; }
   parentInd.subs[subIdx] = subShapeFromMain(main);
   state.indicators[mainIdx] = mainShapeFromSub(sub, parentInd);
+  syncMetaLojaOnBlockPromote(targetMainId, subId);
   if (state.order.indicators) {
     const oi = state.order.indicators.indexOf(targetMainId);
     if (oi >= 0) state.order.indicators[oi] = subId;
