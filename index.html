@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v65";
+  var BUILD = "v66";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -1150,6 +1150,7 @@ function migrate(s) {
   s.consultorSchedule = normalizeConsultorSchedule(s.consultorSchedule);
   repairBlockMetasFromSubsInState(s);
   mergeKpiIdHistory(s);
+  applyMatrizShowUi(s);
   autoRecoverOrphanKpiData(s);
   return s;
 }
@@ -1402,7 +1403,6 @@ function extractOperationalConfig(st) {
     pctOnly: !!ind.pctOnly,
     lowerBetter: !!ind.lowerBetter,
     openQuestion: !!ind.openQuestion,
-    showInMatriz: ind.showInMatriz !== false,
     planCrossNames: normalizePlanCrossIds(ind).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean),
     subs: (ind.subs || []).map(s => ({
       name: s.name,
@@ -1411,7 +1411,6 @@ function extractOperationalConfig(st) {
       lowerBetter: !!s.lowerBetter,
       sundayOnly: !!s.sundayOnly,
       openQuestion: !!s.openQuestion,
-      showInMatriz: s.showInMatriz !== false,
       planCrossNames: normalizePlanCrossIds(s).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean)
     })),
     rates: (ind.rates || []).map(r => ({
@@ -1421,8 +1420,7 @@ function extractOperationalConfig(st) {
       invert: !!r.invert,
       manual: !!r.manual,
       lowerBetter: !!r.lowerBetter,
-      absolute: !!r.absolute,
-      showInMatriz: r.showInMatriz !== false
+      absolute: !!r.absolute
     }))
   }));
   const idToName = Object.fromEntries((st.indicators || []).map(i => [i.id, i.name]));
@@ -1432,6 +1430,36 @@ function extractOperationalConfig(st) {
 }
 function configHash(tpl) {
   return JSON.stringify({ indicators: tpl.indicators, orderNames: tpl.orderNames });
+}
+function showInMatrizFromLocal(local) {
+  return local?.showInMatriz != null ? !!local.showInMatriz : true;
+}
+function persistMatrizShowUi(st) {
+  st.ui = st.ui || {};
+  const vis = st.ui.matrizShow = st.ui.matrizShow || {};
+  (st.indicators || []).forEach(ind => {
+    if (ind.showInMatriz != null) vis[ind.id] = !!ind.showInMatriz;
+    (ind.subs || []).forEach(s => { if (s.showInMatriz != null) vis[s.id] = !!s.showInMatriz; });
+    (ind.rates || []).forEach(r => { if (r.showInMatriz != null) vis[r.id] = !!r.showInMatriz; });
+  });
+}
+function applyMatrizShowUi(st) {
+  const vis = st?.ui?.matrizShow;
+  if (!vis) return;
+  (st.indicators || []).forEach(ind => {
+    if (vis[ind.id] != null) ind.showInMatriz = !!vis[ind.id];
+    (ind.subs || []).forEach(s => { if (vis[s.id] != null) s.showInMatriz = !!vis[s.id]; });
+    (ind.rates || []).forEach(r => { if (vis[r.id] != null) r.showInMatriz = !!vis[r.id]; });
+  });
+}
+function saveMatrizVisibility(opts) {
+  persistMatrizShowUi(state);
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); }
+  matrizUiRerender();
+  if (fbReady && fbDb && lojaCode && !divisionalMode()) {
+    fbPush({ skipMerge: true, immediate: true });
+  }
+  if (!opts?.silent) renderIndicatorConfig();
 }
 function applyOperationalConfig(st, tpl, opts) {
   if (!tpl || !Array.isArray(tpl.indicators)) return false;
@@ -1456,7 +1484,7 @@ function applyOperationalConfig(st, tpl, opts) {
       pctOnly: tInd.pctOnly,
       lowerBetter: tInd.lowerBetter != null ? tInd.lowerBetter : !!local?.lowerBetter,
       openQuestion: !!tInd.openQuestion,
-      showInMatriz: tInd.showInMatriz != null ? !!tInd.showInMatriz : local?.showInMatriz !== false,
+      showInMatriz: showInMatrizFromLocal(local),
       planCrossId: local?.planCrossId || "",
       planCrossIds: Array.isArray(local?.planCrossIds) ? local.planCrossIds.slice() : (local?.planCrossId ? [local.planCrossId] : []),
       metaDay: local?.metaDay ?? 0,
@@ -1477,7 +1505,7 @@ function applyOperationalConfig(st, tpl, opts) {
         lowerBetter: ts.lowerBetter != null ? ts.lowerBetter : !!ls?.lowerBetter,
         sundayOnly: !!ts.sundayOnly,
         openQuestion: !!ts.openQuestion,
-        showInMatriz: ts.showInMatriz != null ? !!ts.showInMatriz : ls?.showInMatriz !== false,
+        showInMatriz: showInMatrizFromLocal(ls),
         planCrossId: ls?.planCrossId || "",
         planCrossIds: Array.isArray(ls?.planCrossIds) ? ls.planCrossIds.slice() : (ls?.planCrossId ? [ls.planCrossId] : []),
         metaDay: ls?.metaDay ?? 0,
@@ -1497,7 +1525,7 @@ function applyOperationalConfig(st, tpl, opts) {
         lowerBetter: !!ls.lowerBetter,
         sundayOnly: !!ls.sundayOnly,
         openQuestion: !!ls.openQuestion,
-        showInMatriz: ls.showInMatriz !== false,
+        showInMatriz: showInMatrizFromLocal(ls),
         planCrossId: ls.planCrossId || "",
         planCrossIds: Array.isArray(ls.planCrossIds) ? ls.planCrossIds.slice() : (ls.planCrossId ? [ls.planCrossId] : []),
         metaDay: ls.metaDay ?? 0,
@@ -1518,7 +1546,7 @@ function applyOperationalConfig(st, tpl, opts) {
         manual: tr.manual,
         lowerBetter: tr.lowerBetter,
         absolute: lr?.absolute ?? !!tr.absolute,
-        showInMatriz: tr.showInMatriz != null ? !!tr.showInMatriz : lr?.showInMatriz !== false,
+        showInMatriz: showInMatrizFromLocal(lr),
         target: lr?.target ?? 0
       };
     });
@@ -1557,6 +1585,7 @@ function applyOperationalConfig(st, tpl, opts) {
   st.order.indicators = (tpl.orderNames || newIndicators.map(i => i.name)).map(n => nameToId[n]).filter(Boolean);
   const after = configHash(extractOperationalConfig(st));
   if (before === after && !opts?.ignoreVersion) return false;
+  applyMatrizShowUi(st);
   autoRecoverOrphanKpiData(st);
   if (!opts?.ignoreVersion) lastAppliedConfigVersion = tpl.updatedAt;
   return true;
@@ -1647,6 +1676,7 @@ function startConfigListener() {
 }
 
 function save(opts) {
+  persistMatrizShowUi(state);
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); }
   if (!opts?.skipPush && typeof fbPush === "function") fbPush();
   if (!opts?.skipConfigPush) queueConfigPush();
@@ -2212,7 +2242,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v65"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v66"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -6236,7 +6266,7 @@ function bindIndicatorEvents() {
         renderMatrizLegend("arvoreLegend", "arvoreLegendHint");
         matrizUiRerender();
       }
-      if (k === "showInMatriz") matrizUiRerender();
+      if (k === "showInMatriz") { saveMatrizVisibility(); return; }
       save();
       renderIndicatorConfig();
     }));
@@ -6251,7 +6281,7 @@ function bindIndicatorEvents() {
       const k = f.dataset.sk;
       s[k] = f.type === "checkbox" ? f.checked : (["metaDay", "metaSat", "metaSun", "metaMonth"].includes(k) ? Number(f.value) || 0 : f.value);
       if (k === "lowerBetter") { renderMatrizLegend(); renderMatrizLegend("arvoreLegend", "arvoreLegendHint"); matrizUiRerender(); }
-      if (k === "showInMatriz") matrizUiRerender();
+      if (k === "showInMatriz") { saveMatrizVisibility(); return; }
       save(); renderIndicatorConfig();
     }));
     row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
@@ -6263,7 +6293,7 @@ function bindIndicatorEvents() {
       r[k] = f.type === "checkbox" ? f.checked : (k === "target" ? Number(f.value) || 0 : f.value);
       if (k === "absolute" && r.absolute) r.manual = true;
       if (k === "lowerBetter" || k === "absolute") { renderMatrizLegend(); renderMatrizLegend("arvoreLegend", "arvoreLegendHint"); matrizUiRerender(); }
-      if (k === "showInMatriz") matrizUiRerender();
+      if (k === "showInMatriz") { saveMatrizVisibility(); return; }
       save(); renderIndicatorConfig();
     }));
     row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
@@ -7489,9 +7519,13 @@ function pullLoja(){
       tryPromptOrphanRecovery();
     };
     if (v && v.data) {
+      const localVis = state?.ui?.matrizShow ? { ...state.ui.matrizShow } : null;
       state = migrate(v.data);
+      if (localVis) state.ui.matrizShow = { ...(state.ui.matrizShow || {}), ...localVis };
+      applyMatrizShowUi(state);
       state.storeName = v.name || lojaCode;
       applyTemplateFromCloud().then(() => {
+        applyMatrizShowUi(state);
         autoRecoverOrphanKpiData(state);
         save({ skipConfigPush: !isAdmin });
         finish();
