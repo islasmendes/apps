@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v54";
+  var BUILD = "v55";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -804,6 +804,16 @@
   </div>
 </div></div>
 
+<div class="modal-bg" id="recoverKpiModal"><div class="modal" style="max-width:520px">
+  <div class="flex-between"><h3>Recuperar dados de KPI</h3><button class="iconbtn" id="recoverKpiClose" type="button">✕</button></div>
+  <div class="sub" id="recoverKpiSub">Dados podem ter ficado em um ID antigo após reorganizar indicadores.</div>
+  <div id="recoverKpiBody" style="margin-top:12px;"></div>
+  <div class="row" style="margin-top:16px; justify-content:flex-end; gap:8px;">
+    <button class="btn sec" id="recoverKpiCancel" type="button">Fechar</button>
+    <button class="btn" id="recoverKpiConfirm" type="button">Recuperar para indicador</button>
+  </div>
+</div></div>
+
 <div class="modal-bg" id="escalaModal"><div class="modal" style="max-width:480px">
   <div class="flex-between"><h3>📅 <span id="escalaName"></span> · <span id="escalaMonth"></span></h3><button class="iconbtn" id="closeEscala">✕</button></div>
   <div class="sub">Escala, matrícula e portal do consultor (check-in/out pelo celular).</div>
@@ -965,7 +975,8 @@ function migrate(s) {
   if (!s.order) s.order = { sellers: null, indicators: null };
   if (!s.months) s.months = {};
   if (!s.theme) s.theme = "dark";
-  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, matrizFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" } }, s.ui || {});
+  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, matrizFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" }, kpiReorgAt: 0 }, s.ui || {});
+  if (s.ui.kpiReorgAt == null) s.ui.kpiReorgAt = 0;
   if (!s.ui.expanded) s.ui.expanded = {};
   if (!s.ui.lancamentoExpanded) s.ui.lancamentoExpanded = {};
   if (!Array.isArray(s.ui.matrizFilter)) s.ui.matrizFilter = [];
@@ -1017,6 +1028,8 @@ function migrate(s) {
   });
   s.consultorSchedule = normalizeConsultorSchedule(s.consultorSchedule);
   repairBlockMetasFromSubsInState(s);
+  mergeKpiIdHistory(s);
+  autoRecoverOrphanKpiData(s);
   return s;
 }
 function consultorMetaScore(cfg) {
@@ -1215,6 +1228,34 @@ function resolveFieldIdByName(name, st) {
   }
   return "";
 }
+/** Mapa nome → id/cfg de todos os KPIs (principal e sub) para preservar IDs na sincronização. */
+function buildLocalFieldRegistry(st) {
+  const reg = Object.create(null);
+  (st.indicators || []).forEach(ind => {
+    if (ind.name && !reg[ind.name]) reg[ind.name] = { id: ind.id, cfg: ind };
+    (ind.subs || []).forEach(s => {
+      if (s.name && !reg[s.name]) reg[s.name] = { id: s.id, cfg: s };
+    });
+  });
+  return reg;
+}
+function mergeKpiIdHistory(st) {
+  st = st || state;
+  st.ui = st.ui || {};
+  st.ui.kpiIdHistory = st.ui.kpiIdHistory || {};
+  (st.indicators || []).forEach(ind => {
+    st.ui.kpiIdHistory[ind.id] = ind.name;
+    (ind.subs || []).forEach(s => { st.ui.kpiIdHistory[s.id] = s.name; });
+  });
+}
+function afterKpiStructureChange() {
+  mergeKpiIdHistory(state);
+  state.ui = state.ui || {};
+  state.ui.kpiReorgAt = Date.now();
+  save({ skipConfigPush: true });
+  if (canPushOperationalConfig()) pushConfigTemplate();
+  else queueConfigPush();
+}
 function extractOperationalConfig(st) {
   const indicators = (st.indicators || []).map(ind => ({
     name: ind.name,
@@ -1257,19 +1298,24 @@ function configHash(tpl) {
 function applyOperationalConfig(st, tpl, opts) {
   if (!tpl || !Array.isArray(tpl.indicators)) return false;
   if (!opts?.ignoreVersion && tpl.updatedAt && lastAppliedConfigVersion === tpl.updatedAt) return false;
-  const localByName = Object.fromEntries((st.indicators || []).map(i => [i.name, i]));
+  const reorgAt = Number(st.ui?.kpiReorgAt) || 0;
+  if (!opts?.ignoreVersion && reorgAt && tpl.updatedAt && tpl.updatedAt < reorgAt) {
+    const localHash = configHash(extractOperationalConfig(st));
+    if (localHash !== configHash(tpl)) return false;
+  }
+  const reg = buildLocalFieldRegistry(st);
   const newIndicators = tpl.indicators.map(tInd => {
-    const local = localByName[tInd.name];
+    const local = reg[tInd.name]?.cfg;
     const ind = {
-      id: local?.id || uid(),
+      id: reg[tInd.name]?.id || uid(),
       name: tInd.name,
-      abbr: tInd.abbr || "",
-      color: tInd.color,
+      abbr: tInd.abbr || local?.abbr || "",
+      color: tInd.color || local?.color,
       checkin: tInd.checkin,
       checkout: tInd.checkout,
-      role: tInd.role || "",
+      role: tInd.role || local?.role || "",
       pctOnly: tInd.pctOnly,
-      lowerBetter: tInd.lowerBetter,
+      lowerBetter: tInd.lowerBetter != null ? tInd.lowerBetter : !!local?.lowerBetter,
       openQuestion: !!tInd.openQuestion,
       planCrossId: local?.planCrossId || "",
       planCrossIds: Array.isArray(local?.planCrossIds) ? local.planCrossIds.slice() : (local?.planCrossId ? [local.planCrossId] : []),
@@ -1280,15 +1326,14 @@ function applyOperationalConfig(st, tpl, opts) {
       subs: [],
       rates: []
     };
-    const localSubByName = Object.fromEntries((local?.subs || []).map(s => [s.name, s]));
     ind.subs = (tInd.subs || []).map(ts => {
-      const ls = localSubByName[ts.name];
+      const ls = reg[ts.name]?.cfg;
       return {
-        id: ls?.id || uid(),
+        id: reg[ts.name]?.id || uid(),
         name: ts.name,
         checkin: ts.checkin,
         checkout: ts.checkout,
-        lowerBetter: ts.lowerBetter,
+        lowerBetter: ts.lowerBetter != null ? ts.lowerBetter : !!ls?.lowerBetter,
         sundayOnly: !!ts.sundayOnly,
         openQuestion: !!ts.openQuestion,
         planCrossId: ls?.planCrossId || "",
@@ -1818,7 +1863,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v54";
+const APP_BUILD = "v55";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -5178,6 +5223,151 @@ function countFieldDataEntries(fieldId) {
   });
   return { cells, days: days.size, sellers: sellers.size };
 }
+function configuredFieldIds(st) {
+  const ids = new Set();
+  const indicators = st?.indicators || state.indicators || [];
+  indicators.forEach(ind => {
+    ids.add(ind.id);
+    (ind.subs || []).forEach(s => ids.add(s.id));
+  });
+  return ids;
+}
+function scanOrphanedKpiData(st) {
+  const indicators = st?.indicators || state.indicators;
+  const months = st?.months || state.months;
+  const active = configuredFieldIds({ indicators });
+  const orphans = {};
+  Object.keys(months || {}).forEach(m => {
+    const md = months[m];
+    const fids = new Set();
+    Object.values(md.daily || {}).forEach(byF => Object.keys(byF || {}).forEach(id => fids.add(id)));
+    Object.values(md.system || {}).forEach(byF => Object.keys(byF || {}).forEach(id => fids.add(id)));
+    fids.forEach(fid => {
+      if (active.has(fid)) return;
+      const prev = state;
+      if (st) state = st;
+      let stt;
+      try { stt = countFieldDataEntries(fid); } finally { if (st) state = prev; }
+      if (!stt.cells) return;
+      if (!orphans[fid]) orphans[fid] = { fieldId: fid, cells: 0, days: 0, sellers: 0, months: [] };
+      orphans[fid].cells = Math.max(orphans[fid].cells, stt.cells);
+      orphans[fid].days = Math.max(orphans[fid].days, stt.days);
+      orphans[fid].sellers = Math.max(orphans[fid].sellers, stt.sellers);
+      if (!orphans[fid].months.includes(m)) orphans[fid].months.push(m);
+    });
+  });
+  return Object.values(orphans).sort((a, b) => b.cells - a.cells);
+}
+function mergeFieldDataInto(sourceId, targetId, st) {
+  if (!sourceId || !targetId || sourceId === targetId) return 0;
+  const months = st?.months || state.months;
+  let merged = 0;
+  Object.keys(months || {}).forEach(m => {
+    const md = months[m];
+    if (!md) return;
+    Object.keys(md.daily || {}).forEach(sid => {
+      const src = md.daily[sid]?.[sourceId];
+      if (!src) return;
+      md.daily[sid] = md.daily[sid] || {};
+      const dst = md.daily[sid][targetId] || {};
+      Object.keys(src).forEach(day => {
+        const sc = src[day], dc = dst[day];
+        if (!cellHasAnyFill(dc)) {
+          dst[day] = JSON.parse(JSON.stringify(sc));
+          merged++;
+        } else if (cellHasAnyFill(sc)) {
+          const sr = Number(sc.real) || 0, dr = Number(dc.real) || 0;
+          const sp = Number(sc.plan) || 0, dp = Number(dc.plan) || 0;
+          if (sr > dr || (sr === dr && sp > dp)) {
+            dst[day] = JSON.parse(JSON.stringify(sc));
+            merged++;
+          }
+        }
+      });
+      if (Object.keys(dst).length) md.daily[sid][targetId] = dst;
+    });
+    Object.keys(md.system || {}).forEach(sid => {
+      const src = md.system[sid]?.[sourceId];
+      if (src == null || src === "") return;
+      md.system[sid] = md.system[sid] || {};
+      if (md.system[sid][targetId] == null || md.system[sid][targetId] === "") {
+        md.system[sid][targetId] = src;
+        merged++;
+      }
+    });
+    if (md.metaLoja?.[sourceId] != null && (md.metaLoja[targetId] == null || md.metaLoja[targetId] === "")) {
+      md.metaLoja[targetId] = md.metaLoja[sourceId];
+      merged++;
+    }
+  });
+  return merged;
+}
+function autoRecoverOrphanKpiData(s) {
+  const hist = s.ui?.kpiIdHistory || {};
+  const prev = state;
+  state = s;
+  try {
+    scanOrphanedKpiData(s).forEach(o => {
+      const name = hist[o.fieldId];
+      if (!name) return;
+      const target = resolveFieldIdByName(name, s);
+      if (target && target !== o.fieldId) mergeFieldDataInto(o.fieldId, target, s);
+    });
+  } finally {
+    state = prev;
+  }
+}
+let recoverKpiSelectedOrphan = null;
+function closeRecoverKpiModal() {
+  document.getElementById("recoverKpiModal")?.classList.remove("show");
+  recoverKpiSelectedOrphan = null;
+}
+function openRecoverKpiModal(preselectOrphanId) {
+  const orphans = scanOrphanedKpiData();
+  const fields = allFields();
+  const body = document.getElementById("recoverKpiBody");
+  if (!orphans.length) {
+    body.innerHTML = `<div class="hint">Nenhum dado órfão encontrado. Se ainda faltar na matriz, use <b>↻ Baixar da nuvem</b> abaixo.</div>`;
+    recoverKpiSelectedOrphan = null;
+  } else {
+    const selId = preselectOrphanId && orphans.some(o => o.fieldId === preselectOrphanId) ? preselectOrphanId : orphans[0].fieldId;
+    recoverKpiSelectedOrphan = selId;
+    const hist = state.ui?.kpiIdHistory || {};
+    const fieldOpts = fields.map(f => `<option value="${f.id}">${f.kind === "sub" ? "↳ " : ""}${escapeHtml(f.name)}</option>`).join("");
+    const guess = fields.find(f => {
+      const hn = String(hist[selId] || "").toLowerCase();
+      return hn && String(f.name).toLowerCase() === hn;
+    });
+    body.innerHTML = `<label class="field" style="display:block;width:100%;"><span>Dados no ID antigo</span>
+      <select id="recoverOrphanPick" style="${kpiMoveSelectStyle()}">${orphans.map(o => {
+        const lbl = hist[o.fieldId] ? escapeHtml(hist[o.fieldId]) : "…" + escapeHtml(o.fieldId.slice(-6));
+        return `<option value="${o.fieldId}"${o.fieldId === selId ? " selected" : ""}>${lbl} · ${o.cells} reg. · ${o.days} dia(s)</option>`;
+      }).join("")}</select></label>
+      <label class="field" style="display:block;width:100%;margin-top:12px;"><span>Recuperar para indicador atual</span>
+      <select id="recoverTargetPick" style="${kpiMoveSelectStyle()}">${fieldOpts}</select></label>`;
+    if (guess) document.getElementById("recoverTargetPick").value = guess.id;
+    document.getElementById("recoverOrphanPick").onchange = e => { recoverKpiSelectedOrphan = e.target.value; };
+  }
+  document.getElementById("recoverKpiModal").classList.add("show");
+}
+function confirmRecoverKpi() {
+  const orphanId = document.getElementById("recoverOrphanPick")?.value || recoverKpiSelectedOrphan;
+  const targetId = document.getElementById("recoverTargetPick")?.value;
+  if (!orphanId || !targetId) { toast("Selecione origem e destino", true); return; }
+  const n = mergeFieldDataInto(orphanId, targetId);
+  save();
+  closeRecoverKpiModal();
+  renderActive();
+  toast(n ? `Recuperados ${n} registro(s) — confira a matriz` : "Destino já tinha esses dados");
+}
+function tryPromptOrphanRecovery() {
+  if (sessionStorage.getItem("gc_orphan_prompt_v55")) return;
+  const orphans = scanOrphanedKpiData();
+  if (!orphans.length) return;
+  sessionStorage.setItem("gc_orphan_prompt_v55", "1");
+  toast("Dados de KPI desligados da configuração — abrindo recuperação…", true);
+  setTimeout(() => openRecoverKpiModal(orphans[0].fieldId), 500);
+}
 function subShapeFromMain(ind) {
   return {
     id: ind.id,
@@ -5241,6 +5431,7 @@ function mainCanBecomeSub(ind) {
   return null;
 }
 function demoteIndicatorToSub(indId, parentIndId) {
+  mergeKpiIdHistory(state);
   if (!indId || !parentIndId || indId === parentIndId) return false;
   const idx = state.indicators.findIndex(i => i.id === indId);
   if (idx < 0) return false;
@@ -5254,11 +5445,11 @@ function demoteIndicatorToSub(indId, parentIndId) {
   parent.subs.push(subShapeFromMain(ind));
   state.indicators.splice(idx, 1);
   if (state.order.indicators) state.order.indicators = state.order.indicators.filter(id => id !== indId);
-  save();
-  queueConfigPush();
+  afterKpiStructureChange();
   return true;
 }
 function swapMainWithSub(mainId, parentIndId, subId) {
+  mergeKpiIdHistory(state);
   if (!mainId || !parentIndId || !subId || mainId === subId) return false;
   const mainIdx = state.indicators.findIndex(i => i.id === mainId);
   if (mainIdx < 0) return false;
@@ -5277,12 +5468,12 @@ function swapMainWithSub(mainId, parentIndId, subId) {
     const oi = state.order.indicators.indexOf(mainId);
     if (oi >= 0) state.order.indicators[oi] = subId;
   }
-  save();
-  queueConfigPush();
+  afterKpiStructureChange();
   return true;
 }
 /** Sub sobe no lugar do pai no mesmo bloco; pai desce para a posição do sub. Preserva taxas e demais subs. */
 function promoteSubReplacingParent(subId) {
+  mergeKpiIdHistory(state);
   let parentInd = null, sub = null, subIdx = -1;
   for (const ind of state.indicators) {
     const i = (ind.subs || []).findIndex(s => s.id === subId);
@@ -5313,14 +5504,14 @@ function promoteSubReplacingParent(subId) {
     const oi = state.order.indicators.indexOf(parentId);
     if (oi >= 0) state.order.indicators[oi] = subId;
   }
-  save();
-  queueConfigPush();
+  afterKpiStructureChange();
   return true;
 }
 function promoteSubToMain(subId) {
   return promoteSubReplacingParent(subId);
 }
 function swapSubWithMain(subId, targetMainId) {
+  mergeKpiIdHistory(state);
   if (!subId || !targetMainId || subId === targetMainId) return false;
   let parentInd = null, sub = null, subIdx = -1;
   for (const ind of state.indicators) {
@@ -5345,8 +5536,7 @@ function swapSubWithMain(subId, targetMainId) {
     const oi = state.order.indicators.indexOf(targetMainId);
     if (oi >= 0) state.order.indicators[oi] = subId;
   }
-  save();
-  queueConfigPush();
+  afterKpiStructureChange();
   return true;
 }
 let kpiMoveCtx = null;
@@ -6745,6 +6935,7 @@ function pullLoja(){
       updateDivisionalNav();
       watchDivisionalMetas();
       renderActive(); startLojaDataListener();
+      tryPromptOrphanRecovery();
     };
     if (v && v.data) {
       state = migrate(v.data);
@@ -6783,7 +6974,7 @@ function renderSync(){
   if (!div) {
     html += `<div class="hint" style="margin-top:6px;">Versão do app: <b>${typeof APP_BUILD !== "undefined" ? APP_BUILD : "—"}</b> · Links antigos do consultor (sem <code>?v=</code>) atualizam sozinhos ao abrir. Ao publicar HTML novo, abra o gestor uma vez para gravar a versão no Firebase.</div>`;
     html += `<div class="hint" style="margin-top:4px;">Qualquer aparelho que abrir e digitar <b>${escapeHtml(lojaCode||'')}</b> carrega esta mesma configuração (a última sincronizada).</div>`;
-    html += `<div class="row" style="margin-top:10px;"><button class="btn sec" id="reloadCloud">↻ Baixar da nuvem agora</button><button class="btn danger" id="clearMine">🗑 Apagar e recomeçar esta loja</button></div>`;
+    html += `<div class="row" style="margin-top:10px; flex-wrap:wrap; gap:8px;"><button class="btn sec" id="reloadCloud">↻ Baixar da nuvem agora</button><button class="btn sec" id="recoverKpiBtn">🔧 Recuperar dados de KPI</button><button class="btn danger" id="clearMine">🗑 Apagar e recomeçar esta loja</button></div>`;
   } else {
     html += `<div class="hint" style="margin-top:6px;">Você está vendo o consolidado de <b>${lojas.length}</b> loja(s) ao vivo. Não cria/edita loja.</div>`;
   }
@@ -6844,6 +7035,7 @@ function renderSync(){
   el.querySelectorAll("[data-quick-loja]").forEach(b => b.onclick = () => switchToLoja(b.dataset.quickLoja));
   el.querySelectorAll("[data-enter-loja]").forEach(b => b.onclick = () => switchToLoja(b.dataset.enterLoja));
   const rc=document.getElementById("reloadCloud"); if(rc) rc.onclick=()=>{ pullLoja(); };
+  const rk=document.getElementById("recoverKpiBtn"); if(rk) rk.onclick=()=> openRecoverKpiModal();
   const cm=document.getElementById("clearMine"); if(cm) cm.onclick=()=>{ if(confirm("Apagar os dados desta loja e recomeçar? (admin remove também da nuvem)")){ try{ if(fbReady&&fbDb&&lojaCode) fbDb.ref("lojas/"+lojaCode).remove(); }catch(e){} localStorage.removeItem(LS_KEY); clearAuthSession(); location.reload(); } };
   el.querySelectorAll("[data-del-loja]").forEach(b=>b.onclick=()=>{ if(confirm("Excluir esta loja da nuvem?")){ try{ fbDb.ref("lojas/"+b.dataset.delLoja).remove(); toast("Loja excluída"); }catch(e){ toast("Sem permissão", true); } } });
   const cpd=document.getElementById("copyDeviceId"); if(cpd) cpd.onclick=()=>{ try{ navigator.clipboard&&navigator.clipboard.writeText(getDeviceId()); }catch(e){} toast("ID copiado"); };
@@ -6928,6 +7120,10 @@ function init() {
   document.getElementById("kpiMoveClose").onclick = closeKpiMoveModal;
   document.getElementById("kpiMoveCancel").onclick = closeKpiMoveModal;
   document.getElementById("kpiMoveConfirm").onclick = confirmKpiMove;
+  document.getElementById("recoverKpiClose").onclick = closeRecoverKpiModal;
+  document.getElementById("recoverKpiCancel").onclick = closeRecoverKpiModal;
+  document.getElementById("recoverKpiConfirm").onclick = confirmRecoverKpi;
+  document.getElementById("recoverKpiModal").addEventListener("click", e => { if (e.target.id === "recoverKpiModal") closeRecoverKpiModal(); });
   document.getElementById("kpiMoveModal").addEventListener("click", e => { if (e.target.id === "kpiMoveModal") closeKpiMoveModal(); });
   const divMetaClose = document.getElementById("divMetaClose");
   if (divMetaClose) divMetaClose.onclick = closeDivisionalMetasModal;
