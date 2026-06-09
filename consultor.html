@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v48";
+  var BUILD = "v52";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -502,7 +502,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v48";
+const APP_BUILD = "v52";
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -2629,11 +2629,16 @@ function normalizeAppUrl(build = APP_BUILD) {
     history.replaceState(null, "", u.toString());
   }
 }
-function redirectToAppBuild(remoteBuild) {
+function redirectToAppBuild(remoteBuild, force) {
+  sessionStorage.removeItem("gc_build_fail");
   const u = new URL(location.href);
   u.searchParams.set("v", remoteBuild);
   u.searchParams.set("_", String(Date.now()));
-  location.replace(u.toString());
+  if (force) u.searchParams.set("reload", "1");
+  const go = () => location.replace(u.toString());
+  if (force && "caches" in window) {
+    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {}).finally(go);
+  } else go();
 }
 function showStaleBanner(remoteBuild) {
   let b = document.getElementById("appStaleBanner");
@@ -2644,10 +2649,7 @@ function showStaleBanner(remoteBuild) {
     document.body.prepend(b);
   }
   b.innerHTML = `Nova versão disponível (${remoteBuild})<button type="button">Atualizar agora</button>`;
-  b.querySelector("button").onclick = () => {
-    sessionStorage.removeItem("gc_build_fail");
-    redirectToAppBuild(remoteBuild);
-  };
+  b.querySelector("button").onclick = () => redirectToAppBuild(remoteBuild, true);
 }
 function applyRemoteAppBuild(remoteBuild) {
   if (!remoteBuild || buildNum(remoteBuild) <= buildNum(APP_BUILD)) {
@@ -2656,12 +2658,17 @@ function applyRemoteAppBuild(remoteBuild) {
     document.getElementById("appStaleBanner")?.remove();
     return;
   }
+  const urlV = new URL(location.href).searchParams.get("v");
+  if (urlV && buildNum(urlV) >= buildNum(remoteBuild) && sessionStorage.getItem("gc_build_fail") === remoteBuild) {
+    showStaleBanner(remoteBuild);
+    return;
+  }
   if (sessionStorage.getItem("gc_build_fail") === remoteBuild) {
     showStaleBanner(remoteBuild);
     return;
   }
   sessionStorage.setItem("gc_build_fail", remoteBuild);
-  redirectToAppBuild(remoteBuild);
+  redirectToAppBuild(remoteBuild, false);
 }
 function watchAppBuild() {
   if (!fbDb) return;

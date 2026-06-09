@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v51";
+  var BUILD = "v52";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1783,7 +1783,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v51";
+const APP_BUILD = "v52";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -5173,6 +5173,64 @@ function mainShapeFromSub(sub, parentInd) {
     rates: []
   };
 }
+const KPI_SWAP_META_KEYS = ["metaDay", "metaSat", "metaSun", "metaMonth", "checkin", "checkout", "lowerBetter", "openQuestion", "planCrossId", "planCrossIds", "sundayOnly"];
+function swapObjField(obj, keyA, keyB) {
+  if (!obj || keyA === keyB) return;
+  const hasA = Object.prototype.hasOwnProperty.call(obj, keyA);
+  const hasB = Object.prototype.hasOwnProperty.call(obj, keyB);
+  if (!hasA && !hasB) return;
+  const a = obj[keyA], b = obj[keyB];
+  if (hasB) obj[keyA] = b; else delete obj[keyA];
+  if (hasA) obj[keyB] = a; else delete obj[keyB];
+}
+function swapFieldStoredData(fieldIdA, fieldIdB) {
+  if (!fieldIdA || !fieldIdB || fieldIdA === fieldIdB) return;
+  Object.keys(state.months || {}).forEach(m => {
+    const md = monthData(m);
+    Object.keys(md.daily || {}).forEach(sid => swapObjField(md.daily[sid], fieldIdA, fieldIdB));
+    Object.keys(md.system || {}).forEach(sid => swapObjField(md.system[sid], fieldIdA, fieldIdB));
+    Object.keys(md.systemAt || {}).forEach(sid => swapObjField(md.systemAt[sid], fieldIdA, fieldIdB));
+    if (md.metaLoja) swapObjField(md.metaLoja, fieldIdA, fieldIdB);
+  });
+  const store = loadDivisionalMetasStore();
+  const code = divisionalMetaCode();
+  let storeDirty = false;
+  Object.keys(divisionalMetasByMonth).forEach(m => {
+    if (divisionalMetasByMonth[m]) { swapObjField(divisionalMetasByMonth[m], fieldIdA, fieldIdB); storeDirty = true; }
+  });
+  if (store[code]) {
+    Object.keys(store[code]).forEach(m => {
+      if (store[code][m]) { swapObjField(store[code][m], fieldIdA, fieldIdB); storeDirty = true; }
+    });
+  }
+  if (storeDirty) {
+    if (!store[code]) store[code] = {};
+    Object.keys(divisionalMetasByMonth).forEach(m => { store[code][m] = divisionalMetasByMonth[m]; });
+    saveDivisionalMetasStore(store);
+  }
+}
+function swapIndicatorConfigMetas(fieldIdA, fieldIdB) {
+  const cfgA = cfgForFieldId(fieldIdA);
+  const cfgB = cfgForFieldId(fieldIdB);
+  if (!cfgA || !cfgB) return;
+  KPI_SWAP_META_KEYS.forEach(k => {
+    const ta = cfgA[k], tb = cfgB[k];
+    if (k === "planCrossIds") {
+      cfgA[k] = Array.isArray(tb) ? [...tb] : [];
+      cfgB[k] = Array.isArray(ta) ? [...ta] : [];
+    } else if (k === "planCrossId") {
+      cfgA[k] = tb || "";
+      cfgB[k] = ta || "";
+    } else {
+      cfgA[k] = tb;
+      cfgB[k] = ta;
+    }
+  });
+}
+function swapKpiRoleData(fieldIdA, fieldIdB) {
+  swapFieldStoredData(fieldIdA, fieldIdB);
+  swapIndicatorConfigMetas(fieldIdA, fieldIdB);
+}
 function mainCanBecomeSub(ind) {
   if (!ind || ind.pctOnly) return "Indicadores só-taxa não podem virar sub.";
   if ((ind.subs || []).length) return "Este indicador tem sub-indicadores. Reorganize-os antes.";
@@ -5215,6 +5273,7 @@ function swapMainWithSub(mainId, parentIndId, subId) {
     const oi = state.order.indicators.indexOf(mainId);
     if (oi >= 0) state.order.indicators[oi] = subId;
   }
+  swapKpiRoleData(mainId, subId);
   save();
   queueConfigPush();
   return true;
@@ -5250,6 +5309,7 @@ function promoteSubReplacingParent(subId) {
     const oi = state.order.indicators.indexOf(parentId);
     if (oi >= 0) state.order.indicators[oi] = subId;
   }
+  swapKpiRoleData(subId, parentId);
   save();
   queueConfigPush();
   return true;
@@ -5281,6 +5341,7 @@ function swapSubWithMain(subId, targetMainId) {
     const oi = state.order.indicators.indexOf(targetMainId);
     if (oi >= 0) state.order.indicators[oi] = subId;
   }
+  swapKpiRoleData(subId, targetMainId);
   save();
   queueConfigPush();
   return true;
