@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v57";
+  var BUILD = "v58";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -684,7 +684,7 @@
       <div id="diarioSellerBar" class="matriz-toolbar diario-seller-bar" style="margin-top:10px;"></div>
       <div id="diarioLockBar" class="dio-lock-bar"></div>
       <div class="table-wrap" style="margin-top:12px;"><table id="diarioTable"></table></div>
-      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Só o <b>dia de hoje</b> fica liberado; demais dias exigem <b>Desbloquear</b> na coluna ou nos botões acima (reset à 00:00). <b>Limpar semana/dia:</b> desbloqueie o cadeado 🔒 na barra acima — escolha o dia e <b>Vendedor atual</b> ou <b>Todos</b>; marque <b>⚙ sistema</b> se o erro aparecer na matriz (Real do gestor). <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar. Nome <b style="color:var(--ok)">verde</b> = check-out de hoje finalizado · <b style="color:var(--danger)">vermelho</b> = pendente.</div>
+      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Só o <b>dia de hoje</b> fica liberado; demais dias exigem <b>Desbloquear</b> na coluna ou nos botões acima (reset à 00:00). <b>Limpar semana/dia:</b> desbloqueie o cadeado 🔒 — escolha dia, vendedor e indicador; apaga <b>check-in e check-out do consultor e do gestor</b> na nuvem. Marque <b>⚙ sistema</b> se o erro estiver na matriz (Real do gestor). <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar. Nome <b style="color:var(--ok)">verde</b> = check-out de hoje finalizado · <b style="color:var(--danger)">vermelho</b> = pendente.</div>
     </div>
   </section>
 
@@ -986,8 +986,9 @@ function migrate(s) {
   if (!s.order) s.order = { sellers: null, indicators: null };
   if (!s.months) s.months = {};
   if (!s.theme) s.theme = "dark";
-  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, matrizFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" }, kpiReorgAt: 0 }, s.ui || {});
+  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, matrizFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" }, kpiReorgAt: 0, dailyTombstones: {} }, s.ui || {});
   if (s.ui.kpiReorgAt == null) s.ui.kpiReorgAt = 0;
+  if (!s.ui.dailyTombstones) s.ui.dailyTombstones = {};
   if (!s.ui.expanded) s.ui.expanded = {};
   if (!s.ui.lancamentoExpanded) s.ui.lancamentoExpanded = {};
   if (!Array.isArray(s.ui.matrizFilter)) s.ui.matrizFilter = [];
@@ -1635,7 +1636,45 @@ function toggleDiarioClearWeekArm() {
   renderDiarioLockBar();
   toast(diarioClearWeekArmed ? "Botão de limpar semana liberado" : "Limpar semana bloqueado");
 }
-const DIO_CELL_KEYS = ["plan", "real", "planYes", "planJustif", "planBy", "realBy", "planAt", "realAt"];
+function dailyTombstoneKey(sid, fid, day, m = currentMonth) {
+  return `${m}|${sid}|${fid}|${day}`;
+}
+function markDailyTombstones(days, sellerIds, fieldIds, m = currentMonth) {
+  state.ui = state.ui || {};
+  state.ui.dailyTombstones = state.ui.dailyTombstones || {};
+  const ts = Date.now();
+  sellerIds.forEach(sid => {
+    fieldIds.forEach(fid => {
+      days.forEach(d => { state.ui.dailyTombstones[dailyTombstoneKey(sid, fid, d, m)] = ts; });
+    });
+  });
+}
+function isDailyTombstoned(sid, fid, day, m = currentMonth) {
+  return !!(state.ui?.dailyTombstones?.[dailyTombstoneKey(sid, fid, day, m)]);
+}
+async function pushDailyClearsToFirebase({ days, sellerIds, fieldIds, clearSystem = false, month = currentMonth }) {
+  if (!fbReady || !fbDb || !lojaCode || divisionalMode()) return false;
+  const updates = {};
+  sellerIds.forEach(sid => {
+    fieldIds.forEach(fid => {
+      days.forEach(d => {
+        updates[`lojas/${lojaCode}/data/months/${month}/daily/${sid}/${fid}/${d}`] = null;
+      });
+      if (clearSystem) {
+        updates[`lojas/${lojaCode}/data/months/${month}/system/${sid}/${fid}`] = null;
+        updates[`lojas/${lojaCode}/data/months/${month}/systemAt/${sid}/${fid}`] = null;
+      }
+    });
+  });
+  updates[`lojas/${lojaCode}/updatedAt`] = Date.now();
+  try {
+    await fbDb.ref().update(updates);
+    return true;
+  } catch (e) {
+    console.warn("push daily clear", e);
+    return false;
+  }
+}
 function purgeDiarioDailyCell(md, sellerId, fieldId, day) {
   const days = md.daily?.[sellerId]?.[fieldId];
   if (!days || !days[day]) return;
@@ -1659,16 +1698,16 @@ function diarioDayShortLabel(d, m = currentMonth) {
   const dn = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
   return `${d} ${dn[weekday(m, d)]}`;
 }
-function clearDiarioScope({ days, sellerIds, fieldIds, clearSystem = false }) {
-  const md = monthData(currentMonth);
+function clearDiarioScope({ days, sellerIds, fieldIds, clearSystem = false, month = currentMonth }) {
+  const md = monthData(month);
   md.daily = md.daily || {};
   sellerIds.forEach(sid => {
     fieldIds.forEach(fid => {
       days.forEach(d => {
         if (!md.daily[sid]?.[fid]?.[d]) return;
-        const cell = md.daily[sid][fid][d];
-        DIO_CELL_KEYS.forEach(k => delete cell[k]);
-        purgeDiarioDailyCell(md, sid, fid, d);
+        delete md.daily[sid][fid][d];
+        if (!Object.keys(md.daily[sid][fid]).length) delete md.daily[sid][fid];
+        if (!Object.keys(md.daily[sid]).length) delete md.daily[sid];
       });
       if (clearSystem) {
         if (md.system?.[sid]?.[fid] != null) delete md.system[sid][fid];
@@ -1676,6 +1715,17 @@ function clearDiarioScope({ days, sellerIds, fieldIds, clearSystem = false }) {
       }
     });
   });
+}
+async function commitDiarioClear(scope, toastMsg) {
+  const month = currentMonth;
+  clearDiarioScope({ ...scope, month });
+  markDailyTombstones(scope.days, scope.sellerIds, scope.fieldIds, month);
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+  const synced = await pushDailyClearsToFirebase({ ...scope, month });
+  fbPush({ skipMerge: true, immediate: true });
+  renderDiario();
+  if (activeView === "matriz") { renderMatriz(); renderAcuracidade(); }
+  toast(synced ? toastMsg : `${toastMsg} (local — confira conexão com a nuvem)`, !synced);
 }
 function diarioClearSystemChecked() {
   return !!document.getElementById("dioClearSystem")?.checked;
@@ -1697,16 +1747,13 @@ function clearDiarioWeekResults() {
   const indLbl = fieldIds.length === 1 ? diarioFieldOptionLabels().find(f => f.id === fieldIds[0])?.label || "1 indicador" : "todos os indicadores";
   const sysNote = diarioClearSystemChecked() ? "\n\nInclui lançamento do gestor (⚙ sistema) do mês." : "";
   if (!confirm(`Limpar check-in e check-out de TODOS os ${sellers.length} vendedores na ${weekLbl}?\nIndicadores: ${indLbl}.${sysNote}\n\nEsta ação não tem desfazer automático.`)) return;
-  clearDiarioScope({
+  diarioClearWeekArmed = false;
+  commitDiarioClear({
     days,
     sellerIds: sellers.map(s => s.id),
     fieldIds,
     clearSystem: diarioClearSystemChecked()
-  });
-  diarioClearWeekArmed = false;
-  save();
-  renderDiario();
-  toast(`${weekLbl} limpa para todos os vendedores`);
+  }, `${weekLbl} limpa para todos os vendedores (consultor + gestor)`);
 }
 function clearDiarioDayResults() {
   if (!diarioClearWeekArmed) {
@@ -1726,11 +1773,12 @@ function clearDiarioDayResults() {
   const indLbl = fieldIds.length === 1 ? diarioFieldOptionLabels().find(f => f.id === fieldIds[0])?.label || "1 indicador" : "todos os indicadores";
   const sysNote = diarioClearSystemChecked() ? "\n\nInclui lançamento do gestor (⚙ sistema) do mês para esses indicadores." : "";
   if (!confirm(`Limpar check-in e check-out do dia ${dayLbl} para ${who}?\nIndicadores: ${indLbl}.${sysNote}\n\nEsta ação não tem desfazer automático.`)) return;
-  clearDiarioScope({ days: [day], sellerIds, fieldIds, clearSystem: diarioClearSystemChecked() });
-  save();
-  renderDiario();
-  if (activeView === "matriz") { renderMatriz(); renderAcuracidade(); }
-  toast(`Dia ${dayLbl} limpo · ${who}`);
+  commitDiarioClear({
+    days: [day],
+    sellerIds,
+    fieldIds,
+    clearSystem: diarioClearSystemChecked()
+  }, `Dia ${dayLbl} limpo · ${who} (consultor + gestor)`);
 }
 function diarioDayHeadHtml(d, dn) {
   const wd = weekday(currentMonth, d);
@@ -1928,6 +1976,13 @@ function mergeDailyFromRemote(remoteMonths) {
         const localDays = md.daily[sid]?.[fid] || {};
         const allDays = new Set([...Object.keys(remoteDays), ...Object.keys(localDays)]);
         allDays.forEach(day => {
+          if (isDailyTombstoned(sid, fid, day, m)) {
+            if (md.daily[sid]?.[fid]?.[day]) {
+              delete md.daily[sid][fid][day];
+              changed = true;
+            }
+            return;
+          }
           const rc = remoteDays[day];
           const hadLocal = localDays[day];
           if (rc == null) {
@@ -1980,7 +2035,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v57";
+const APP_BUILD = "v58";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -7063,14 +7118,18 @@ function publishAppBuild() {
   if (!fbReady || !fbDb || typeof APP_BUILD === "undefined") return;
   try { fbDb.ref("config/appBuild").set(APP_BUILD); } catch (e) {}
 }
-function fbPush(){
+function fbPush(opts){
   if (!fbReady || !fbDb || !lojaCode || divisionalMode()) return;
   clearTimeout(fbPushTimer);
+  const skipMerge = !!(opts && opts.skipMerge);
+  const delay = opts && opts.immediate ? 0 : 1200;
   fbPushTimer = setTimeout(async () => {
     try {
-      const snap = await fbDb.ref("lojas/" + lojaCode + "/data/months").once("value");
-      const remoteMonths = snap.val();
-      if (remoteMonths) mergeDailyFromRemote(remoteMonths);
+      if (!skipMerge) {
+        const snap = await fbDb.ref("lojas/" + lojaCode + "/data/months").once("value");
+        const remoteMonths = snap.val();
+        if (remoteMonths) mergeDailyFromRemote(remoteMonths);
+      }
       fbDb.ref("lojas/" + lojaCode).set({
         name: state.storeName || lojaCode,
         code: lojaCode,
@@ -7079,7 +7138,7 @@ function fbPush(){
       });
       publishAppBuild();
     } catch (e) { console.warn("push falhou", e); }
-  }, 1200);
+  }, delay);
 }
 function pullDivisional() {
   if (!fbReady || !fbDb || !divisionalCode) return;
