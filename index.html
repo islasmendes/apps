@@ -219,7 +219,7 @@
   .dio-clear-system-lbl { font-size: 11px; color: var(--text-dim); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
   .dio-clear-week-wrap { flex-wrap: wrap; }
   .dio-clear-fields-pick { position: relative; font-size: 12px; }
-  .dio-clear-fields-pick[disabled] { opacity: 0.38; pointer-events: none; }
+  .dio-clear-fields-pick.locked { opacity: 0.38; pointer-events: none; }
   .dio-clear-fields-summary {
     list-style: none; cursor: pointer; padding: 5px 10px; border-radius: 8px;
     border: 1px solid var(--border); background: var(--cell); color: var(--text);
@@ -1818,9 +1818,9 @@ function clearDiarioWeekResults() {
   if (!sellers.length) return;
   const fieldIds = diarioClearFieldIds();
   if (!fieldIds || !fieldIds.length) return;
-  const indLbl = diarioClearFieldSummaryLabel(fieldIds);
+  const indLbl = diarioClearFieldConfirmList(fieldIds);
   const sysNote = diarioClearSystemChecked() ? "\n\nInclui lançamento do gestor (⚙ sistema) do mês." : "";
-  if (!confirm(`Limpar check-in e check-out de TODOS os ${sellers.length} vendedores na ${weekLbl}?\nIndicadores: ${indLbl}.${sysNote}\n\nEsta ação não tem desfazer automático.`)) return;
+  if (!confirm(`Limpar check-in e check-out de TODOS os ${sellers.length} vendedores na ${weekLbl}?\n\nIndicadores:\n${indLbl}${sysNote}\n\nEsta ação não tem desfazer automático.`)) return;
   diarioClearWeekArmed = false;
   commitDiarioClear({
     days,
@@ -1844,9 +1844,9 @@ function clearDiarioDayResults() {
   if (!fieldIds || !fieldIds.length) return;
   const dayLbl = diarioDayShortLabel(day);
   const who = scope === "all" ? `todos os ${sellerIds.length} vendedores` : (sellers.find(s => s.id === diarioSeller)?.name || "vendedor atual");
-  const indLbl = diarioClearFieldSummaryLabel(fieldIds);
+  const indLbl = diarioClearFieldConfirmList(fieldIds);
   const sysNote = diarioClearSystemChecked() ? "\n\nInclui lançamento do gestor (⚙ sistema) do mês para esses indicadores." : "";
-  if (!confirm(`Limpar check-in e check-out do dia ${dayLbl} para ${who}?\nIndicadores: ${indLbl}.${sysNote}\n\nEsta ação não tem desfazer automático.`)) return;
+  if (!confirm(`Limpar check-in e check-out do dia ${dayLbl} para ${who}?\n\nIndicadores:\n${indLbl}${sysNote}\n\nEsta ação não tem desfazer automático.`)) return;
   commitDiarioClear({
     days: [day],
     sellerIds,
@@ -1885,7 +1885,7 @@ function renderDiarioLockBar() {
         <option value="seller">Vendedor atual</option>
         <option value="all">Todos vendedores</option>
       </select>
-      <details class="dio-clear-fields-pick" id="dioClearFieldsPick"${diarioClearWeekArmed ? "" : " disabled"}>
+      <details class="dio-clear-fields-pick${diarioClearWeekArmed ? "" : " locked"}" id="dioClearFieldsPick">
         <summary class="dio-clear-fields-summary" id="dioClearFieldsSummary" title="Marcar indicadores a limpar">Indicadores (${escapeHtml(diarioClearFieldSummaryLabel([...diarioClearFieldsSelectedSet()]))})</summary>
         <div class="dio-clear-fields-panel">
           <label class="dio-clear-field-all"><input type="checkbox" id="dioClearFieldAll"> <b>Todos</b></label>
