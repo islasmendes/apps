@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v52";
+  var BUILD = "v53";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -744,6 +744,7 @@
       <div class="row">
         <button class="btn sec" id="exportJson">⬇ Exportar backup (.json)</button>
         <button class="btn sec" id="importJsonBtn">⬆ Importar backup</button>
+        <button class="btn sec" id="recoverKpiBtn">🔧 Recuperar dados de KPI</button>
         <input type="file" id="importJson" accept="application/json" style="display:none;">
         <button class="btn danger" id="resetAll">Apagar tudo</button>
       </div>
@@ -801,6 +802,16 @@
   <div class="row" style="margin-top:16px; justify-content:flex-end; gap:8px;">
     <button class="btn sec" id="kpiMoveCancel" type="button">Cancelar</button>
     <button class="btn" id="kpiMoveConfirm" type="button">Confirmar</button>
+  </div>
+</div></div>
+
+<div class="modal-bg" id="recoverKpiModal"><div class="modal" style="max-width:520px">
+  <div class="flex-between"><h3>🔧 Recuperar dados de KPI</h3><button class="iconbtn" id="recoverKpiClose" type="button">✕</button></div>
+  <div class="sub" id="recoverKpiSub">Dados podem ter ficado em um ID antigo após reorganizar indicadores. Primeiro tente <b>↻ Baixar da nuvem</b> em Sincronização.</div>
+  <div id="recoverKpiBody" style="margin-top:12px;"></div>
+  <div class="row" style="margin-top:16px; justify-content:flex-end; gap:8px;">
+    <button class="btn sec" id="recoverKpiCancel" type="button">Fechar</button>
+    <button class="btn" id="recoverKpiConfirm" type="button">Recuperar para indicador</button>
   </div>
 </div></div>
 
@@ -1783,7 +1794,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v52";
+const APP_BUILD = "v53";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -5173,63 +5184,192 @@ function mainShapeFromSub(sub, parentInd) {
     rates: []
   };
 }
-const KPI_SWAP_META_KEYS = ["metaDay", "metaSat", "metaSun", "metaMonth", "checkin", "checkout", "lowerBetter", "openQuestion", "planCrossId", "planCrossIds", "sundayOnly"];
-function swapObjField(obj, keyA, keyB) {
-  if (!obj || keyA === keyB) return;
-  const hasA = Object.prototype.hasOwnProperty.call(obj, keyA);
-  const hasB = Object.prototype.hasOwnProperty.call(obj, keyB);
-  if (!hasA && !hasB) return;
-  const a = obj[keyA], b = obj[keyB];
-  if (hasB) obj[keyA] = b; else delete obj[keyA];
-  if (hasA) obj[keyB] = a; else delete obj[keyB];
+function configuredFieldIds() {
+  const ids = new Set();
+  allFields().forEach(f => ids.add(f.id));
+  return ids;
 }
-function swapFieldStoredData(fieldIdA, fieldIdB) {
-  if (!fieldIdA || !fieldIdB || fieldIdA === fieldIdB) return;
+function snapshotFieldData(fieldId) {
+  const snap = { daily: {}, system: {}, systemAt: {}, metaLoja: {} };
+  if (!fieldId) return snap;
+  Object.keys(state.months || {}).forEach(m => {
+    const md = state.months[m];
+    Object.keys(md.daily || {}).forEach(sid => {
+      const cell = md.daily[sid]?.[fieldId];
+      if (cell && Object.keys(cell).length) {
+        if (!snap.daily[m]) snap.daily[m] = {};
+        snap.daily[m][sid] = JSON.parse(JSON.stringify(cell));
+      }
+    });
+    Object.keys(md.system || {}).forEach(sid => {
+      if (md.system[sid]?.[fieldId] != null && md.system[sid][fieldId] !== "") {
+        if (!snap.system[m]) snap.system[m] = {};
+        snap.system[m][sid] = md.system[sid][fieldId];
+      }
+    });
+    Object.keys(md.systemAt || {}).forEach(sid => {
+      if (md.systemAt[sid]?.[fieldId] != null) {
+        if (!snap.systemAt[m]) snap.systemAt[m] = {};
+        snap.systemAt[m][sid] = md.systemAt[sid][fieldId];
+      }
+    });
+    if (md.metaLoja?.[fieldId] != null && md.metaLoja[fieldId] !== "") snap.metaLoja[m] = md.metaLoja[fieldId];
+  });
+  return snap;
+}
+function clearFieldStoredData(fieldId) {
+  if (!fieldId) return;
   Object.keys(state.months || {}).forEach(m => {
     const md = monthData(m);
-    Object.keys(md.daily || {}).forEach(sid => swapObjField(md.daily[sid], fieldIdA, fieldIdB));
-    Object.keys(md.system || {}).forEach(sid => swapObjField(md.system[sid], fieldIdA, fieldIdB));
-    Object.keys(md.systemAt || {}).forEach(sid => swapObjField(md.systemAt[sid], fieldIdA, fieldIdB));
-    if (md.metaLoja) swapObjField(md.metaLoja, fieldIdA, fieldIdB);
-  });
-  const store = loadDivisionalMetasStore();
-  const code = divisionalMetaCode();
-  let storeDirty = false;
-  Object.keys(divisionalMetasByMonth).forEach(m => {
-    if (divisionalMetasByMonth[m]) { swapObjField(divisionalMetasByMonth[m], fieldIdA, fieldIdB); storeDirty = true; }
-  });
-  if (store[code]) {
-    Object.keys(store[code]).forEach(m => {
-      if (store[code][m]) { swapObjField(store[code][m], fieldIdA, fieldIdB); storeDirty = true; }
+    Object.keys(md.daily || {}).forEach(sid => { if (md.daily[sid]?.[fieldId]) delete md.daily[sid][fieldId]; });
+    Object.keys(md.system || {}).forEach(sid => {
+      if (md.system[sid]?.[fieldId] != null) delete md.system[sid][fieldId];
     });
-  }
-  if (storeDirty) {
-    if (!store[code]) store[code] = {};
-    Object.keys(divisionalMetasByMonth).forEach(m => { store[code][m] = divisionalMetasByMonth[m]; });
-    saveDivisionalMetasStore(store);
-  }
+    Object.keys(md.systemAt || {}).forEach(sid => {
+      if (md.systemAt[sid]?.[fieldId] != null) delete md.systemAt[sid][fieldId];
+    });
+    if (md.metaLoja?.[fieldId] != null) delete md.metaLoja[fieldId];
+  });
 }
-function swapIndicatorConfigMetas(fieldIdA, fieldIdB) {
-  const cfgA = cfgForFieldId(fieldIdA);
-  const cfgB = cfgForFieldId(fieldIdB);
-  if (!cfgA || !cfgB) return;
-  KPI_SWAP_META_KEYS.forEach(k => {
-    const ta = cfgA[k], tb = cfgB[k];
-    if (k === "planCrossIds") {
-      cfgA[k] = Array.isArray(tb) ? [...tb] : [];
-      cfgB[k] = Array.isArray(ta) ? [...ta] : [];
-    } else if (k === "planCrossId") {
-      cfgA[k] = tb || "";
-      cfgB[k] = ta || "";
-    } else {
-      cfgA[k] = tb;
-      cfgB[k] = ta;
+function restoreFieldDataSnapshot(fieldId, snap) {
+  if (!fieldId || !snap) return;
+  Object.keys(state.months || {}).forEach(m => {
+    const md = monthData(m);
+    Object.entries(snap.daily[m] || {}).forEach(([sid, cell]) => {
+      md.daily[sid] = md.daily[sid] || {};
+      md.daily[sid][fieldId] = cell;
+    });
+    Object.entries(snap.system[m] || {}).forEach(([sid, val]) => {
+      md.system[sid] = md.system[sid] || {};
+      md.system[sid][fieldId] = val;
+    });
+    Object.entries(snap.systemAt[m] || {}).forEach(([sid, val]) => {
+      md.systemAt[sid] = md.systemAt[sid] || {};
+      md.systemAt[sid][fieldId] = val;
+    });
+    if (snap.metaLoja[m] != null) {
+      md.metaLoja = md.metaLoja || {};
+      md.metaLoja[fieldId] = snap.metaLoja[m];
     }
   });
 }
-function swapKpiRoleData(fieldIdA, fieldIdB) {
-  swapFieldStoredData(fieldIdA, fieldIdB);
-  swapIndicatorConfigMetas(fieldIdA, fieldIdB);
+/** Troca só números (daily/sistema/meta) — não mexe check-in/out nem metas do KPI na config */
+function transferRoleData(fieldIdA, fieldIdB) {
+  if (!fieldIdA || !fieldIdB || fieldIdA === fieldIdB) return;
+  const snapA = snapshotFieldData(fieldIdA);
+  const snapB = snapshotFieldData(fieldIdB);
+  clearFieldStoredData(fieldIdA);
+  clearFieldStoredData(fieldIdB);
+  restoreFieldDataSnapshot(fieldIdA, snapB);
+  restoreFieldDataSnapshot(fieldIdB, snapA);
+}
+function scanOrphanedKpiData() {
+  const active = configuredFieldIds();
+  const orphans = {};
+  Object.keys(state.months || {}).forEach(m => {
+    const md = state.months[m];
+    const fids = new Set();
+    Object.values(md.daily || {}).forEach(byF => Object.keys(byF || {}).forEach(id => fids.add(id)));
+    Object.values(md.system || {}).forEach(byF => Object.keys(byF || {}).forEach(id => fids.add(id)));
+    fids.forEach(fid => {
+      if (active.has(fid)) return;
+      const st = countFieldDataEntries(fid);
+      if (!st.cells) return;
+      if (!orphans[fid]) orphans[fid] = { fieldId: fid, cells: 0, days: 0, sellers: 0, months: [] };
+      orphans[fid].cells = Math.max(orphans[fid].cells, st.cells);
+      orphans[fid].days = Math.max(orphans[fid].days, st.days);
+      orphans[fid].sellers = Math.max(orphans[fid].sellers, st.sellers);
+      if (!orphans[fid].months.includes(m)) orphans[fid].months.push(m);
+    });
+  });
+  return Object.values(orphans).sort((a, b) => b.cells - a.cells);
+}
+function mergeFieldDataInto(sourceId, targetId) {
+  if (!sourceId || !targetId || sourceId === targetId) return 0;
+  let merged = 0;
+  Object.keys(state.months || {}).forEach(m => {
+    const md = monthData(m);
+    Object.keys(md.daily || {}).forEach(sid => {
+      const src = md.daily[sid]?.[sourceId];
+      if (!src) return;
+      md.daily[sid] = md.daily[sid] || {};
+      const dst = md.daily[sid][targetId] || {};
+      Object.keys(src).forEach(day => {
+        const sc = src[day], dc = dst[day];
+        if (!cellHasAnyFill(dc)) {
+          dst[day] = JSON.parse(JSON.stringify(sc));
+          merged++;
+        } else if (cellHasAnyFill(sc)) {
+          const sr = Number(sc.real) || 0, dr = Number(dc.real) || 0;
+          const sp = Number(sc.plan) || 0, dp = Number(dc.plan) || 0;
+          if (sr > dr || (sr === dr && sp > dp)) {
+            dst[day] = JSON.parse(JSON.stringify(sc));
+            merged++;
+          }
+        }
+      });
+      if (Object.keys(dst).length) md.daily[sid][targetId] = dst;
+    });
+    Object.keys(md.system || {}).forEach(sid => {
+      const src = md.system[sid]?.[sourceId];
+      if (src == null || src === "") return;
+      md.system[sid] = md.system[sid] || {};
+      if (md.system[sid][targetId] == null || md.system[sid][targetId] === "") {
+        md.system[sid][targetId] = src;
+        merged++;
+      }
+    });
+    if (md.metaLoja?.[sourceId] != null && (md.metaLoja[targetId] == null || md.metaLoja[targetId] === "")) {
+      md.metaLoja[targetId] = md.metaLoja[sourceId];
+      merged++;
+    }
+  });
+  return merged;
+}
+let recoverKpiSelectedOrphan = null;
+function closeRecoverKpiModal() {
+  document.getElementById("recoverKpiModal")?.classList.remove("show");
+  recoverKpiSelectedOrphan = null;
+}
+function openRecoverKpiModal(preselectOrphanId) {
+  const orphans = scanOrphanedKpiData();
+  const fields = allFields().filter(f => !f.rate);
+  const body = document.getElementById("recoverKpiBody");
+  if (!orphans.length) {
+    body.innerHTML = `<div class="hint">Nenhum dado órfão encontrado neste aparelho.<br>Se sumiu na matriz, use <b>↻ Baixar da nuvem</b> (Regras de Negócio → Sincronização) ou importe um backup .json.</div>`;
+    recoverKpiSelectedOrphan = null;
+  } else {
+    const selId = preselectOrphanId && orphans.some(o => o.fieldId === preselectOrphanId) ? preselectOrphanId : orphans[0].fieldId;
+    recoverKpiSelectedOrphan = selId;
+    const fieldOpts = fields.map(f => `<option value="${f.id}">${f.kind === "sub" ? "↳ " : ""}${escapeHtml(f.name)}</option>`).join("");
+    const agto = fields.find(f => normNameCross(f.name).includes("agend"));
+    body.innerHTML = `<label class="field" style="display:block;width:100%;"><span>Dados encontrados (ID antigo)</span>
+      <select id="recoverOrphanPick" style="${kpiMoveSelectStyle()}">${orphans.map(o => `<option value="${o.fieldId}"${o.fieldId === selId ? " selected" : ""}>${o.cells} registro(s) · ${o.days} dia(s) · ${o.sellers} CV · ${o.months.length} mês(es) · …${escapeHtml(o.fieldId.slice(-6))}</option>`).join("")}</select></label>
+      <label class="field" style="display:block;width:100%;margin-top:12px;"><span>Recuperar para qual indicador atual?</span>
+      <select id="recoverTargetPick" style="${kpiMoveSelectStyle()}">${fieldOpts}</select></label>
+      <div class="hint" style="margin-top:10px;line-height:1.5;">Copia check-in/out e lançamento gestor do ID antigo para o indicador escolhido (sem apagar o backup órfão até você confirmar na matriz).</div>`;
+    if (agto) document.getElementById("recoverTargetPick").value = agto.id;
+    document.getElementById("recoverOrphanPick").onchange = e => { recoverKpiSelectedOrphan = e.target.value; };
+  }
+  document.getElementById("recoverKpiModal").classList.add("show");
+}
+function confirmRecoverKpi() {
+  const orphanId = document.getElementById("recoverOrphanPick")?.value || recoverKpiSelectedOrphan;
+  const targetId = document.getElementById("recoverTargetPick")?.value;
+  if (!orphanId || !targetId) { toast("Selecione origem e destino", true); return; }
+  const n = mergeFieldDataInto(orphanId, targetId);
+  save();
+  closeRecoverKpiModal();
+  renderActive();
+  toast(n ? `Recuperados ${n} registro(s) · confira a matriz` : "Nada novo para copiar (destino já tinha dados)");
+}
+function tryPromptOrphanRecovery() {
+  if (sessionStorage.getItem("gc_orphan_prompt_v53")) return;
+  const orphans = scanOrphanedKpiData();
+  if (!orphans.length) return;
+  sessionStorage.setItem("gc_orphan_prompt_v53", "1");
+  toast("⚠ Dados de KPI desligados da configuração — abrindo recuperação…", true);
+  setTimeout(() => openRecoverKpiModal(orphans[0].fieldId), 400);
 }
 function mainCanBecomeSub(ind) {
   if (!ind || ind.pctOnly) return "Indicadores só-taxa não podem virar sub.";
@@ -5273,7 +5413,7 @@ function swapMainWithSub(mainId, parentIndId, subId) {
     const oi = state.order.indicators.indexOf(mainId);
     if (oi >= 0) state.order.indicators[oi] = subId;
   }
-  swapKpiRoleData(mainId, subId);
+  transferRoleData(mainId, subId);
   save();
   queueConfigPush();
   return true;
@@ -5309,7 +5449,7 @@ function promoteSubReplacingParent(subId) {
     const oi = state.order.indicators.indexOf(parentId);
     if (oi >= 0) state.order.indicators[oi] = subId;
   }
-  swapKpiRoleData(subId, parentId);
+  transferRoleData(subId, parentId);
   save();
   queueConfigPush();
   return true;
@@ -5341,7 +5481,7 @@ function swapSubWithMain(subId, targetMainId) {
     const oi = state.order.indicators.indexOf(targetMainId);
     if (oi >= 0) state.order.indicators[oi] = subId;
   }
-  swapKpiRoleData(subId, targetMainId);
+  transferRoleData(subId, targetMainId);
   save();
   queueConfigPush();
   return true;
@@ -5380,7 +5520,7 @@ function updatePromoteModalSwapList() {
   if (!wrap || !kpiMoveCtx || kpiMoveCtx.mode !== "promote") return;
   const parentInd = findIndBySub(kpiMoveCtx.fieldId);
   const otherMains = orderedIndicators().filter(i => !i.pctOnly && i.id !== kpiMoveCtx.fieldId && i.id !== parentInd?.id);
-  let html = `<div class="hint" style="margin-top:4px;line-height:1.55;">Padrão: <b>${escapeHtml(kpiMoveCtx.name)}</b> substitui <b>${escapeHtml(parentInd?.name || "o pai")}</b> no <b>mesmo bloco</b>. O pai desce para sub na posição dele. Taxas e outros subs permanecem no bloco.</div>`;
+  let html = `<div class="hint" style="margin-top:4px;line-height:1.55;">Padrão: <b>${escapeHtml(kpiMoveCtx.name)}</b> substitui <b>${escapeHtml(parentInd?.name || "o pai")}</b> no <b>mesmo bloco</b>. Os <b>números</b> (real, sistema, meta loja) trocam de ID junto. Taxas e outros subs permanecem no bloco.</div>`;
   if (otherMains.length) {
     html += `<label class="field" style="display:block;width:100%;margin-top:12px;"><span>Ou trocar com principal de outro bloco</span>
       <select id="kpiMoveSwapMain" style="${kpiMoveSelectStyle()}">
@@ -6742,6 +6882,7 @@ function pullLoja(){
       updateDivisionalNav();
       watchDivisionalMetas();
       renderActive(); startLojaDataListener();
+      tryPromptOrphanRecovery();
     };
     if (v && v.data) {
       state = migrate(v.data);
@@ -6926,6 +7067,11 @@ function init() {
   document.getElementById("kpiMoveCancel").onclick = closeKpiMoveModal;
   document.getElementById("kpiMoveConfirm").onclick = confirmKpiMove;
   document.getElementById("kpiMoveModal").addEventListener("click", e => { if (e.target.id === "kpiMoveModal") closeKpiMoveModal(); });
+  document.getElementById("recoverKpiClose").onclick = closeRecoverKpiModal;
+  document.getElementById("recoverKpiCancel").onclick = closeRecoverKpiModal;
+  document.getElementById("recoverKpiConfirm").onclick = confirmRecoverKpi;
+  document.getElementById("recoverKpiModal").addEventListener("click", e => { if (e.target.id === "recoverKpiModal") closeRecoverKpiModal(); });
+  document.getElementById("recoverKpiBtn").onclick = () => openRecoverKpiModal();
   const divMetaClose = document.getElementById("divMetaClose");
   if (divMetaClose) divMetaClose.onclick = closeDivisionalMetasModal;
   const divMetaModal = document.getElementById("divisionalMetasModal");
@@ -6978,6 +7124,7 @@ function init() {
   showView(activeView);
   if (typeof fbInit === "function") fbInit();
   else if (!authUnlocked) startAuthFlow();
+  setTimeout(tryPromptOrphanRecovery, 1200);
   const _ls=document.getElementById("lojaSubmit"); if(_ls) _ls.onclick=submitLoja;
   const _lc=document.getElementById("lojaCodeInput"); if(_lc) _lc.addEventListener("keydown",e=>{ if(e.key==="Enter") submitLoja(); });
   const _tlt=document.getElementById("trocarLojaTop"); if(_tlt) _tlt.onclick=trocarLoja;
