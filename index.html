@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v55";
+  var BUILD = "v56";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function norm(b) {
@@ -1239,19 +1239,33 @@ function buildLocalFieldRegistry(st) {
   });
   return reg;
 }
+function snapshotFieldIdNames(st) {
+  const map = Object.create(null);
+  (st?.indicators || state.indicators || []).forEach(ind => {
+    map[ind.id] = ind.name;
+    (ind.subs || []).forEach(s => { map[s.id] = s.name; });
+  });
+  return map;
+}
 function mergeKpiIdHistory(st) {
   st = st || state;
   st.ui = st.ui || {};
   st.ui.kpiIdHistory = st.ui.kpiIdHistory || {};
-  (st.indicators || []).forEach(ind => {
-    st.ui.kpiIdHistory[ind.id] = ind.name;
-    (ind.subs || []).forEach(s => { st.ui.kpiIdHistory[s.id] = s.name; });
-  });
+  Object.assign(st.ui.kpiIdHistory, snapshotFieldIdNames(st));
+}
+function localBlockForFieldName(st, name) {
+  const asMain = (st.indicators || []).find(i => i.name === name);
+  if (asMain) return asMain;
+  for (const ind of st.indicators || []) {
+    if ((ind.subs || []).some(s => s.name === name)) return ind;
+  }
+  return null;
 }
 function afterKpiStructureChange() {
   mergeKpiIdHistory(state);
   state.ui = state.ui || {};
   state.ui.kpiReorgAt = Date.now();
+  autoRecoverOrphanKpiData(state);
   save({ skipConfigPush: true });
   if (canPushOperationalConfig()) pushConfigTemplate();
   else queueConfigPush();
@@ -1303,6 +1317,7 @@ function applyOperationalConfig(st, tpl, opts) {
     const localHash = configHash(extractOperationalConfig(st));
     if (localHash !== configHash(tpl)) return false;
   }
+  mergeKpiIdHistory(st);
   const reg = buildLocalFieldRegistry(st);
   const newIndicators = tpl.indicators.map(tInd => {
     const local = reg[tInd.name]?.cfg;
@@ -1326,6 +1341,7 @@ function applyOperationalConfig(st, tpl, opts) {
       subs: [],
       rates: []
     };
+    const tplSubNames = new Set((tInd.subs || []).map(s => s.name));
     ind.subs = (tInd.subs || []).map(ts => {
       const ls = reg[ts.name]?.cfg;
       return {
@@ -1343,6 +1359,25 @@ function applyOperationalConfig(st, tpl, opts) {
         metaSun: ls?.metaSun ?? 0,
         metaMonth: ls?.metaMonth ?? 0
       };
+    });
+    const localBlock = localBlockForFieldName(st, tInd.name);
+    (localBlock?.subs || []).forEach(ls => {
+      if (tplSubNames.has(ls.name) || ind.subs.some(s => s.id === ls.id)) return;
+      ind.subs.push({
+        id: ls.id,
+        name: ls.name,
+        checkin: !!ls.checkin,
+        checkout: !!ls.checkout,
+        lowerBetter: !!ls.lowerBetter,
+        sundayOnly: !!ls.sundayOnly,
+        openQuestion: !!ls.openQuestion,
+        planCrossId: ls.planCrossId || "",
+        planCrossIds: Array.isArray(ls.planCrossIds) ? ls.planCrossIds.slice() : (ls.planCrossId ? [ls.planCrossId] : []),
+        metaDay: ls.metaDay ?? 0,
+        metaSat: ls.metaSat ?? 0,
+        metaSun: ls.metaSun ?? 0,
+        metaMonth: ls.metaMonth ?? 0
+      });
     });
     const localRateByName = Object.fromEntries((local?.rates || []).map(r => [r.name, r]));
     ind.rates = (tInd.rates || []).map(tr => {
@@ -1394,6 +1429,7 @@ function applyOperationalConfig(st, tpl, opts) {
   st.order.indicators = (tpl.orderNames || newIndicators.map(i => i.name)).map(n => nameToId[n]).filter(Boolean);
   const after = configHash(extractOperationalConfig(st));
   if (before === after && !opts?.ignoreVersion) return false;
+  autoRecoverOrphanKpiData(st);
   if (!opts?.ignoreVersion) lastAppliedConfigVersion = tpl.updatedAt;
   return true;
 }
@@ -1454,6 +1490,8 @@ function applyTemplateFromCloud() {
       lastPushedConfigHash = configHash(tpl);
       try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
       expandedBlocks = state.ui.expanded;
+    } else {
+      autoRecoverOrphanKpiData(state);
     }
     return changed;
   }).catch(() => false);
@@ -1863,7 +1901,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v55";
+const APP_BUILD = "v56";
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -5303,19 +5341,22 @@ function mergeFieldDataInto(sourceId, targetId, st) {
   return merged;
 }
 function autoRecoverOrphanKpiData(s) {
+  mergeKpiIdHistory(s);
   const hist = s.ui?.kpiIdHistory || {};
   const prev = state;
   state = s;
+  let total = 0;
   try {
     scanOrphanedKpiData(s).forEach(o => {
       const name = hist[o.fieldId];
       if (!name) return;
       const target = resolveFieldIdByName(name, s);
-      if (target && target !== o.fieldId) mergeFieldDataInto(o.fieldId, target, s);
+      if (target && target !== o.fieldId) total += mergeFieldDataInto(o.fieldId, target, s);
     });
   } finally {
     state = prev;
   }
+  return total;
 }
 let recoverKpiSelectedOrphan = null;
 function closeRecoverKpiModal() {
@@ -5361,11 +5402,17 @@ function confirmRecoverKpi() {
   toast(n ? `Recuperados ${n} registro(s) — confira a matriz` : "Destino já tinha esses dados");
 }
 function tryPromptOrphanRecovery() {
-  if (sessionStorage.getItem("gc_orphan_prompt_v55")) return;
+  const recovered = autoRecoverOrphanKpiData(state);
+  if (recovered > 0) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+    if (activeView === "diario") renderDiario();
+    else if (activeView === "matriz" || activeView === "arvore") matrizUiRerender();
+  }
+  if (sessionStorage.getItem("gc_orphan_prompt_v56")) return;
   const orphans = scanOrphanedKpiData();
   if (!orphans.length) return;
-  sessionStorage.setItem("gc_orphan_prompt_v55", "1");
-  toast("Dados de KPI desligados da configuração — abrindo recuperação…", true);
+  sessionStorage.setItem("gc_orphan_prompt_v56", "1");
+  toast("Ainda há dados de KPI desligados — abrindo recuperação…", true);
   setTimeout(() => openRecoverKpiModal(orphans[0].fieldId), 500);
 }
 function subShapeFromMain(ind) {
@@ -6941,6 +6988,7 @@ function pullLoja(){
       state = migrate(v.data);
       state.storeName = v.name || lojaCode;
       applyTemplateFromCloud().then(() => {
+        autoRecoverOrphanKpiData(state);
         save({ skipConfigPush: !isAdmin });
         finish();
         toast("Loja "+lojaCode+" carregada da nuvem");
