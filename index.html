@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v62";
+  var BUILD = "v63";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -244,16 +244,27 @@
   .dio-clear-field-row input { margin-top: 2px; flex-shrink: 0; }
   th.today, td.today { background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)) !important; }
   th.col-sun, td.col-sun { opacity: .5; }
-  #diarioTable { width: 100%; }
+  #diarioTable { width: 100%; table-layout: fixed; }
+  #diarioTable col.dio-col-name, #diarioTable col.dio-col-meta, #diarioTable col.dio-col-week { width: 1%; }
+  #diarioTable col.dio-col-day { width: 140px; }
   #diarioTable th.name, #diarioTable td.name,
   #diarioTable th.dio-meta-col, #diarioTable td.dio-meta-col,
   #diarioTable th.dio-week-col, #diarioTable td.dio-week-col {
     width: 1%;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   #diarioTable th.dio-day-col, #diarioTable td[data-dio-day] {
-    min-width: 132px;
-    width: auto;
+    width: 140px;
+    max-width: 140px;
+    white-space: normal;
+    overflow: hidden;
+  }
+  #diarioTable td[data-dio-day] .daycell,
+  #diarioTable td[data-dio-day] .dio-field {
+    min-width: 0;
+    max-width: 100%;
     overflow: hidden;
   }
   #diarioTable tbody tr.dgroup td { border-top: 2px solid var(--gc); }
@@ -287,23 +298,21 @@
   .matriz-filter-chip:hover { border-color: var(--accent); color: var(--text); }
   .matriz-filter-chip.active { background: color-mix(in srgb, var(--accent) 22%, var(--cell)); border-color: var(--accent); color: var(--text); font-weight: 700; }
   .diario-seller-bar .matriz-filter-chip {
-    --dio-ci-bd: var(--border);
-    --dio-co-bd: var(--border);
-    border: 2px solid transparent;
-    background:
-      linear-gradient(var(--cell), var(--cell)) padding-box,
-      conic-gradient(from 90deg, var(--dio-ci-bd) 0deg 180deg, var(--dio-co-bd) 180deg 360deg) border-box;
+    border: 2px solid var(--border);
+    border-top-color: var(--border);
+    border-bottom-color: var(--border);
+    background: var(--cell);
   }
   .diario-seller-bar .matriz-filter-chip.active {
-    background:
-      linear-gradient(color-mix(in srgb, var(--accent) 28%, var(--cell)), color-mix(in srgb, var(--accent) 28%, var(--cell))) padding-box,
-      conic-gradient(from 90deg, var(--dio-ci-bd) 0deg 180deg, var(--dio-co-bd) 180deg 360deg) border-box;
-    border-color: transparent;
+    background: color-mix(in srgb, var(--accent) 28%, var(--cell));
+    border-color: var(--border);
     color: var(--text);
     box-shadow: none;
   }
-  .diario-seller-bar .matriz-filter-chip.dio-ci-done { --dio-ci-bd: var(--accent); }
-  .diario-seller-bar .matriz-filter-chip.dio-co-done { --dio-co-bd: var(--ok); }
+  .diario-seller-bar .matriz-filter-chip.dio-ci-done,
+  .diario-seller-bar .matriz-filter-chip.active.dio-ci-done { border-top-color: var(--accent); }
+  .diario-seller-bar .matriz-filter-chip.dio-co-done,
+  .diario-seller-bar .matriz-filter-chip.active.dio-co-done { border-bottom-color: var(--ok); }
   .diario-seller-bar .matriz-filter-chip.dio-co-done { color: var(--ok); font-weight: 700; }
   .diario-seller-bar .matriz-filter-chip.dio-co-pending { color: var(--danger); font-weight: 700; }
   html[data-theme="light"] .diario-seller-bar .matriz-filter-chip.active { color: var(--text); }
@@ -463,13 +472,16 @@
     overflow: hidden;
     border: 1.5px solid var(--dio-in-bd);
     background: var(--dio-in-bg);
+    contain: inline-size;
   }
   .open-plan-scroll .open-plan-read {
-    flex: 1;
+    flex: 1 1 0;
+    width: 0;
     min-width: 0;
     max-width: 100%;
     display: block;
     overflow-x: auto;
+    overflow-y: hidden;
     white-space: nowrap;
     text-align: left;
     scrollbar-width: none;
@@ -784,7 +796,7 @@
       <div id="diarioSellerBar" class="matriz-toolbar diario-seller-bar" style="margin-top:10px;"></div>
       <div id="diarioLockBar" class="dio-lock-bar"></div>
       <div class="table-wrap" style="margin-top:12px;"><table id="diarioTable"></table></div>
-      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Só o <b>dia de hoje</b> fica liberado; demais dias exigem <b>Desbloquear</b> na coluna ou nos botões acima (reset à 00:00). <b>Limpar semana/dia:</b> desbloqueie o cadeado 🔒 — escolha dia, vendedor e <b>Indicadores</b> (vários com ☑); apaga <b>check-in e check-out do consultor e do gestor</b> na nuvem. Marque <b>⚙ sistema</b> se o erro estiver na matriz (Real do gestor). <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar. Nome <b style="color:var(--ok)">verde</b> = check-out de hoje ok · <b style="color:var(--danger)">vermelho</b> = pendente · borda <b style="color:var(--accent)">esquerda</b> = check-in ok · borda <b style="color:var(--ok)">direita</b> = check-out ok. Justificativas longas: arraste <b>⋮⋮</b> na lateral.</div>
+      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Só o <b>dia de hoje</b> fica liberado; demais dias exigem <b>Desbloquear</b> na coluna ou nos botões acima (reset à 00:00). <b>Limpar semana/dia:</b> desbloqueie o cadeado 🔒 — escolha dia, vendedor e <b>Indicadores</b> (vários com ☑); apaga <b>check-in e check-out do consultor e do gestor</b> na nuvem. Marque <b>⚙ sistema</b> se o erro estiver na matriz (Real do gestor). <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar. Nome <b style="color:var(--ok)">verde</b> = check-out de hoje ok · <b style="color:var(--danger)">vermelho</b> = pendente · borda <b style="color:var(--accent)">superior</b> = check-in ok · borda <b style="color:var(--ok)">inferior</b> = check-out ok. Justificativas longas: arraste <b>⋮⋮</b> na lateral (coluna não alarga).</div>
     </div>
   </section>
 
@@ -2197,7 +2209,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v62"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v63"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4230,7 +4242,10 @@ function renderDiario() {
   if (diarioWeekIdx >= weeks.length) diarioWeekIdx = 0;
   const days = weeks[diarioWeekIdx] || []; const dn = ["DOM","SEG","TER","QUA","QUI","SEX","SÁB"];
 
-  let head = '<thead><tr><th class="name">Indicador</th><th class="neon dio-meta-col">Meta/dia</th>';
+  let cols = '<colgroup><col class="dio-col-name"><col class="dio-col-meta">';
+  days.forEach(() => { cols += '<col class="dio-col-day">'; });
+  cols += '<col class="dio-col-week"><col class="dio-col-week"></colgroup>';
+  let head = cols + '<thead><tr><th class="name">Indicador</th><th class="neon dio-meta-col">Meta/dia</th>';
   days.forEach(d => { head += diarioDayHeadHtml(d, dn); });
   head += '<th class="dio-week-col">Semana</th><th class="dio-week-col">Semana<br><span class="muted" style="font-weight:600;font-size:9px">loja</span></th></tr></thead>';
   let body = "<tbody>";
