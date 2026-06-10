@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v76";
+  var BUILD = "v77";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -1822,10 +1822,15 @@ function clearDailyTombstone(sid, fid, day, m = currentMonth) {
   }
   return false;
 }
-function tombstoneBlocksMerge(sid, fid, dayKey, m, lc) {
+function tombstoneBlocksMerge(sid, fid, dayKey, m, lc, rc) {
   const ts = state.ui?.dailyTombstones?.[dailyTombstoneKey(sid, fid, dayKey, m)];
   if (!ts) return false;
   const localAt = Math.max(cellFieldAt(lc, "plan"), cellFieldAt(lc, "real"));
+  const remoteAt = rc && typeof rc === "object" ? cellLatestAt(rc) : 0;
+  if (remoteAt > ts) {
+    clearDailyTombstone(sid, fid, dayKey, m);
+    return false;
+  }
   if (localAt > ts) {
     clearDailyTombstone(sid, fid, dayKey, m);
     return false;
@@ -2378,7 +2383,8 @@ function mergeDailyFromRemote(remoteMonths) {
             if (diarioPendingOverlay.has(pk)) return;
           }
           if ([...diarioPendingPushes.keys()].some(k => k.includes(`|${sid}|${fid}|${dayKey}|`))) return;
-          if (tombstoneBlocksMerge(sid, fid, dayKey, m, lc)) {
+          const rcPre = remoteDays[day] ?? remoteDays[dayKey];
+          if (tombstoneBlocksMerge(sid, fid, dayKey, m, lc, rcPre)) {
             if (Object.keys(lc).length) {
               delete md.daily[sid][fid][dayKey];
               changed = true;
@@ -2430,7 +2436,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v76"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v77"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -7834,6 +7840,24 @@ function publishAppBuild() {
   if (!fbReady || !fbDb || typeof APP_BUILD === "undefined") return;
   try { fbDb.ref("config/appBuild").set(APP_BUILD); } catch (e) {}
 }
+/** Grava loja na nuvem sem tocar em months/*/daily — check-in/out vive só em pushes granulares (gestor + consultor). */
+function buildLojaPushUpdates(code, st) {
+  const updates = {};
+  const ts = Date.now();
+  updates[`lojas/${code}/name`] = st.storeName || code;
+  updates[`lojas/${code}/code`] = code;
+  updates[`lojas/${code}/updatedAt`] = ts;
+  const data = JSON.parse(JSON.stringify(st));
+  const months = data.months || {};
+  delete data.months;
+  Object.keys(data).forEach(k => { updates[`lojas/${code}/data/${k}`] = data[k]; });
+  Object.keys(months).forEach(m => {
+    const md = { ...months[m] };
+    delete md.daily;
+    Object.keys(md).forEach(mk => { updates[`lojas/${code}/data/months/${m}/${mk}`] = md[mk]; });
+  });
+  return updates;
+}
 function fbPush(opts){
   if (!fbReady || !fbDb || !lojaCode || divisionalMode()) return;
   clearTimeout(fbPushTimer);
@@ -7841,20 +7865,13 @@ function fbPush(opts){
   const delay = opts && opts.immediate ? 0 : 1200;
   fbPushTimer = setTimeout(async () => {
     try {
-      const mergeRemoteDaily = async () => {
+      if (!skipMerge) {
         const snap = await fbDb.ref("lojas/" + lojaCode + "/data/months").once("value");
         const remoteMonths = snap.val();
         if (remoteMonths) mergeDailyFromRemote(remoteMonths);
-      };
-      if (!skipMerge) await mergeRemoteDaily();
-      await mergeRemoteDaily();
+      }
       try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
-      await fbDb.ref("lojas/" + lojaCode).set({
-        name: state.storeName || lojaCode,
-        code: lojaCode,
-        updatedAt: Date.now(),
-        data: JSON.parse(JSON.stringify(state))
-      });
+      await fbDb.ref().update(buildLojaPushUpdates(lojaCode, state));
       publishAppBuild();
     } catch (e) { console.warn("push falhou", e); }
   }, delay);

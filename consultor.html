@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v76";
+  var BUILD = "v77";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -509,7 +509,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v76"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v77"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -521,7 +521,7 @@ let lojaData = null, lojaCode = "", seller = null, lojaListener = null, lojaDail
 let tickTimer = null, lastRenderDay = null, lastTimePhase = null;
 let fieldsEditDepth = 0, renderFieldsQueued = false, lojaListenerTimer = null;
 const fieldSaveTimers = new Map();
-const CONSULTOR_PUSH_DEBOUNCE_MS = 100;
+const CONSULTOR_SAVE_DEBOUNCE_MS = 200;
 const consultorPendingPushes = new Map();
 const consultorMergeGuard = new Map();
 const OFFLINE_QUEUE_LS = "gc_consultor_offline_queue";
@@ -725,7 +725,8 @@ function attachFbConnectionListener() {
   fbDb.ref(".info/connected").on("value", s => {
     const nowConnected = !!(s && s.val());
     if (nowConnected && !wasConnected) {
-      flushAllConsultorCellPushes().then(() => flushOfflineQueue());
+      flushPendingFieldSaves();
+      flushOfflineQueue();
     }
     wasConnected = nowConnected;
     connected = nowConnected;
@@ -998,13 +999,11 @@ async function pushConsultorDailyCell(sellerId, fieldId, day, key, val, month, o
   opts = opts || {};
   const dayKey = String(day);
   if (!seller || !lojaCode) return false;
-  if (!fbReady || !fbDb) {
-    if (!opts.skipOffline) enqueueOfflinePush({ sellerId, fieldId, day: dayKey, key, val, month, confirm: !!opts.confirm });
-    return false;
-  }
-  const base = `lojas/${lojaCode}/data/months/${month}/daily/${sellerId}/${fieldId}/${dayKey}`;
-  const cell = getCell(sellerId, fieldId, dayKey, month);
-  const at = Date.now();
+  if (!fbReady || !fbDb) return false;
+  const storageFieldId = cfg ? dailyStorageFieldId(cfg, key) : (key === "real" ? checkoutFieldId(fieldId) : fieldId);
+  const path = `lojas/${lojaCode}/data/months/${month}/daily/${sellerId}/${storageFieldId}/${dayKey}`;
+  const ref = fbDb.ref(path);
+  const cell = getCell(sellerId, storageFieldId, dayKey, month);
   try {
     if (val === "" || val === null || (typeof val === "number" && isNaN(val))) {
       if (cell[key + "By"] === "gestor" && hasCellValue(cell, key)) return false;
@@ -1013,90 +1012,40 @@ async function pushConsultorDailyCell(sellerId, fieldId, day, key, val, month, o
       delete next[cellConfirmKey(key)];
       const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
       const stillHas = (cfg && hasPlanValue(next, cfg)) || hasCellValue(next, "real") || next.planYes === true || next.planYes === false || (next.planJustif && String(next.planJustif).trim());
-      const updates = { [`lojas/${lojaCode}/updatedAt`]: at };
-      if (!stillHas) updates[base] = null;
+      if (!stillHas) await ref.remove();
       else {
-        updates[`${base}/${key}`] = null;
-        updates[`${base}/${key}By`] = null;
-        updates[`${base}/${key}At`] = null;
-        updates[`${base}/${cellConfirmKey(key)}`] = null;
+        await Promise.all([
+          ref.child(key).remove(),
+          ref.child(key + "By").remove(),
+          ref.child(key + "At").remove(),
+          ref.child(cellConfirmKey(key)).remove(),
+        ]);
       }
-      await fbDb.ref().update(updates);
-      setLocalCell(sellerId, fieldId, dayKey, month, key, null);
-      if (!stillHas) {
-        const md = lojaData.months?.[month];
-        if (md?.daily?.[sellerId]?.[fieldId]) delete md.daily[sellerId][fieldId][dayKey];
-      }
-      clearConfirmLocal(sellerId, fieldId, dayKey, month, key);
-      setLocalCellFlag(sellerId, fieldId, dayKey, month, cellConfirmKey(key), null);
+      setLocalCell(sellerId, storageFieldId, dayKey, month, key, null);
     } else {
-      const updates = {
-        [`${base}/${key}`]: val,
-        [`${base}/${key}By`]: "consultor",
-        [`${base}/${key}At`]: at,
-        [`lojas/${lojaCode}/updatedAt`]: at,
-      };
-      if (opts.confirm) updates[`${base}/${cellConfirmKey(key)}`] = true;
-      await fbDb.ref().update(updates);
-      setLocalCell(sellerId, fieldId, dayKey, month, key, val);
+      const payload = { [key]: val, [key + "By"]: "consultor", [key + "At"]: Date.now() };
+      if (opts.confirm) payload[cellConfirmKey(key)] = true;
+      await ref.update(payload);
+      setLocalCell(sellerId, storageFieldId, dayKey, month, key, val);
       if (opts.confirm) {
-        setLocalCellFlag(sellerId, fieldId, dayKey, month, cellConfirmKey(key), true);
-        persistConfirmLocal(sellerId, fieldId, dayKey, month, key);
+        setLocalCellFlag(sellerId, storageFieldId, dayKey, month, cellConfirmKey(key), true);
+        persistConfirmLocal(sellerId, storageFieldId, dayKey, month, key);
       }
     }
-    releaseConsultorMergeGuard(sellerId, fieldId, dayKey, month);
+    await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
+    armConsultorMergeGuard(sellerId, storageFieldId, dayKey, month);
     return true;
   } catch (e) {
     console.warn("pushConsultorDailyCell", e);
-    if (!opts.skipOffline) enqueueOfflinePush({ sellerId, fieldId, day: dayKey, key, val, month, confirm: !!opts.confirm });
-    if (!opts.silent) toast("Falha ao sincronizar — tentando de novo ao reconectar", true);
     return false;
   }
 }
-function scheduleConsultorCellPush(sellerId, fieldId, day, key, val, month, opts) {
-  const dayKey = String(day);
-  const pk = consultorPushKey(sellerId, fieldId, dayKey, key, month);
-  const prev = consultorPendingPushes.get(pk);
-  if (prev?.timer) clearTimeout(prev.timer);
-  const timer = setTimeout(() => {
-    consultorPendingPushes.delete(pk);
-    pushConsultorDailyCell(sellerId, fieldId, dayKey, key, val, month, opts);
-  }, CONSULTOR_PUSH_DEBOUNCE_MS);
-  consultorPendingPushes.set(pk, { sellerId, fieldId, day: dayKey, key, val, month, opts, timer });
-}
-async function flushConsultorCellPush(sellerId, fieldId, day, key, month, opts) {
-  const dayKey = String(day);
-  const pk = consultorPushKey(sellerId, fieldId, dayKey, key, month);
-  const pending = consultorPendingPushes.get(pk);
-  if (pending?.timer) clearTimeout(pending.timer);
-  consultorPendingPushes.delete(pk);
-  if (pending) return pushConsultorDailyCell(pending.sellerId, pending.fieldId, pending.day, pending.key, pending.val, pending.month, { ...pending.opts, ...opts });
-  const cell = getCell(sellerId, fieldId, dayKey, month);
-  const v = cell[key];
-  return pushConsultorDailyCell(sellerId, fieldId, dayKey, key, v != null && v !== "" ? v : "", month, opts);
-}
-async function flushAllConsultorCellPushes() {
-  const items = [...consultorPendingPushes.values()];
-  consultorPendingPushes.forEach(p => { if (p?.timer) clearTimeout(p.timer); });
-  consultorPendingPushes.clear();
-  await Promise.all(items.map(p => pushConsultorDailyCell(p.sellerId, p.fieldId, p.day, p.key, p.val, p.month, p.opts)));
-}
-function consultorInputChanged(inp) {
-  if (!seller) return;
-  const fieldId = inp.dataset.fid, key = inp.dataset.key;
-  const month = todayISO(), day = todayDay();
-  const val = inp.value.trim();
-  if (val === "") {
-    setLocalCell(seller.id, fieldId, day, month, key, null);
-    armConsultorMergeGuard(seller.id, fieldId, day, month);
-    scheduleConsultorCellPush(seller.id, fieldId, day, key, "", month);
-    return;
-  }
-  const num = Number(val);
-  if (isNaN(num)) return;
-  setLocalCell(seller.id, fieldId, day, month, key, num);
-  armConsultorMergeGuard(seller.id, fieldId, day, month);
-  scheduleConsultorCellPush(seller.id, fieldId, day, key, num, month);
+function flushPendingFieldSaves() {
+  fieldSaveTimers.forEach(timer => clearTimeout(timer));
+  fieldSaveTimers.clear();
+  document.querySelectorAll("input[data-fid]").forEach(inp => {
+    if (inp.value.trim() !== "") saveField(inp);
+  });
 }
 function cellFilledFromDom(cfg, key, cell) {
   if (key === "plan" && cfgOpenQuestion(cfg)) {
@@ -1744,6 +1693,12 @@ function checkoutFieldId(fieldId) {
   const ind = mainIndicatorById(fieldId);
   const sub = ind ? parentRollupHojeSub(ind) : null;
   return sub ? sub.id : fieldId;
+}
+function dailyStorageFieldId(cfg, key) {
+  return key === "real" ? checkoutFieldId(cfg.id) : cfg.id;
+}
+function getDisplayCell(sellerId, cfg, key, day, month) {
+  return getCell(sellerId, dailyStorageFieldId(cfg, key), day, month);
 }
 /** Soma dos check-outs do indicador no período (principal usa sub “hoje” quando existir). */
 function checkoutSum(sellerId, fieldId, days, m = todayISO()) {
@@ -2647,13 +2602,14 @@ function renderFieldsNow() {
   }
   root.innerHTML = fields.map(({ cfg, color, sub }) => {
     const c = getCell(seller.id, cfg.id, day, month);
+    const cOut = getDisplayCell(seller.id, cfg, "real", day, month);
     const needs = consultorFieldNeeds(seller.id, cfg, day, month);
     const hintHtml = consultorCvHint(cfg);
     const metaHtml = consultorMetaSummary(cfg, seller.id, month);
     const planLocked = cellLockedForConsultor(c, "plan", day, month, cfg);
-    const realLocked = cellLockedForConsultor(c, "real", day, month, cfg);
+    const realLocked = cellLockedForConsultor(cOut, "real", day, month, cfg);
     const planMine = cellIsMine(c, "plan", cfg);
-    const realMine = cellIsMine(c, "real", cfg);
+    const realMine = cellIsMine(cOut, "real", cfg);
     const showCheckin = needs.checkin;
     const showCheckout = needs.checkout && consultorCheckoutVisible();
     if (!showCheckin && !showCheckout) return "";
@@ -2675,10 +2631,10 @@ function renderFieldsNow() {
         html += buildOpenQuestionBox(cfg, c, "out", day, month);
       } else {
         const progOut = programacaoRunningHint(seller.id, cfg, month, day);
-        const realSoon = fieldSoonKind(c, "real", day, month, cfg);
-        html += `<div class="dio-box out${realLocked ? " locked" : ""}${realMine && !realLocked ? " mine" : ""}"><div class="dio-lbl">Check-out ${lockLabel(c, "real", day, month, cfg)}</div>`;
+        const realSoon = fieldSoonKind(cOut, "real", day, month, cfg);
+        html += `<div class="dio-box out${realLocked ? " locked" : ""}${realMine && !realLocked ? " mine" : ""}"><div class="dio-lbl">Check-out ${lockLabel(cOut, "real", day, month, cfg)}</div>`;
         if (realSoon) html += soonBannerHtml(realSoon);
-        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="real" data-day="${day}" value="${c.real ?? ""}" placeholder="—" ${realLocked ? "disabled" : ""}>${progOut}${dioSaveFooterHtml(cfg, c, "real", day, month, "Check-out")}</div>`;
+        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="real" data-day="${day}" value="${cOut.real ?? ""}" placeholder="—" ${realLocked ? "disabled" : ""}>${progOut}${dioSaveFooterHtml(cfg, cOut, "real", day, month, "Check-out")}</div>`;
       }
     }
     html += "</div></div>";
@@ -2689,22 +2645,19 @@ function renderFieldsNow() {
       updateProgramacaoRunningHint(inp);
       refreshDioSaveBtn(inp.closest(".dio-box"));
       updateProgress();
-      consultorInputChanged(inp);
       const saveKey = `${inp.dataset.fid}|${inp.dataset.key}`;
       clearTimeout(fieldSaveTimers.get(saveKey));
       fieldSaveTimers.set(saveKey, setTimeout(() => {
         fieldSaveTimers.delete(saveKey);
-        if (!inp.isConnected || inp.disabled || !seller) return;
-        flushConsultorCellPush(seller.id, inp.dataset.fid, todayDay(), inp.dataset.key, todayISO());
-      }, CONSULTOR_PUSH_DEBOUNCE_MS));
+        if (!inp.isConnected || inp.disabled) return;
+        saveField(inp);
+      }, CONSULTOR_SAVE_DEBOUNCE_MS));
     });
     inp.addEventListener("change", () => {
       const saveKey = `${inp.dataset.fid}|${inp.dataset.key}`;
       clearTimeout(fieldSaveTimers.get(saveKey));
       fieldSaveTimers.delete(saveKey);
-      if (!seller) return;
-      consultorInputChanged(inp);
-      flushConsultorCellPush(seller.id, inp.dataset.fid, todayDay(), inp.dataset.key, todayISO());
+      saveField(inp);
     });
     inp.addEventListener("keydown", e => { if (e.key === "Enter") { inp.blur(); } });
     refreshDioSaveBtn(inp.closest(".dio-box"));
@@ -2803,11 +2756,14 @@ async function confirmField(btn) {
 }
 async function saveField(inp, opts) {
   opts = opts || {};
-  if (!seller) return;
+  if (!fbReady || !seller) return;
   const fieldId = inp.dataset.fid, key = inp.dataset.key;
   const month = todayISO(), day = todayDay();
   const val = inp.value.trim();
-  const cell = getCell(seller.id, fieldId, day, month);
+  const storageFieldId = cfg ? dailyStorageFieldId(cfg, key) : (key === "real" ? checkoutFieldId(fieldId) : fieldId);
+  const path = `lojas/${lojaCode}/data/months/${month}/daily/${seller.id}/${storageFieldId}/${day}`;
+  const ref = fbDb.ref(path);
+  const cell = getCell(seller.id, storageFieldId, day, month);
   const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
   try {
     if (val === "") {
@@ -2821,10 +2777,30 @@ async function saveField(inp, opts) {
         updateProgress();
         return;
       }
-      consultorInputChanged(inp);
-      await flushConsultorCellPush(seller.id, fieldId, day, key, month, opts);
+      const next = { ...cell };
+      delete next[key]; delete next[key + "By"]; delete next[key + "At"];
+      delete next[cellConfirmKey(key)];
+      const stillHas = (cfg && hasPlanValue(next, cfg)) || hasCellValue(next, "real") || next.planYes === true || next.planYes === false || (next.planJustif && String(next.planJustif).trim());
+      if (!stillHas) await ref.remove();
+      else {
+        await Promise.all([
+          ref.child(key).remove(),
+          ref.child(key + "By").remove(),
+          ref.child(key + "At").remove(),
+          ref.child(cellConfirmKey(key)).remove(),
+        ]);
+      }
+      setLocalCell(seller.id, storageFieldId, day, month, key, null);
+      if (!stillHas) {
+        const md = lojaData.months?.[month];
+        if (md?.daily?.[seller.id]?.[storageFieldId]) delete md.daily[seller.id][storageFieldId][day];
+      }
+      clearConfirmLocal(seller.id, storageFieldId, day, month, key);
+      setLocalCellFlag(seller.id, storageFieldId, day, month, cellConfirmKey(key), null);
+      await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
+      armConsultorMergeGuard(seller.id, storageFieldId, day, month);
       if (opts.confirm) toast("Campo limpo");
-      else patchConsultorFieldInputs();
+      scheduleRenderFields();
       return;
     }
     const num = Number(val);
@@ -2850,24 +2826,29 @@ async function saveField(inp, opts) {
       scheduleRenderFields();
       return;
     }
-    setLocalCell(seller.id, fieldId, day, month, key, num);
-    armConsultorMergeGuard(seller.id, fieldId, day, month);
-    const ok = await flushConsultorCellPush(seller.id, fieldId, day, key, month, opts);
+    const payload = { [key]: num, [key + "By"]: "consultor", [key + "At"]: Date.now() };
+    if (opts.confirm) payload[cellConfirmKey(key)] = true;
+    await ref.update(payload);
+    setLocalCell(seller.id, storageFieldId, day, month, key, num);
+    if (opts.confirm) {
+      setLocalCellFlag(seller.id, storageFieldId, day, month, cellConfirmKey(key), true);
+      persistConfirmLocal(seller.id, storageFieldId, day, month, key);
+    }
+    await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
+    armConsultorMergeGuard(seller.id, storageFieldId, day, month);
     const slot = opts.slotLabel || (key === "real" ? "Check-out" : "Check-in");
     if (opts.confirm) {
-      if (ok) toast(`${slot} salvo · travado`);
-      else toast("Salvo localmente · sincroniza ao reconectar", !ok);
+      toast(`${slot} salvo · travado`);
       patchDioBoxAfterConfirm(fieldId, key, day, month);
       if (key === "plan") refreshOpenCrossAll();
-    } else if (!ok) {
-      toast("Salvo localmente · sincroniza ao reconectar", true);
     } else {
       refreshDioSaveBtn(inp.closest(".dio-box"));
       updateProgress();
     }
   } catch (e) {
     console.warn(e);
-    toast("Erro ao salvar. Verifique a conexão.", true);
+    enqueueOfflinePush({ sellerId: seller.id, fieldId: storageFieldId, day: String(day), key, val: val === "" ? "" : Number(val), month, confirm: !!opts.confirm });
+    toast("Sem conexão — salvo local, sincroniza ao reconectar", true);
   }
 }
 function detachLojaListeners() {
@@ -3061,10 +3042,10 @@ document.getElementById("btnResumo").onclick = () => openResumo();
 document.getElementById("resumoClose").onclick = () => closeResumo();
 document.getElementById("resumoOverlay").onclick = e => { if (e.target.id === "resumoOverlay") closeResumo(); };
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden" && seller) flushAllConsultorCellPushes();
+  if (document.visibilityState === "hidden" && seller) flushPendingFieldSaves();
 });
 document.getElementById("btnLogout").onclick = () => {
-  flushAllConsultorCellPushes();
+  flushPendingFieldSaves();
   detachLojaListeners();
   stopTickLoop();
   closeResumo();
