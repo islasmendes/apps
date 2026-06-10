@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v69";
+  var BUILD = "v70";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2143,19 +2143,79 @@ function allFields() { const arr = []; orderedIndicators().forEach(ind => { arr.
 function cfgById(id) { for (const ind of state.indicators) { if (ind.id === id) return ind; for (const s of (ind.subs || [])) if (s.id === id) return s; } return null; }
 
 /* Dados diários */
-function getCell(sellerId, fieldId, day, m = currentMonth) { const md = monthData(m); return (md.daily[sellerId] && md.daily[sellerId][fieldId] && md.daily[sellerId][fieldId][day]) || {}; }
+let diarioEditDepth = 0;
+const diarioPendingOverlay = new Map();
+let diarioCellPushTimer = null;
+function diarioPendingKey(sellerId, fieldId, day, m = currentMonth) {
+  return `${m}|${sellerId}|${fieldId}|${day}`;
+}
+function getCell(sellerId, fieldId, day, m = currentMonth) {
+  const md = monthData(m);
+  const dayKey = String(day);
+  return (md.daily[sellerId] && md.daily[sellerId][fieldId] && md.daily[sellerId][fieldId][dayKey]) ||
+    (md.daily[sellerId] && md.daily[sellerId][fieldId] && md.daily[sellerId][fieldId][day]) || {};
+}
+function diarioCellForRender(sellerId, fieldId, day, m = currentMonth) {
+  const base = { ...getCell(sellerId, fieldId, day, m) };
+  const pending = diarioPendingOverlay.get(diarioPendingKey(sellerId, fieldId, day, m));
+  if (pending) Object.assign(base, pending);
+  return base;
+}
+function isDiarioEditing() {
+  return diarioEditDepth > 0 || !!document.querySelector("#diarioTable .cellinput:focus");
+}
+async function pushGestorDailyCell(sellerId, fieldId, day, key, val, m = currentMonth) {
+  if (!fbReady || !fbDb || !lojaCode || divisionalMode()) return false;
+  const path = `lojas/${lojaCode}/data/months/${m}/daily/${sellerId}/${fieldId}/${day}`;
+  const ref = fbDb.ref(path);
+  try {
+    if (val === "" || val === null || isNaN(val)) {
+      const snap = await ref.once("value");
+      const cell = snap.val() || {};
+      const next = { ...cell };
+      delete next[key]; delete next[key + "By"]; delete next[key + "At"];
+      const ck = key === "plan" ? "planConfirm" : key === "real" ? "realConfirm" : null;
+      if (ck) delete next[ck];
+      if (!Object.keys(next).length) await ref.remove();
+      else await ref.update({ [key]: null, [key + "By"]: null, [key + "At"]: null, ...(ck ? { [ck]: null } : {}) });
+    } else {
+      await ref.update({ [key]: val, [key + "By"]: "gestor", [key + "At"]: Date.now() });
+    }
+    await fbDb.ref(`lojas/${lojaCode}`).update({ updatedAt: Date.now() });
+    return true;
+  } catch (e) {
+    console.warn("pushGestorDailyCell", e);
+    return false;
+  }
+}
+function scheduleGestorDailyCellPush(sellerId, fieldId, day, key, val, m = currentMonth) {
+  clearTimeout(diarioCellPushTimer);
+  diarioCellPushTimer = setTimeout(() => {
+    pushGestorDailyCell(sellerId, fieldId, day, key, val, m);
+  }, 280);
+}
 function setCell(sellerId, fieldId, day, key, val, m = currentMonth) {
+  const dayKey = String(day);
   const md = monthData(m);
   md.daily[sellerId] = md.daily[sellerId] || {};
   md.daily[sellerId][fieldId] = md.daily[sellerId][fieldId] || {};
-  const cell = md.daily[sellerId][fieldId][day] || {};
-  md.daily[sellerId][fieldId][day] = cell;
+  const cell = md.daily[sellerId][fieldId][dayKey] || md.daily[sellerId][fieldId][day] || {};
+  md.daily[sellerId][fieldId][dayKey] = cell;
+  if (md.daily[sellerId][fieldId][day] && dayKey !== String(day)) delete md.daily[sellerId][fieldId][day];
+  const pk = diarioPendingKey(sellerId, fieldId, day, m);
+  const overlay = diarioPendingOverlay.get(pk) || {};
   if (val === "" || val === null || isNaN(val)) {
     delete cell[key]; delete cell[key + "By"]; delete cell[key + "At"];
+    delete overlay[key]; delete overlay[key + "By"]; delete overlay[key + "At"];
   } else {
-    cell[key] = val; cell[key + "By"] = "gestor"; cell[key + "At"] = Date.now();
+    const at = Date.now();
+    cell[key] = val; cell[key + "By"] = "gestor"; cell[key + "At"] = at;
+    overlay[key] = val; overlay[key + "By"] = "gestor"; overlay[key + "At"] = at;
   }
-  save({ skipPush: true, skipConfigPush: true });
+  if (Object.keys(overlay).length) diarioPendingOverlay.set(pk, overlay);
+  else diarioPendingOverlay.delete(pk);
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+  scheduleGestorDailyCellPush(sellerId, fieldId, dayKey, key, val, m);
   if (typeof fbPush === "function") fbPush({ skipMerge: true });
 }
 function cellSourceTag(cell, key) {
@@ -2214,33 +2274,43 @@ function mergeCellFromRemote(lc, rc) {
 function mergeDailyFromRemote(remoteMonths) {
   if (!remoteMonths || typeof remoteMonths !== "object") return false;
   let changed = false;
-  Object.keys(remoteMonths).forEach(m => {
-    const remoteDaily = remoteMonths[m]?.daily;
-    if (!remoteDaily) return;
+  const monthKeys = new Set([...Object.keys(state.months || {}), ...Object.keys(remoteMonths)]);
+  monthKeys.forEach(m => {
     const md = monthData(m);
-    Object.keys(remoteDaily).forEach(sid => {
-      Object.keys(remoteDaily[sid] || {}).forEach(fid => {
-        const remoteDays = remoteDaily[sid][fid] || {};
-        const localDays = md.daily[sid]?.[fid] || {};
+    const remoteDaily = remoteMonths[m]?.daily || {};
+    const localDaily = md.daily || {};
+    const allSellers = new Set([...Object.keys(remoteDaily), ...Object.keys(localDaily)]);
+    allSellers.forEach(sid => {
+      const allFields = new Set([...Object.keys(remoteDaily[sid] || {}), ...Object.keys(localDaily[sid] || {})]);
+      allFields.forEach(fid => {
+        const remoteDays = remoteDaily[sid]?.[fid] || {};
+        const localDays = localDaily[sid]?.[fid] || {};
         const allDays = new Set([...Object.keys(remoteDays), ...Object.keys(localDays)]);
         allDays.forEach(day => {
-          if (isDailyTombstoned(sid, fid, day, m)) {
-            if (md.daily[sid]?.[fid]?.[day]) {
-              delete md.daily[sid][fid][day];
+          const dayKey = String(day);
+          if (isDailyTombstoned(sid, fid, dayKey, m)) {
+            if (md.daily[sid]?.[fid]?.[dayKey]) {
+              delete md.daily[sid][fid][dayKey];
               changed = true;
             }
+            diarioPendingOverlay.delete(diarioPendingKey(sid, fid, dayKey, m));
             return;
           }
-          const rc = remoteDays[day];
-          const hadLocal = localDays[day];
+          const rc = remoteDays[day] ?? remoteDays[dayKey];
+          const hadLocal = localDays[dayKey] ?? localDays[day];
           if (rc == null) return;
           if (typeof rc !== "object") return;
+          if (isDiarioEditing()) {
+            const pk = diarioPendingKey(sid, fid, dayKey, m);
+            if (diarioPendingOverlay.has(pk)) return;
+          }
           md.daily[sid] = md.daily[sid] || {};
           md.daily[sid][fid] = md.daily[sid][fid] || {};
-          const lc = { ...(hadLocal || {}) };
-          if (mergeCellFromRemote(lc, rc)) {
-            if (Object.keys(lc).length) md.daily[sid][fid][day] = lc;
-            else delete md.daily[sid][fid][day];
+          const lc = md.daily[sid][fid][dayKey] || {};
+          md.daily[sid][fid][dayKey] = lc;
+          if (mergeCellFromRemote(lc, rc)) changed = true;
+          if (!Object.keys(lc).length) {
+            delete md.daily[sid][fid][dayKey];
             changed = true;
           }
         });
@@ -2269,15 +2339,16 @@ function startLojaDataListener() {
   fbDb.ref(path).on("value", snap => {
     clearTimeout(lojaMergeTimer);
     lojaMergeTimer = setTimeout(() => {
-      if (mergeDailyFromRemote(snap.val())) {
-        clearTimeout(fbPushTimer);
-        save({ skipPush: true });
-        renderActive();
-      }
+      const changed = mergeDailyFromRemote(snap.val());
+      if (!changed) return;
+      try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+      if (activeView === "diario" && isDiarioEditing()) return;
+      if (activeView === "diario") renderDiario();
+      else renderActive();
     }, 450);
   });
 }
-const APP_BUILD = "v69"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v70"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4352,6 +4423,7 @@ function renderDiarioSellerBar(sellers) {
   });
 }
 function renderDiario() {
+  if (!isDiarioEditing()) diarioPendingOverlay.clear();
   const sellers = orderedSellers();
   const bar = document.getElementById("diarioSellerBar");
   if (!sellers.length) {
@@ -4392,6 +4464,16 @@ function renderDiario() {
   body += "</tbody>";
   const table = document.getElementById("diarioTable"); table.innerHTML = head + body;
   table.querySelectorAll(".cellinput").forEach(inp => {
+    inp.addEventListener("focus", () => { diarioEditDepth++; });
+    inp.addEventListener("blur", () => {
+      diarioEditDepth = Math.max(0, diarioEditDepth - 1);
+      const pk = diarioPendingKey(diarioSeller, inp.dataset.field, +inp.dataset.day);
+      setTimeout(() => {
+        if (!document.querySelector("#diarioTable .cellinput:focus")) {
+          diarioPendingOverlay.delete(pk);
+        }
+      }, 120);
+    });
     inp.addEventListener("input", () => {
       if (inp.readOnly) return;
       const raw = inp.value.trim();
@@ -4507,7 +4589,7 @@ function diarioRow(cfg, color, isSub) {
     const needs = diarioFieldNeeds(diarioSeller, cfg, d);
     const editable = diarioDayEditable(d);
     const ro = editable ? "" : ' readonly tabindex="-1"';
-    const c = getCell(diarioSeller, cfg.id, d);
+    const c = diarioCellForRender(diarioSeller, cfg.id, d);
     const progHint = programacaoDiarioCellHint(diarioSeller, cfg, d);
     let cell = '<div class="daycell">';
     if (needs.checkin) {
