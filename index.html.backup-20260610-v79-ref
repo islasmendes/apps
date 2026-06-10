@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v80";
+  var BUILD = "v79";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2318,17 +2318,7 @@ function mergeCellFromRemote(lc, rc) {
   const dataKeys = ["plan", "real", "planYes", "planJustif"];
   const metaKeys = ["planBy", "realBy", "planAt", "realAt", "planConfirm", "realConfirm"];
   dataKeys.forEach(k => {
-    if (!Object.prototype.hasOwnProperty.call(rc, k)) {
-      if (Object.prototype.hasOwnProperty.call(lc, k) && lc[k + "By"] === "consultor") {
-        delete lc[k];
-        if (lc[k + "By"]) delete lc[k + "By"];
-        if (lc[k + "At"]) delete lc[k + "At"];
-        const ck = k === "plan" ? "planConfirm" : k === "real" ? "realConfirm" : null;
-        if (ck && lc[ck]) delete lc[ck];
-        cellChanged = true;
-      }
-      return;
-    }
+    if (!Object.prototype.hasOwnProperty.call(rc, k)) return;
     if (rc[k] === null || rc[k] === "") {
       const remoteAt = cellFieldAt(rc, k);
       const localAt = cellFieldAt(lc, k);
@@ -2403,16 +2393,7 @@ function mergeDailyFromRemote(remoteMonths) {
             return;
           }
           const rc = remoteDays[day] ?? remoteDays[dayKey];
-          if (rc == null) {
-            if (Object.keys(lc).length) {
-              const gestorBlocks = (lc.planBy === "gestor" && hasCellValue(lc, "plan")) || (lc.realBy === "gestor" && hasCellValue(lc, "real"));
-              if (!gestorBlocks) {
-                delete md.daily[sid][fid][dayKey];
-                changed = true;
-              }
-            }
-            return;
-          }
+          if (rc == null) return;
           if (typeof rc !== "object") return;
           if (localCellWinsMerge(lc, rc)) return;
           if (mergeCellFromRemote(lc, rc)) changed = true;
@@ -2455,7 +2436,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v80"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v79"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
