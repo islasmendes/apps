@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v83";
+  var BUILD = "v84";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -330,6 +330,12 @@
   .acur-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; font-size: 11.5px; color: var(--text-dim); }
   .acur-legend i { display: inline-flex; align-items: center; gap: 5px; font-style: normal; }
   .acur-legend .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .acur-adh { font-size: 11px; line-height: 1.35; text-align: center; min-width: 108px; }
+  .acur-adh-labels { display: flex; justify-content: center; gap: 4px 8px; font-size: 9px; text-transform: uppercase; letter-spacing: .25px; color: var(--text-faint); font-weight: 700; margin-bottom: 3px; }
+  .acur-adh-labels span { flex: 1; min-width: 0; }
+  .acur-adh-vals { display: flex; justify-content: center; align-items: center; gap: 4px 6px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .acur-adh-vals > span:not(.acur-adh-sep) { flex: 1; min-width: 0; }
+  .acur-adh-sep { color: var(--text-faint); font-weight: 500; flex: none !important; }
   /* Seller chips */
   .seller-chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .seller-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 99px; padding: 5px 6px 5px 12px; transition: .15s; }
@@ -765,11 +771,11 @@
     </div>
     <div class="panel">
       <div class="flex-between">
-        <div><h2>Acuracidade do Relato</h2><div class="sub">Auditoria do mês: check-in (plano) · check-out (relato) × sistema. Clique no <b>nome</b> aqui para ver a auditoria; use <b>⚙ Lançamento do Sistema</b> (ou o nome na matriz) para lançar o número real do gestor.</div></div>
+        <div><h2>Acuracidade do Relato</h2><div class="sub">Relato do CV (check-out acumulado) × lançamento do gestor ⚙ por <b>indicador principal</b>. Só aparecem colunas com ⚙ lançado. Clique no <b>nome</b> para auditoria detalhada.</div></div>
       </div>
       <div class="table-wrap" style="margin-top:6px;"><table id="acuracidadeTable"></table></div>
       <div class="acur-legend" id="acurLegend"></div>
-      <div class="hint" style="margin-top:10px;">Só entram indicadores com <b>lançamento do gestor (sistema ⚙)</b> na matriz, para os vendedores do filtro atual. O número com ⚙ na matriz é o sistema; sem ⚙, o Real vem só do check-out. <b>Aderência</b> = dias encerrados na escala com check-in e check-out completos ÷ dias encerrados (igual ao app do consultor).</div>
+      <div class="hint" style="margin-top:10px;"><b>Acuracidade</b> = quanto o check-out acumulado do CV “bate” com o ⚙ do gestor (quanto maior, melhor). Não usa a soma da matriz — compara relato puro × sistema. <b>Aderência</b> = na escala do mês: Completo | Check-in | Check-out (dias ok ÷ dias na escala).</div>
     </div>
   </section>
 
@@ -2474,7 +2480,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v83"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v84"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4164,7 +4170,8 @@ function acuracidadeFieldList() {
   const fields = [];
   state.indicators.forEach(ind => {
     if (ind.pctOnly) { (ind.rates||[]).forEach(r => { if (r.manual) fields.push({ id: "rate:"+r.id, rateId: r.id, name: r.name, color: ind.color, sub: false, rate: true }); }); return; }
-    if (ind.checkout) fields.push({ id: ind.id, name: ind.name, color: ind.color, sub: false, rate: false });
+    const hasCo = ind.checkout || (ind.subs || []).some(s => s.checkout);
+    if (hasCo) fields.push({ id: ind.id, name: ind.name, color: ind.color, sub: false, rate: false });
   });
   return fields;
 }
@@ -4172,15 +4179,13 @@ function fieldHasSistema(sellerId, f, m = currentMonth) {
   if (f.rate) return getSystemRate(sellerId, f.rateId, m) != null;
   return getSystem(sellerId, f.id, m) != null;
 }
-/** Coluna na acuracidade: gestor lançou ⚙ e há comparação real (sistema ≠ 0 ou relato no mês). Evita coluna fantasma com 0/0. */
+/** Célula/coluna na acuracidade: só quando o gestor lançou ⚙ para este vendedor. */
 function acurFieldActive(sellerId, f, days, m = currentMonth) {
-  if (!fieldHasSistema(sellerId, f, m)) return false;
-  if (f.rate) return true;
-  const sys = getSystem(sellerId, f.id, m);
-  if (sys == null) return false;
-  if (Number(sys) !== 0) return true;
-  const rel = checkoutSum(sellerId, f.id, days, m);
-  return rel != null && rel !== 0;
+  return fieldHasSistema(sellerId, f, m);
+}
+/** Relato na acuracidade: check-out acumulado do CV (indicador principal — rollup do sub quando houver). */
+function acurRelatoSum(sellerId, fieldId, days, m = currentMonth) {
+  return checkoutSum(sellerId, fieldId, days, m);
 }
 function acuracidadeVisibleFields(sellers, allFields, days) {
   const d = days || monthDays();
@@ -4190,28 +4195,25 @@ function acuracidadeVisibleFields(sellers, allFields, days) {
 }
 function acurTipRelato(f, rel, sys, acc) {
   const lines = [
-    (f.sub ? "↳ " : "") + f.name,
-    "Relato (check-out): " + (rel != null ? fmt(rel) : "—"),
-    "Sistema (gestor ⚙): " + (sys != null ? fmt(sys) : "—"),
+    matrizDisplayName(f.name) + " (indicador principal)",
+    "Relato CV (check-out acumulado): " + (rel != null ? fmt(rel) : "—"),
+    "Gestor ⚙ (lançamento): " + (sys != null ? fmt(sys) : "—"),
   ];
   if (sys != null && acc != null) {
-    lines.push("Acuracidade: " + pctTxt(acc) + (acc >= 0.95 ? " · excelente" : acc >= 0.5 ? " · atenção" : " · distante do sistema"));
+    lines.push("Acuracidade: " + pctTxt(acc) + (acc >= 0.95 ? " · excelente" : acc >= 0.5 ? " · atenção" : " · distante do gestor"));
     if (sys > 0 && rel != null) {
       const desv = Math.abs(rel - sys);
-      lines.push("Desvio: " + fmt(desv) + " (" + pctTxt(desv / sys) + " do sistema)");
-    } else if (sys === 0) lines.push("Sistema = 0 · relato " + (rel === 0 ? "bate" : "diverge"));
+      lines.push("Desvio: " + fmt(desv) + " (" + pctTxt(desv / sys) + " do gestor)");
+    } else if (sys === 0) lines.push("Gestor = 0 · relato " + (rel === 0 ? "bate" : "diverge"));
   }
   return lines.join("\n");
 }
 function acurRelatoCellHtml(sellerId, f, days) {
   const sys = getSystem(sellerId, f.id);
   if (sys == null) {
-    const rel = accum(sellerId, f.id, "real", days);
-    const tip = (f.sub ? "↳ " : "") + f.name + "\nSem lançamento sistema ⚙ deste vendedor." +
-      (rel != null ? "\nRelato na matriz (" + fmt(rel) + ") vem só do check-out — use ⚙ Lançamento do Sistema." : "\nUse ⚙ Lançamento do Sistema na matriz.");
-    return `<td class="relato muted"${matrizTipData(tip, f.color)}>—</td>`;
+    return `<td class="relato muted"${matrizTipData(matrizDisplayName(f.name) + "\nSem lançamento ⚙ do gestor para este vendedor.", f.color)}>—</td>`;
   }
-  const rel = checkoutSum(sellerId, f.id, days);
+  const rel = acurRelatoSum(sellerId, f.id, days);
   const acc = fieldAccuracy(sellerId, f.id, days);
   const accColor = acc != null ? heatText(acc) : "var(--text-faint)";
   const relDisp = rel != null ? fmt(rel) : "—";
@@ -4227,18 +4229,48 @@ function renderAcurLegend(targetId) {
   const el = document.getElementById(targetId || "acurLegend");
   if (!el) return;
   el.innerHTML =
-    `<i><span class="sw" style="background:var(--danger)"></span> Relato / % distantes do sistema</i>` +
+    `<i><span class="sw" style="background:var(--danger)"></span> Acuracidade baixa (&lt;50%)</i>` +
     `<i><span class="sw" style="background:var(--warn)"></span> Atenção (50–94%)</i>` +
     `<i><span class="sw" style="background:var(--ok)"></span> Acurado (≥95%)</i>` +
-    `<i><span class="heat matriz-from-sys matriz-real acur-sys" style="padding:1px 5px;font-size:10px;min-width:0">24</span> Valor sistema ⚙ (gestor)</i>` +
-    `<i><span class="muted">—</span> Sem ⚙ = relato só do check-out, não entra na comparação</i>`;
+    `<i><span class="heat matriz-from-sys matriz-real acur-sys" style="padding:1px 5px;font-size:10px;min-width:0">24</span> Gestor ⚙</i>` +
+    `<i><span class="muted">—</span> Sem ⚙ do gestor = coluna oculta</i>`;
 }
 function fieldAccuracy(sellerId, fieldId, days) {
   const sys = getSystem(sellerId, fieldId);
   if (sys == null) return null;
-  const r = checkoutSum(sellerId, fieldId, days) ?? 0;
+  const r = acurRelatoSum(sellerId, fieldId, days) ?? 0;
   if (sys > 0) return Math.max(0, 1 - Math.abs(r - sys) / sys);
   return r === 0 ? 1 : 0;
+}
+function acurAdherenciaCellHtml(disc) {
+  if (!disc || !disc.scheduled) return `<td class="acur-adh muted">—</td>`;
+  const den = disc.scheduled;
+  const tip = `${disc.scheduled} dia(s) na escala do mês\n` +
+    `${disc.closed} encerrado(s) até ontem\n` +
+    `Completo (check-in + check-out): ${disc.complete}/${den}\n` +
+    `Check-in ok: ${disc.checkinDays}/${den}\n` +
+    `Check-out ok: ${disc.checkoutDays}/${den}`;
+  const col = disc.pct != null ? heatText(disc.pct) : "var(--text-dim)";
+  return `<td class="acur-adh"${matrizTipData(tip, "var(--accent-2)")}>` +
+    `<div class="acur-adh-labels"><span>Completo</span><span>Check-in</span><span>Check-out</span></div>` +
+    `<div class="acur-adh-vals" style="color:${col}">` +
+    `<span>${disc.complete}/${den}</span><span class="acur-adh-sep">|</span>` +
+    `<span>${disc.checkinDays}/${den}</span><span class="acur-adh-sep">|</span>` +
+    `<span>${disc.checkoutDays}/${den}</span></div></td>`;
+}
+function acurAdherenciaEquipeHtml(discAgg) {
+  if (!discAgg || !discAgg.scheduled) return `<td class="acur-adh muted">—</td>`;
+  const den = discAgg.scheduled;
+  const tip = `Equipe · ${den} dia(s) na escala (soma)\n` +
+    `Completo: ${discAgg.complete}/${den}\nCheck-in: ${discAgg.checkinDays}/${den}\nCheck-out: ${discAgg.checkoutDays}/${den}`;
+  const pct = den ? discAgg.complete / den : null;
+  const col = pct != null ? heatText(pct) : "var(--text-dim)";
+  return `<td class="acur-adh"${matrizTipData(tip, "var(--accent-2)")}>` +
+    `<div class="acur-adh-labels"><span>Completo</span><span>Check-in</span><span>Check-out</span></div>` +
+    `<div class="acur-adh-vals" style="color:${col}">` +
+    `<span>${discAgg.complete}/${den}</span><span class="acur-adh-sep">|</span>` +
+    `<span>${discAgg.checkinDays}/${den}</span><span class="acur-adh-sep">|</span>` +
+    `<span>${discAgg.checkoutDays}/${den}</span></div></td>`;
 }
 function acurEquipeMetrics(sellerIds, fields, days) {
   let accSum = 0, accN = 0;
@@ -4247,14 +4279,17 @@ function acurEquipeMetrics(sellerIds, fields, days) {
     const t = arvAcurTotalsForSellers(sellerIds, f, days);
     if (t.acc != null) { accSum += t.acc; accN++; }
   });
-  let complete = 0, closed = 0;
+  let complete = 0, closed = 0, scheduled = 0, checkinDays = 0, checkoutDays = 0;
   sellerIds.forEach(sid => {
     const d = consultantDisciplineDetails(sid);
     complete += d.complete;
     closed += d.closed;
+    scheduled += d.scheduled;
+    checkinDays += d.checkinDays;
+    checkoutDays += d.checkoutDays;
   });
-  const ader = closed ? complete / closed : null;
-  return { acc: accN ? accSum / accN : null, ader, disc: { complete, closed } };
+  const ader = scheduled ? complete / scheduled : null;
+  return { acc: accN ? accSum / accN : null, ader, disc: { complete, closed, scheduled, checkinDays, checkoutDays } };
 }
 function acurEquipeRowHtml(sellerIds, fields, days) {
   if (!sellerIds.length || !fields.length) return "";
@@ -4262,12 +4297,11 @@ function acurEquipeRowHtml(sellerIds, fields, days) {
   let row = `<tr class="acur-equipe" style="font-weight:800; background:var(--panel-2);"><td class="name">⌀ Equipe</td>`;
   fields.forEach(f => {
     const t = arvAcurTotalsForSellers(sellerIds, f, days);
-    row += arvAcurAggregateCellHtml(f, t.rel, t.sys, t.acc, "Total da equipe — soma relato × sistema ⚙");
+    row += arvAcurAggregateCellHtml(f, t.rel, t.sys, t.acc, "Total da equipe — relato CV × gestor ⚙");
   });
   row += `<td style="color:${heatText(m.acc)};font-weight:700;"${m.acc != null ? matrizTipData("Média de acuracidade da equipe\n" + pctTxt(m.acc), "var(--accent)") : ""}>${m.acc == null ? "—" : pctTxt(m.acc)}</td>`;
-  const aderDisp = m.ader == null ? "—" : pctTxt(m.ader) + (m.disc?.closed ? ` · ${m.disc.complete}/${m.disc.closed}` : "");
-  const aderTip = m.disc?.closed ? `${m.disc.complete} de ${m.disc.closed} dias completos (equipe)` : "";
-  row += `<td style="color:${heatText(m.ader)};font-weight:700;"${aderTip ? matrizTipData(aderTip, "var(--accent-2)") : ""}>${aderDisp}</td></tr>`;
+  row += acurAdherenciaEquipeHtml(m.disc);
+  row += "</tr>";
   return row;
 }
 function renderAcuracidade() {
@@ -4284,10 +4318,10 @@ function renderAcuracidade() {
     fields.forEach(f => {
       const disp = escapeHtml(matrizDisplayName(f.name));
       const tipExtra = f.name !== matrizDisplayName(f.name) ? f.name + "\n" : "";
-      head += `<th${f.sub?' style="color:var(--accent-2)"':''}${matrizTipData(tipExtra + "Coluna visível: algum vendedor do filtro atual tem sistema ⚙ lançado.\nRelato / Sistema / Acuracidade", f.color)}>${f.sub?'↳ ':''}${disp}<br><span class="muted" style="font-weight:600">relato · sis · %</span></th>`;
+      head += `<th${matrizTipData(tipExtra + "Indicador principal · coluna visível se algum vendedor do filtro tem ⚙ do gestor.\nRelato CV / Gestor / %", f.color)}>${disp}<br><span class="muted" style="font-weight:600">relato · gestor · %</span></th>`;
     });
   }
-  head += '<th>Acurac.</th><th>Aderência<br><span class="muted" style="font-weight:600">escala · dias</span></th></tr></thead>';
+  head += '<th>Acurac.</th><th>Aderência<br><span class="muted" style="font-weight:600">completo · check-in · check-out</span></th></tr></thead>';
   let body = "<tbody>";
   if (!sellers.length) {
     body += `<tr><td class="empty" colspan="${Math.max(fields.length, 1) + 3}">Nenhum vendedor no filtro.</td></tr>`;
@@ -4298,10 +4332,9 @@ function renderAcuracidade() {
       const m = sellerMetrics(s.id);
       body += `<tr data-seller="${s.id}"><td class="name seller-link" title="Ver auditoria detalhada">${s.name}</td>`;
       fields.forEach(f => { body += acurRelatoCellHtml(s.id, f, days); });
-      body += `<td style="color:${heatText(m.acc)}; font-weight:700;"${m.acc != null ? matrizTipData("Média de acuracidade nos indicadores com sistema ⚙\n" + pctTxt(m.acc), "var(--accent)") : ""}>${m.acc==null?'—':pctTxt(m.acc)}</td>`;
-      const aderTip = m.disc ? `${m.disc.complete} de ${m.disc.closed} dias encerrados na escala com check-in e check-out completos\n${m.disc.scheduled} dias na escala do mês\nAderência ${pctTxt(m.ader)}` : "";
-      const aderDisp = m.ader == null ? "—" : pctTxt(m.ader) + (m.disc?.closed ? ` · ${m.disc.complete}/${m.disc.closed}` : "");
-      body += `<td style="color:${heatText(m.ader)}; font-weight:700;"${aderTip ? matrizTipData(aderTip, "var(--accent-2)") : ""}>${aderDisp}</td></tr>`;
+      body += `<td style="color:${heatText(m.acc)}; font-weight:700;"${m.acc != null ? matrizTipData("Média de acuracidade (relato CV × gestor ⚙)\n" + pctTxt(m.acc), "var(--accent)") : ""}>${m.acc==null?'—':pctTxt(m.acc)}</td>`;
+      body += acurAdherenciaCellHtml(m.disc);
+      body += "</tr>";
     });
     if (!hasFilter) body += acurEquipeRowHtml(sellers.map(s => s.id), fields, days);
   }
@@ -4359,7 +4392,7 @@ function arvAcurTotalsForSellers(sellerIds, f, days) {
     if (!acurFieldActive(sid, f, days)) return;
     const sys = getSystem(sid, fieldId);
     sysSum += sys;
-    relSum += checkoutSum(sid, fieldId, days) ?? 0;
+    relSum += acurRelatoSum(sid, fieldId, days) ?? 0;
     n++;
   });
   if (!n) return { sys: null, rel: null, acc: null };
@@ -4384,7 +4417,7 @@ function arvTotalAcurCellHtml(lojas, fTpl, days) {
       arvTeamSellerIds(L).forEach(sid => {
         if (!acurFieldActive(sid, f, days)) return;
         sysSum += getSystem(sid, f.id);
-        relSum += checkoutSum(sid, f.id, days) ?? 0;
+        relSum += acurRelatoSum(sid, f.id, days) ?? 0;
         n++;
       });
     });
@@ -4403,24 +4436,28 @@ function arvLojaMetrics(loja, days, fields) {
       const t = arvAcurTotalsForSellers(ids, f, days);
       if (t.acc != null) { accSum += t.acc; accN++; }
     });
-    let complete = 0, closed = 0, scheduled = 0;
+    let complete = 0, closed = 0, scheduled = 0, checkinDays = 0, checkoutDays = 0;
     ids.forEach(sid => {
       const d = consultantDisciplineDetails(sid);
       complete += d.complete; closed += d.closed; scheduled += d.scheduled;
+      checkinDays += d.checkinDays; checkoutDays += d.checkoutDays;
     });
-    const ader = closed ? complete / closed : null;
-    return { acc: accN ? accSum / accN : null, ader, disc: { complete, closed, scheduled } };
+    const ader = scheduled ? complete / scheduled : null;
+    return { acc: accN ? accSum / accN : null, ader, disc: { complete, closed, scheduled, checkinDays, checkoutDays } };
   });
 }
 function arvTotalMetrics(lojas, days, fields) {
-  let accSum = 0, accN = 0, complete = 0, closed = 0, scheduled = 0;
+  let accSum = 0, accN = 0, complete = 0, closed = 0, scheduled = 0, checkinDays = 0, checkoutDays = 0;
   lojas.forEach(L => {
     const m = arvLojaMetrics(L, days, fields);
     if (m.acc != null) { accSum += m.acc; accN++; }
-    if (m.disc) { complete += m.disc.complete; closed += m.disc.closed; scheduled += m.disc.scheduled; }
+    if (m.disc) {
+      complete += m.disc.complete; closed += m.disc.closed; scheduled += m.disc.scheduled;
+      checkinDays += m.disc.checkinDays; checkoutDays += m.disc.checkoutDays;
+    }
   });
-  const ader = closed ? complete / closed : null;
-  return { acc: accN ? accSum / accN : null, ader, disc: { complete, closed, scheduled } };
+  const ader = scheduled ? complete / scheduled : null;
+  return { acc: accN ? accSum / accN : null, ader, disc: { complete, closed, scheduled, checkinDays, checkoutDays } };
 }
 function arvAcurRelatoCellHtml(loja, sellerId, fTpl, days) {
   return arvScoped(loja, () => {
@@ -4462,7 +4499,7 @@ function renderArvoreAcuracidade() {
     const tipExtra = f.name !== matrizDisplayName(f.name) ? f.name + "\n" : "";
     head += `<th${f.sub ? ' style="color:var(--accent-2)"' : ''}${matrizTipData(tipExtra + "Coluna visível: algum vendedor do filtro atual tem sistema ⚙ lançado.\nRelato / Sistema / Acuracidade", f.color)}>${f.sub ? '↳ ' : ''}${disp}<br><span class="muted" style="font-weight:600">relato · sis · %</span></th>`;
   });
-  head += '<th>Acurac.</th><th>Aderência<br><span class="muted" style="font-weight:600">escala · dias</span></th></tr></thead>';
+  head += '<th>Acurac.</th><th>Aderência<br><span class="muted" style="font-weight:600">completo · check-in · check-out</span></th></tr></thead>';
   let body = "<tbody>";
   if (!lojas.length) {
     body += `<tr><td class="empty" colspan="${Math.max(fields.length, 1) + 3}">Nenhuma loja sincronizada.</td></tr>`;
@@ -4473,25 +4510,23 @@ function renderArvoreAcuracidade() {
     body += `<tr class="total"><td class="name">⌂ Total RSCEN${filterLbl ? ' <span class="muted" style="font-weight:600">' + filterLbl + "</span>" : ""}</td>`;
     fields.forEach(f => { body += arvTotalAcurCellHtml(lojas, f, days); });
     body += `<td style="color:${heatText(totalM.acc)};font-weight:700;"${totalM.acc != null ? matrizTipData("Média de acuracidade consolidada\n" + pctTxt(totalM.acc), "var(--accent)") : ""}>${totalM.acc == null ? "—" : pctTxt(totalM.acc)}</td>`;
-    const tAder = totalM.ader == null ? "—" : pctTxt(totalM.ader) + (totalM.disc?.closed ? ` · ${totalM.disc.complete}/${totalM.disc.closed}` : "");
-    const tAderTip = totalM.disc ? `${totalM.disc.complete} de ${totalM.disc.closed} dias completos (todas as lojas)` : "";
-    body += `<td style="color:${heatText(totalM.ader)};font-weight:700;"${tAderTip ? matrizTipData(tAderTip, "var(--accent-2)") : ""}>${tAder}</td></tr>`;
+    body += acurAdherenciaEquipeHtml(totalM.disc);
+    body += "</tr>";
     lojas.forEach(L => {
       const open = !!arvOpenLojas[L.id];
       const lm = arvLojaMetrics(L, days, fields);
       body += `<tr class="tree-row arv-acur-loja" data-loja="${L.id}"><td class="name"><span class="tw">${open ? "－" : "＋"}</span> <b>${escapeHtml(L.name)}</b>${L.self ? ' <span class="tag" style="background:color-mix(in srgb,var(--accent-2) 18%,transparent);color:var(--accent-2)">você</span>' : ""}</td>`;
       fields.forEach(f => { body += arvLojaAcurCellHtml(L, f, days); });
       body += `<td style="color:${heatText(lm.acc)};font-weight:700;"${lm.acc != null ? matrizTipData("Acuracidade média da loja\n" + pctTxt(lm.acc), "var(--accent)") : ""}>${lm.acc == null ? "—" : pctTxt(lm.acc)}</td>`;
-      const lAder = lm.ader == null ? "—" : pctTxt(lm.ader) + (lm.disc?.closed ? ` · ${lm.disc.complete}/${lm.disc.closed}` : "");
-      const lAderTip = lm.disc ? `${lm.disc.complete} de ${lm.disc.closed} dias completos na loja` : "";
-      body += `<td style="color:${heatText(lm.ader)};font-weight:700;"${lAderTip ? matrizTipData(lAderTip, "var(--accent-2)") : ""}>${lAder}</td></tr>`;
+      body += acurAdherenciaEquipeHtml(lm.disc);
+      body += "</tr>";
       arvSortedSellers(L).forEach(s => {
         const sm = arvAcurSellerMetrics(L, s.id, days, fields);
         body += `<tr class="vend arv-acur-v arv-acur-${L.id}" data-loja="${L.id}" data-seller="${s.id}" style="display:${open ? "table-row" : "none"}"><td class="name seller-link" title="Ver auditoria">↳ ${escapeHtml(s.name)}</td>`;
         fields.forEach(f => { body += arvAcurRelatoCellHtml(L, s.id, f, days); });
         body += `<td style="color:${heatText(sm.acc)};font-weight:700;">${sm.acc == null ? "—" : pctTxt(sm.acc)}</td>`;
-        const sAder = sm.ader == null ? "—" : pctTxt(sm.ader) + (sm.disc?.closed ? ` · ${sm.disc.complete}/${sm.disc.closed}` : "");
-        body += `<td style="color:${heatText(sm.ader)};font-weight:700;">${sAder}</td></tr>`;
+        body += acurAdherenciaCellHtml(sm.disc);
+        body += "</tr>";
       });
     });
   }
@@ -5116,11 +5151,11 @@ function closeLancamentoModal() {
 function renderAuditoriaModal(sellerId) {
   const days = monthDays(); const m = sellerMetrics(sellerId);
   const disc = consultantDisciplineDetails(sellerId);
-  const aderLbl = m.ader != null ? pctTxt(m.ader) + (disc.closed ? " · " + disc.complete + "/" + disc.closed + " dias" : "") : "—";
+  const aderLbl = disc.scheduled ? `${disc.complete}/${disc.scheduled} | ${disc.checkinDays}/${disc.scheduled} | ${disc.checkoutDays}/${disc.scheduled}` : "—";
   const sumEl = document.getElementById("auditoriaSummary");
   sumEl.innerHTML =
     `<span class="pill" style="color:${heatText(m.acc)}"${m.acc != null ? matrizTipData("Média de acuracidade (relato × sistema ⚙) nos indicadores com lançamento do gestor.\n" + pctTxt(m.acc), "var(--accent)") : ""}>Acuracidade ${pctTxt(m.acc)}</span>` +
-    `<span class="pill" style="color:${heatText(m.ader)}"${disc.closed ? matrizTipData(`${disc.complete} de ${disc.closed} dias encerrados completos\n${disc.incompleteDays.length} incompleto(s)\n${disc.scheduled} dias na escala do mês`, "var(--accent-2)") : ""}>Aderência escala ${aderLbl}</span>`;
+    `<span class="pill" style="color:${heatText(m.ader)}"${disc.scheduled ? matrizTipData(`Completo | Check-in | Check-out (dias ok / escala)\n${aderLbl}\n${disc.closed} dia(s) encerrado(s) até ontem`, "var(--accent-2)") : ""}>Aderência ${aderLbl}</span>`;
   bindMatrizTips(sumEl);
   renderAuditoriaDiscipline(sellerId);
   const fields = acuracidadeFieldList().filter(f => !f.rate && fieldHasSistema(sellerId, f));
@@ -5129,11 +5164,11 @@ function renderAuditoriaModal(sellerId) {
   fields.forEach(f => {
     const sys = getSystem(sellerId, f.id);
     if (sys == null) return;
-    const rel = checkoutSum(sellerId, f.id, days);
+    const rel = acurRelatoSum(sellerId, f.id, days);
     const acc = fieldAccuracy(sellerId, f.id, days);
     const accColor = acc != null ? heatText(acc) : "var(--text-dim)";
     const tip = acurTipRelato(f, rel, sys, acc);
-    body += `<tr${matrizTipData(tip, f.color)}><td class="name">${f.sub?'↳ ':''}${escapeHtml(matrizDisplayName(f.name))}</td>` +
+    body += `<tr${matrizTipData(tip, f.color)}><td class="name">${escapeHtml(matrizDisplayName(f.name))}</td>` +
       `<td style="color:${accColor};font-weight:700">${rel==null?'—':fmt(rel)}</td>` +
       `<td><span class="heat matriz-from-sys matriz-real acur-sys">${fmt(sys)}</span></td>` +
       `<td style="color:${accColor};font-weight:700">${acc==null?'—':pctTxt(acc)}</td></tr>`;
@@ -5467,32 +5502,41 @@ function consultantDisciplineDetails(sellerId, m = currentMonth) {
   const isCurrent = todayISO() === m;
   const today = isCurrent ? new Date().getDate() : n + 1;
   const fields = diarioFieldList();
-  let scheduled = 0, closed = 0, complete = 0;
+  let scheduled = 0, closed = 0, complete = 0, checkinDays = 0, checkoutDays = 0;
   const closedDays = [], pendingDays = [];
-  if (!fields.length) return { pct: null, complete: 0, closed: 0, scheduled: 0, closedDays, pendingDays };
+  if (!fields.length) return { pct: null, complete: 0, closed: 0, scheduled: 0, checkinDays: 0, checkoutDays: 0, closedDays, pendingDays };
   for (let d = 1; d <= n; d++) {
     if (!sellerWorks(sellerId, d, m)) continue;
     scheduled++;
     const wd = AUDIT_DN[weekday(m, d)];
-    if (isCurrent && d >= today) { pendingDays.push({ day: d, wd }); continue; }
-    closed++;
     const gaps = [];
+    let needsIn = false, needsOut = false, inOk = true, outOk = true;
     fields.forEach(entry => {
       const cfg = entry.cfg;
       const needs = diarioFieldNeeds(sellerId, cfg, d, m);
       if (!needs.checkin && !needs.checkout) return;
       const c = getCell(sellerId, cfg.id, d, m);
       const label = fieldDiarioLabel(entry);
-      if (needs.checkin && !hasPlanValue(c, cfg)) gaps.push({ type: "in", field: label });
-      if (needs.checkout && !hasCellValue(c, "real")) gaps.push({ type: "out", field: label });
+      if (needs.checkin) {
+        needsIn = true;
+        if (!hasPlanValue(c, cfg)) { gaps.push({ type: "in", field: label }); inOk = false; }
+      }
+      if (needs.checkout) {
+        needsOut = true;
+        if (!hasCellValue(c, "real")) { gaps.push({ type: "out", field: label }); outOk = false; }
+      }
     });
     const dayComplete = gaps.length === 0;
+    if (isCurrent && d >= today) { pendingDays.push({ day: d, wd }); continue; }
+    closed++;
     if (dayComplete) complete++;
+    if (needsIn && inOk) checkinDays++;
+    if (needsOut && outOk) checkoutDays++;
     closedDays.push({ day: d, wd, complete: dayComplete, gaps });
   }
   return {
-    pct: closed ? complete / closed : null,
-    complete, closed, scheduled,
+    pct: scheduled ? complete / scheduled : null,
+    complete, closed, scheduled, checkinDays, checkoutDays,
     closedDays,
     pendingDays,
     incompleteDays: closedDays.filter(x => !x.complete)
@@ -5535,8 +5579,9 @@ function renderAuditoriaDiscipline(sellerId) {
   html += `<div class="audit-disc-statgrid">`;
   html += `<div class="audit-disc-stat"><div class="k">Na escala</div><div class="v">${disc.scheduled} <small>dias</small></div></div>`;
   html += `<div class="audit-disc-stat"><div class="k">Encerrados</div><div class="v">${disc.closed} <small>dias</small></div></div>`;
-  html += `<div class="audit-disc-stat"><div class="k">Completos</div><div class="v" style="color:${pctColor}">${disc.complete} <small>/ ${disc.closed}</small></div></div>`;
-  html += `<div class="audit-disc-stat"><div class="k">Aderência</div><div class="v" style="color:${pctColor}">${disc.pct == null ? "—" : pctTxt(disc.pct)}</div></div>`;
+  html += `<div class="audit-disc-stat"><div class="k">Completos</div><div class="v" style="color:${pctColor}">${disc.complete} <small>/ ${disc.scheduled}</small></div></div>`;
+  html += `<div class="audit-disc-stat"><div class="k">Check-in ok</div><div class="v">${disc.checkinDays} <small>/ ${disc.scheduled}</small></div></div>`;
+  html += `<div class="audit-disc-stat"><div class="k">Check-out ok</div><div class="v">${disc.checkoutDays} <small>/ ${disc.scheduled}</small></div></div>`;
   html += `</div>`;
   if (!disc.closed) {
     html += `<div class="empty" style="padding:12px;">Ainda não há dias encerrados na escala deste mês.</div>`;
@@ -5608,16 +5653,19 @@ function sellerMetrics(sellerId) {
     if (meta && real != null) pace = matrizPaceRatio(real, meta, sellerId, false, days, cfgLowerBetter(primary));
   }
   const gaps = sellerDisciplineGapCounts(sellerId);
+  const disc = gaps.disc;
   return {
     projVsMeta: projN ? projSum / projN : null,
     pace,
     acc: accN ? accSum / accN : null,
+    ader: disc.pct,
+    disc,
     daysIn: gaps.daysIn,
     daysOut: gaps.daysOut,
     gapsIn: gaps.gapsIn,
     gapsOut: gaps.gapsOut,
-    daysComplete: gaps.disc.complete,
-    daysClosed: gaps.disc.closed,
+    daysComplete: disc.complete,
+    daysClosed: disc.closed,
   };
 }
 let _focoLastMetrics = [];
