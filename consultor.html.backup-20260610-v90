@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v91";
+  var BUILD = "v90";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -569,7 +569,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v91"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v90"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -2139,8 +2139,8 @@ function consultantDisciplineStats(sellerId, m = todayISO()) {
       }
     });
     const dayComplete = !gaps.length;
-    if (isCurrent && d > today) continue;
-    if (!(isCurrent && d === today)) closed++;
+    if (isCurrent && d >= today) continue;
+    closed++;
     if (dayComplete) complete++;
     if (needsIn && inOk) checkinDays++;
     if (needsOut && outOk) checkoutDays++;
@@ -2422,18 +2422,6 @@ function resumoGestorSubs(ind) {
 function resumoGestorRates(ind) {
   return ind.rates || [];
 }
-function resumoFieldRowHasData(cfg, sellerId, m, parentInd) {
-  if (fieldHasMonthData(sellerId, cfg.id, m)) return true;
-  if (getSystem(sellerId, cfg.id, m) != null) return true;
-  const st = fieldProjStats(cfg, sellerId, m, parentInd);
-  return st.meta != null || st.real != null || st.relato != null || st.sistema != null;
-}
-function resumoRateHasData(rate, sellerId, m) {
-  if (rateValueForSeller(rate, sellerId, m) != null) return true;
-  if (getSystemRate(sellerId, rate.id, m) != null) return true;
-  const target = matrizRateTarget(rate, m);
-  return target != null && target > 0;
-}
 function resumoProjFmt(st) {
   const heatColor = resumoHeatColor(st.proj, st.meta, st.perfRatio, st.lb, false);
   const motiv = resumoMotiv(st);
@@ -2481,8 +2469,8 @@ function resumoPrincipalCard(ind, sid, m) {
   const p = resumoProjFmt(st);
   let expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
   expandHtml += resumoPrincipalDetailBlock(ind, sid, m, st);
-  subs.filter(sub => resumoFieldRowHasData(sub, sid, m, ind)).forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false, parentInd: ind }, m); });
-  rates.filter(rate => resumoRateHasData(rate, sid, m)).forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
+  subs.forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false, parentInd: ind }, m); });
+  rates.forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
   expandHtml += resumoRankNoteHtml(ind, sid, m);
   expandHtml += `</div>`;
   const motivHtml = resumoMotivHtml(st);
@@ -2539,7 +2527,7 @@ function renderResumo() {
     let expandHtml = "";
     if (rates.length) {
       expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
-      rates.filter(rate => resumoRateHasData(rate, sid, m)).forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
+      rates.forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
       expandHtml += `</div>`;
     }
     cards.push(`<div class="resumo-card" style="--rc:${color}">${resumoPctOnlyHead(ind, color, isOpen)}${expandHtml}</div>`);
@@ -2844,23 +2832,6 @@ function scheduleRenderFields() {
   renderFieldsNow();
 }
 function renderFields() { scheduleRenderFields(); }
-function patchOpenQuestionBoxAfterSave(fieldId, day, month) {
-  const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
-  const box = document.querySelector(`.dio-box.open-q[data-open-fid="${fieldId}"]`);
-  if (!cfg || !box || !seller) { scheduleRenderFields(); return; }
-  const c = getCell(seller.id, fieldId, day, month);
-  const locked = cellLockedForConsultor(c, "plan", day, month, cfg);
-  const planMine = cellIsMine(c, "plan", cfg);
-  box.classList.toggle("locked", locked);
-  box.classList.toggle("mine", planMine && !locked);
-  const slotLbl = box.classList.contains("out") ? "Check-out" : "Check-in";
-  const lbl = box.querySelector(".dio-lbl");
-  if (lbl) lbl.innerHTML = `${slotLbl} ${lockLabel(c, "plan", day, month, cfg)}`;
-  box.querySelectorAll("[data-open-save]").forEach(el => el.remove());
-  box.querySelectorAll(".open-yn-btn, [data-open-qty], [data-open-justif]").forEach(el => { el.disabled = locked; });
-  updateOpenCrossUi(box);
-  updateProgress();
-}
 function patchDioBoxAfterConfirm(fieldId, key, day, month) {
   const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
   const inp = document.querySelector(`input[data-fid="${fieldId}"][data-key="${key}"]`);
@@ -3003,7 +2974,7 @@ async function saveOpenPlan(box) {
     const cell = snap.val() || {};
     if (cellLockedForConsultor(cell, "plan", day, month, cfg) && isOpenPlanComplete(cell)) {
       toast(cell.planBy === "gestor" ? "Preenchido pelo gestor — não pode alterar" : "Resposta já salva — não pode alterar", true);
-      patchOpenQuestionBoxAfterSave(fieldId, day, month);
+      renderFields();
       return;
     }
     if (planYes === null) { toast("Escolha Sim ou Não", true); return; }
@@ -3011,7 +2982,7 @@ async function saveOpenPlan(box) {
     if (planYes === true) {
       if (qtyRaw === "" || isNaN(Number(qtyRaw)) || Number(qtyRaw) < 0) { toast("Informe quantas confirmações", true); return; }
     }
-    const payload = { planYes, planJustif: justif, planBy: "consultor", planAt: Date.now(), planConfirm: true };
+    const payload = { planYes, planJustif: justif, planBy: "consultor", planAt: Date.now() };
     if (planYes === true) payload.plan = Number(qtyRaw);
     await ref.update(payload);
     if (planYes === false) await ref.child("plan").remove();
@@ -3019,19 +2990,15 @@ async function saveOpenPlan(box) {
     setLocalCell(seller.id, fieldId, day, month, "planJustif", justif);
     setLocalCell(seller.id, fieldId, day, month, "planBy", "consultor");
     setLocalCell(seller.id, fieldId, day, month, "planAt", Date.now());
-    setLocalCellFlag(seller.id, fieldId, day, month, "planConfirm", true);
-    persistConfirmLocal(seller.id, fieldId, day, month, "plan");
     if (planYes === true) setLocalCell(seller.id, fieldId, day, month, "plan", Number(qtyRaw));
     else {
       const md = lojaData.months?.[month];
       if (md?.daily?.[seller.id]?.[fieldId]?.[day]) delete md.daily[seller.id][fieldId][day].plan;
     }
     await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
-    armConsultorMergeGuard(seller.id, fieldId, day, month);
-    toast(planYes ? "Check-in salvo · travado" : "Resposta salva · travada");
-    patchOpenQuestionBoxAfterSave(fieldId, day, month);
+    toast(planYes ? "Sim registrado · sincronizado" : "Não registrado · sincronizado");
+    renderFields();
     refreshOpenCrossAll();
-    if (document.getElementById("resumoOverlay")?.classList.contains("show")) renderResumo();
   } catch (e) {
     console.warn(e);
     toast("Erro ao salvar. Verifique a conexão.", true);

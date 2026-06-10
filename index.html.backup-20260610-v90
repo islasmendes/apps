@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v91";
+  var BUILD = "v90";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2512,7 +2512,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v91"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v90"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -5564,14 +5564,7 @@ function consultantDisciplineDetails(sellerId, m = currentMonth) {
       }
     });
     const dayComplete = gaps.length === 0;
-    if (isCurrent && d > today) { pendingDays.push({ day: d, wd }); continue; }
-    if (isCurrent && d === today) {
-      if (dayComplete) complete++;
-      if (needsIn && inOk) checkinDays++;
-      if (needsOut && outOk) checkoutDays++;
-      pendingDays.push({ day: d, wd, live: true, complete: dayComplete, gaps });
-      continue;
-    }
+    if (isCurrent && d >= today) { pendingDays.push({ day: d, wd }); continue; }
     closed++;
     if (dayComplete) complete++;
     if (needsIn && inOk) checkinDays++;
@@ -5619,7 +5612,7 @@ function renderAuditoriaDiscipline(sellerId) {
   const pctColor = heatText(disc.pct);
   const previewN = 6;
   let html = `<h4>Aderência na escala · check-in / check-out</h4>`;
-  html += `<div class="hint" style="margin:-4px 0 10px;">Dia <b>completo</b> = check-ins e check-outs obrigatórios daquele dia. Indicadores <b>só domingo</b> não contam se o CV não trabalha domingo na semana. Inclui <b>hoje ao vivo</b> e dias já encerrados.</div>`;
+  html += `<div class="hint" style="margin:-4px 0 10px;">Dia <b>completo</b> = check-ins e check-outs obrigatórios daquele dia. Indicadores <b>só domingo</b> não contam se o CV não trabalha domingo na semana. Só entram dias <b>encerrados</b> (até ontem).</div>`;
   html += `<div class="audit-disc-statgrid">`;
   html += `<div class="audit-disc-stat"><div class="k">Na escala</div><div class="v">${disc.scheduled} <small>dias</small></div></div>`;
   html += `<div class="audit-disc-stat"><div class="k">Encerrados</div><div class="v">${disc.closed} <small>dias</small></div></div>`;
