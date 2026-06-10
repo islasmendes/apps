@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v70";
+  var BUILD = "v71";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2145,9 +2145,12 @@ function cfgById(id) { for (const ind of state.indicators) { if (ind.id === id) 
 /* Dados diários */
 let diarioEditDepth = 0;
 const diarioPendingOverlay = new Map();
-let diarioCellPushTimer = null;
+const diarioPendingPushes = new Map();
 function diarioPendingKey(sellerId, fieldId, day, m = currentMonth) {
   return `${m}|${sellerId}|${fieldId}|${day}`;
+}
+function diarioPushKey(sellerId, fieldId, day, key, m = currentMonth) {
+  return `push|${m}|${sellerId}|${fieldId}|${day}|${key}`;
 }
 function getCell(sellerId, fieldId, day, m = currentMonth) {
   const md = monthData(m);
@@ -2189,10 +2192,31 @@ async function pushGestorDailyCell(sellerId, fieldId, day, key, val, m = current
   }
 }
 function scheduleGestorDailyCellPush(sellerId, fieldId, day, key, val, m = currentMonth) {
-  clearTimeout(diarioCellPushTimer);
-  diarioCellPushTimer = setTimeout(() => {
+  const pk = diarioPushKey(sellerId, fieldId, day, key, m);
+  const prev = diarioPendingPushes.get(pk);
+  if (prev?.timer) clearTimeout(prev.timer);
+  const timer = setTimeout(() => {
+    diarioPendingPushes.delete(pk);
     pushGestorDailyCell(sellerId, fieldId, day, key, val, m);
   }, 280);
+  diarioPendingPushes.set(pk, { sellerId, fieldId, day, key, val, m, timer });
+}
+function flushGestorDailyCellPush(sellerId, fieldId, day, key, m = currentMonth) {
+  const dayKey = String(day);
+  const pk = diarioPushKey(sellerId, fieldId, dayKey, key, m);
+  const pending = diarioPendingPushes.get(pk);
+  if (pending?.timer) clearTimeout(pending.timer);
+  diarioPendingPushes.delete(pk);
+  if (pending) return pushGestorDailyCell(pending.sellerId, pending.fieldId, pending.day, pending.key, pending.val, pending.m);
+  const cell = getCell(sellerId, fieldId, dayKey, m);
+  const v = cell[key];
+  return pushGestorDailyCell(sellerId, fieldId, dayKey, key, v != null && v !== "" ? v : "", m);
+}
+async function flushAllGestorDailyPushes() {
+  const items = [...diarioPendingPushes.values()];
+  diarioPendingPushes.forEach(p => { if (p?.timer) clearTimeout(p.timer); });
+  diarioPendingPushes.clear();
+  await Promise.all(items.map(p => pushGestorDailyCell(p.sellerId, p.fieldId, p.day, p.key, p.val, p.m)));
 }
 function setCell(sellerId, fieldId, day, key, val, m = currentMonth) {
   const dayKey = String(day);
@@ -2216,7 +2240,6 @@ function setCell(sellerId, fieldId, day, key, val, m = currentMonth) {
   else diarioPendingOverlay.delete(pk);
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
   scheduleGestorDailyCellPush(sellerId, fieldId, dayKey, key, val, m);
-  if (typeof fbPush === "function") fbPush({ skipMerge: true });
 }
 function cellSourceTag(cell, key) {
   const hasVal = key === "plan" && (cell.planYes === true || cell.planYes === false)
@@ -2262,6 +2285,12 @@ function mergeCellFromRemote(lc, rc) {
   });
   metaKeys.forEach(k => {
     if (!Object.prototype.hasOwnProperty.call(rc, k)) return;
+    const field = k.startsWith("plan") ? "plan" : k.startsWith("real") ? "real" : null;
+    if (field) {
+      const remoteAt = cellFieldAt(rc, field);
+      const localAt = cellFieldAt(lc, field);
+      if (remoteAt < localAt) return;
+    }
     if (rc[k] === null || rc[k] === "") {
       if (Object.prototype.hasOwnProperty.call(lc, k)) { delete lc[k]; cellChanged = true; }
     } else if (rc[k] !== lc[k]) {
@@ -2304,6 +2333,7 @@ function mergeDailyFromRemote(remoteMonths) {
             const pk = diarioPendingKey(sid, fid, dayKey, m);
             if (diarioPendingOverlay.has(pk)) return;
           }
+          if ([...diarioPendingPushes.keys()].some(k => k.includes(`|${sid}|${fid}|${dayKey}|`))) return;
           md.daily[sid] = md.daily[sid] || {};
           md.daily[sid][fid] = md.daily[sid][fid] || {};
           const lc = md.daily[sid][fid][dayKey] || {};
@@ -2348,7 +2378,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v70"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v71"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4467,7 +4497,10 @@ function renderDiario() {
     inp.addEventListener("focus", () => { diarioEditDepth++; });
     inp.addEventListener("blur", () => {
       diarioEditDepth = Math.max(0, diarioEditDepth - 1);
-      const pk = diarioPendingKey(diarioSeller, inp.dataset.field, +inp.dataset.day);
+      const day = +inp.dataset.day;
+      const pk = diarioPendingKey(diarioSeller, inp.dataset.field, day);
+      flushGestorDailyCellPush(diarioSeller, inp.dataset.field, day, inp.dataset.key);
+      if (typeof fbPush === "function") fbPush();
       setTimeout(() => {
         if (!document.querySelector("#diarioTable .cellinput:focus")) {
           diarioPendingOverlay.delete(pk);
@@ -7944,6 +7977,12 @@ function init() {
   document.getElementById("resetAll").onclick = () => { if(confirm("Apagar TODOS os dados deste navegador?")){ localStorage.removeItem(LS_KEY); state = defaultState(); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); toast("Tudo apagado"); } };
   document.getElementById("fechPull").onclick = fechPull;
   bindAuthEvents();
+  if (!window._diarioFlushBound) {
+    window._diarioFlushBound = true;
+    const flushDiario = () => { flushAllGestorDailyPushes(); if (typeof fbPush === "function") fbPush({ immediate: true }); };
+    window.addEventListener("pagehide", flushDiario);
+    window.addEventListener("beforeunload", flushDiario);
+  }
   if (tryRestoreAuthSession()) { /* sessão válida neste aparelho */ }
   if (divisionalMode() && !DIVISIONAL_VIEWS.includes(activeView)) activeView = "rscen";
   updateDivisionalNav();

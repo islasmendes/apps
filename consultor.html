@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v70";
+  var BUILD = "v71";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -509,7 +509,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v70"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v71"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -520,6 +520,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 let lojaData = null, lojaCode = "", seller = null, lojaListener = null;
 let tickTimer = null, lastRenderDay = null, lastTimePhase = null;
 let fieldsEditDepth = 0, renderFieldsQueued = false, lojaListenerTimer = null;
+const fieldSaveTimers = new Map();
 let confirmsRestored = false;
 const CONFIRM_LS_PREFIX = "gc_cell_confirm_";
 const CONSULTOR_SCHEDULE_DEFAULTS = {
@@ -792,7 +793,8 @@ function clearSession() { localStorage.removeItem(SESSION_KEY); }
 
 function getCell(sellerId, fieldId, day, month) {
   const d = lojaData?.months?.[month]?.daily;
-  return (d?.[sellerId]?.[fieldId]?.[day]) || {};
+  const dayKey = String(day);
+  return (d?.[sellerId]?.[fieldId]?.[dayKey]) || (d?.[sellerId]?.[fieldId]?.[day]) || {};
 }
 function localCellRef(sellerId, fieldId, day, month) {
   if (!lojaData.months) lojaData.months = {};
@@ -801,8 +803,9 @@ function localCellRef(sellerId, fieldId, day, month) {
   if (!md.daily) md.daily = {};
   if (!md.daily[sellerId]) md.daily[sellerId] = {};
   if (!md.daily[sellerId][fieldId]) md.daily[sellerId][fieldId] = {};
-  if (!md.daily[sellerId][fieldId][day]) md.daily[sellerId][fieldId][day] = {};
-  return md.daily[sellerId][fieldId][day];
+  const dayKey = String(day);
+  if (!md.daily[sellerId][fieldId][dayKey]) md.daily[sellerId][fieldId][dayKey] = {};
+  return md.daily[sellerId][fieldId][dayKey];
 }
 function setLocalCell(sellerId, fieldId, day, month, key, val) {
   const cell = localCellRef(sellerId, fieldId, day, month);
@@ -2344,8 +2347,20 @@ function renderFieldsNow() {
       updateProgramacaoRunningHint(inp);
       refreshDioSaveBtn(inp.closest(".dio-box"));
       updateProgress();
+      const saveKey = `${inp.dataset.fid}|${inp.dataset.key}`;
+      clearTimeout(fieldSaveTimers.get(saveKey));
+      fieldSaveTimers.set(saveKey, setTimeout(() => {
+        fieldSaveTimers.delete(saveKey);
+        if (!inp.isConnected || inp.disabled) return;
+        saveField(inp);
+      }, 450));
     });
-    inp.addEventListener("change", () => saveField(inp));
+    inp.addEventListener("change", () => {
+      const saveKey = `${inp.dataset.fid}|${inp.dataset.key}`;
+      clearTimeout(fieldSaveTimers.get(saveKey));
+      fieldSaveTimers.delete(saveKey);
+      saveField(inp);
+    });
     inp.addEventListener("keydown", e => { if (e.key === "Enter") { inp.blur(); } });
     refreshDioSaveBtn(inp.closest(".dio-box"));
   });
