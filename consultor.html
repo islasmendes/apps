@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v78";
+  var BUILD = "v79";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -509,7 +509,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v78"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v79"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -998,19 +998,17 @@ async function flushOfflineQueue() {
 async function pushConsultorDailyCell(sellerId, fieldId, day, key, val, month, opts) {
   opts = opts || {};
   const dayKey = String(day);
-  if (!seller || !lojaCode) return false;
-  if (!fbReady || !fbDb) return false;
-  const storageFieldId = cfg ? dailyStorageFieldId(cfg, key) : (key === "real" ? checkoutFieldId(fieldId) : fieldId);
-  const path = `lojas/${lojaCode}/data/months/${month}/daily/${sellerId}/${storageFieldId}/${dayKey}`;
+  if (!seller || !lojaCode || !fbReady || !fbDb) return false;
+  const path = `lojas/${lojaCode}/data/months/${month}/daily/${sellerId}/${fieldId}/${dayKey}`;
   const ref = fbDb.ref(path);
-  const cell = getCell(sellerId, storageFieldId, dayKey, month);
+  const cell = getCell(sellerId, fieldId, dayKey, month);
+  const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
   try {
     if (val === "" || val === null || (typeof val === "number" && isNaN(val))) {
       if (cell[key + "By"] === "gestor" && hasCellValue(cell, key)) return false;
       const next = { ...cell };
       delete next[key]; delete next[key + "By"]; delete next[key + "At"];
       delete next[cellConfirmKey(key)];
-      const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
       const stillHas = (cfg && hasPlanValue(next, cfg)) || hasCellValue(next, "real") || next.planYes === true || next.planYes === false || (next.planJustif && String(next.planJustif).trim());
       if (!stillHas) await ref.remove();
       else {
@@ -1021,19 +1019,19 @@ async function pushConsultorDailyCell(sellerId, fieldId, day, key, val, month, o
           ref.child(cellConfirmKey(key)).remove(),
         ]);
       }
-      setLocalCell(sellerId, storageFieldId, dayKey, month, key, null);
+      setLocalCell(sellerId, fieldId, dayKey, month, key, null);
     } else {
       const payload = { [key]: val, [key + "By"]: "consultor", [key + "At"]: Date.now() };
       if (opts.confirm) payload[cellConfirmKey(key)] = true;
       await ref.update(payload);
-      setLocalCell(sellerId, storageFieldId, dayKey, month, key, val);
+      setLocalCell(sellerId, fieldId, dayKey, month, key, val);
       if (opts.confirm) {
-        setLocalCellFlag(sellerId, storageFieldId, dayKey, month, cellConfirmKey(key), true);
-        persistConfirmLocal(sellerId, storageFieldId, dayKey, month, key);
+        setLocalCellFlag(sellerId, fieldId, dayKey, month, cellConfirmKey(key), true);
+        persistConfirmLocal(sellerId, fieldId, dayKey, month, key);
       }
     }
     await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
-    armConsultorMergeGuard(sellerId, storageFieldId, dayKey, month);
+    armConsultorMergeGuard(sellerId, fieldId, dayKey, month);
     return true;
   } catch (e) {
     console.warn("pushConsultorDailyCell", e);
@@ -1693,12 +1691,6 @@ function checkoutFieldId(fieldId) {
   const ind = mainIndicatorById(fieldId);
   const sub = ind ? parentRollupHojeSub(ind) : null;
   return sub ? sub.id : fieldId;
-}
-function dailyStorageFieldId(cfg, key) {
-  return key === "real" ? checkoutFieldId(cfg.id) : cfg.id;
-}
-function getDisplayCell(sellerId, cfg, key, day, month) {
-  return getCell(sellerId, dailyStorageFieldId(cfg, key), day, month);
 }
 /** Soma dos check-outs do indicador no período (principal usa sub “hoje” quando existir). */
 function checkoutSum(sellerId, fieldId, days, m = todayISO()) {
@@ -2602,14 +2594,13 @@ function renderFieldsNow() {
   }
   root.innerHTML = fields.map(({ cfg, color, sub }) => {
     const c = getCell(seller.id, cfg.id, day, month);
-    const cOut = getDisplayCell(seller.id, cfg, "real", day, month);
     const needs = consultorFieldNeeds(seller.id, cfg, day, month);
     const hintHtml = consultorCvHint(cfg);
     const metaHtml = consultorMetaSummary(cfg, seller.id, month);
     const planLocked = cellLockedForConsultor(c, "plan", day, month, cfg);
-    const realLocked = cellLockedForConsultor(cOut, "real", day, month, cfg);
+    const realLocked = cellLockedForConsultor(c, "real", day, month, cfg);
     const planMine = cellIsMine(c, "plan", cfg);
-    const realMine = cellIsMine(cOut, "real", cfg);
+    const realMine = cellIsMine(c, "real", cfg);
     const showCheckin = needs.checkin;
     const showCheckout = needs.checkout && consultorCheckoutVisible();
     if (!showCheckin && !showCheckout) return "";
@@ -2631,10 +2622,10 @@ function renderFieldsNow() {
         html += buildOpenQuestionBox(cfg, c, "out", day, month);
       } else {
         const progOut = programacaoRunningHint(seller.id, cfg, month, day);
-        const realSoon = fieldSoonKind(cOut, "real", day, month, cfg);
-        html += `<div class="dio-box out${realLocked ? " locked" : ""}${realMine && !realLocked ? " mine" : ""}"><div class="dio-lbl">Check-out ${lockLabel(cOut, "real", day, month, cfg)}</div>`;
+        const realSoon = fieldSoonKind(c, "real", day, month, cfg);
+        html += `<div class="dio-box out${realLocked ? " locked" : ""}${realMine && !realLocked ? " mine" : ""}"><div class="dio-lbl">Check-out ${lockLabel(c, "real", day, month, cfg)}</div>`;
         if (realSoon) html += soonBannerHtml(realSoon);
-        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="real" data-day="${day}" value="${cOut.real ?? ""}" placeholder="—" ${realLocked ? "disabled" : ""}>${progOut}${dioSaveFooterHtml(cfg, cOut, "real", day, month, "Check-out")}</div>`;
+        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="real" data-day="${day}" value="${c.real ?? ""}" placeholder="—" ${realLocked ? "disabled" : ""}>${progOut}${dioSaveFooterHtml(cfg, c, "real", day, month, "Check-out")}</div>`;
       }
     }
     html += "</div></div>";
@@ -2760,11 +2751,10 @@ async function saveField(inp, opts) {
   const fieldId = inp.dataset.fid, key = inp.dataset.key;
   const month = todayISO(), day = todayDay();
   const val = inp.value.trim();
-  const storageFieldId = cfg ? dailyStorageFieldId(cfg, key) : (key === "real" ? checkoutFieldId(fieldId) : fieldId);
-  const path = `lojas/${lojaCode}/data/months/${month}/daily/${seller.id}/${storageFieldId}/${day}`;
-  const ref = fbDb.ref(path);
-  const cell = getCell(seller.id, storageFieldId, day, month);
   const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
+  const path = `lojas/${lojaCode}/data/months/${month}/daily/${seller.id}/${fieldId}/${day}`;
+  const ref = fbDb.ref(path);
+  const cell = getCell(seller.id, fieldId, day, month);
   try {
     if (val === "") {
       if (cell[key + "By"] === "gestor" && hasCellValue(cell, key)) {
@@ -2790,15 +2780,15 @@ async function saveField(inp, opts) {
           ref.child(cellConfirmKey(key)).remove(),
         ]);
       }
-      setLocalCell(seller.id, storageFieldId, day, month, key, null);
+      setLocalCell(seller.id, fieldId, day, month, key, null);
       if (!stillHas) {
         const md = lojaData.months?.[month];
-        if (md?.daily?.[seller.id]?.[storageFieldId]) delete md.daily[seller.id][storageFieldId][day];
+        if (md?.daily?.[seller.id]?.[fieldId]) delete md.daily[seller.id][fieldId][day];
       }
-      clearConfirmLocal(seller.id, storageFieldId, day, month, key);
-      setLocalCellFlag(seller.id, storageFieldId, day, month, cellConfirmKey(key), null);
+      clearConfirmLocal(seller.id, fieldId, day, month, key);
+      setLocalCellFlag(seller.id, fieldId, day, month, cellConfirmKey(key), null);
       await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
-      armConsultorMergeGuard(seller.id, storageFieldId, day, month);
+      armConsultorMergeGuard(seller.id, fieldId, day, month);
       if (opts.confirm) toast("Campo limpo");
       scheduleRenderFields();
       return;
@@ -2829,13 +2819,13 @@ async function saveField(inp, opts) {
     const payload = { [key]: num, [key + "By"]: "consultor", [key + "At"]: Date.now() };
     if (opts.confirm) payload[cellConfirmKey(key)] = true;
     await ref.update(payload);
-    setLocalCell(seller.id, storageFieldId, day, month, key, num);
+    setLocalCell(seller.id, fieldId, day, month, key, num);
     if (opts.confirm) {
-      setLocalCellFlag(seller.id, storageFieldId, day, month, cellConfirmKey(key), true);
-      persistConfirmLocal(seller.id, storageFieldId, day, month, key);
+      setLocalCellFlag(seller.id, fieldId, day, month, cellConfirmKey(key), true);
+      persistConfirmLocal(seller.id, fieldId, day, month, key);
     }
     await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
-    armConsultorMergeGuard(seller.id, storageFieldId, day, month);
+    armConsultorMergeGuard(seller.id, fieldId, day, month);
     const slot = opts.slotLabel || (key === "real" ? "Check-out" : "Check-in");
     if (opts.confirm) {
       toast(`${slot} salvo · travado`);
@@ -2846,8 +2836,8 @@ async function saveField(inp, opts) {
       updateProgress();
     }
   } catch (e) {
-    console.warn(e);
-    enqueueOfflinePush({ sellerId: seller.id, fieldId: storageFieldId, day: String(day), key, val: val === "" ? "" : Number(val), month, confirm: !!opts.confirm });
+    console.warn("saveField", e);
+    enqueueOfflinePush({ sellerId: seller.id, fieldId, day: String(day), key, val: val === "" ? "" : Number(val), month, confirm: !!opts.confirm });
     toast("Sem conexão — salvo local, sincroniza ao reconectar", true);
   }
 }
