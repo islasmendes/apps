@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v68";
+  var BUILD = "v69";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -509,7 +509,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v68"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v69"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -1372,9 +1372,37 @@ function getSystemRate(sellerId, rateId, m = todayISO()) {
   const v = monthData(m).systemRate?.[sellerId]?.[rateId];
   return v != null ? Number(v) : null;
 }
-/** Soma dos check-outs do indicador no período (cada fieldId soma só os seus valores no diário). */
+function nameHasHoje(name) {
+  return /hoje/.test(normName(name));
+}
+function cfgHasDiarioLoqa(cfg) {
+  return !!(cfg && (cfg.checkin || cfg.checkout));
+}
+/** Sub “de hoje” que alimenta o indicador principal (ex.: Agendamentos ← Agendamentos p/ HOJE). */
+function parentRollupHojeSub(parentInd) {
+  if (!parentInd || parentInd.pctOnly) return null;
+  const subs = (parentInd.subs || []).filter(cfgHasDiarioLoqa);
+  if (!subs.length) return null;
+  const pn = normName(parentInd.name);
+  const pick = pred => subs.find(s => pred(normName(s.name)));
+  if (/agendament/.test(pn)) return pick(n => /agendament/.test(n) && nameHasHoje(n));
+  if (/compareciment/.test(pn)) return pick(n => /compareciment/.test(n) && nameHasHoje(n));
+  if (/ficha/.test(pn) || /f&i/.test(pn) || /\bfi\b/.test(pn)) return pick(n => /ficha/.test(n) && /financ/.test(n) && nameHasHoje(n));
+  if (/troca/.test(pn)) return pick(n => /troca/.test(n) && nameHasHoje(n));
+  if (/venda/.test(pn)) return pick(n => /venda/.test(n) && nameHasHoje(n));
+  return pick(n => nameHasHoje(n));
+}
+function mainIndicatorById(fieldId) {
+  return orderedIndicators().find(i => i.id === fieldId) || null;
+}
+function checkoutFieldId(fieldId) {
+  const ind = mainIndicatorById(fieldId);
+  const sub = ind ? parentRollupHojeSub(ind) : null;
+  return sub ? sub.id : fieldId;
+}
+/** Soma dos check-outs do indicador no período (principal usa sub “hoje” quando existir). */
 function checkoutSum(sellerId, fieldId, days, m = todayISO()) {
-  return accum(sellerId, fieldId, "real", days, m);
+  return accum(sellerId, checkoutFieldId(fieldId), "real", days, m);
 }
 function matrizFieldValue(sellerId, fieldId, days, periodo, m = todayISO()) {
   return checkoutSum(sellerId, fieldId, days, m);

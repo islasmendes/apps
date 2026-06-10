@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v68";
+  var BUILD = "v69";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2155,7 +2155,8 @@ function setCell(sellerId, fieldId, day, key, val, m = currentMonth) {
   } else {
     cell[key] = val; cell[key + "By"] = "gestor"; cell[key + "At"] = Date.now();
   }
-  save();
+  save({ skipPush: true, skipConfigPush: true });
+  if (typeof fbPush === "function") fbPush({ skipMerge: true });
 }
 function cellSourceTag(cell, key) {
   const hasVal = key === "plan" && (cell.planYes === true || cell.planYes === false)
@@ -2167,20 +2168,44 @@ function cellSourceTag(cell, key) {
   if (by === "gestor") return ' <span class="hint" style="font-size:8px;color:var(--accent)">👔</span>';
   return "";
 }
+function cellFieldAt(cell, key) {
+  if (!cell) return 0;
+  if (key === "plan" || key === "real") return Number(cell[key + "At"]) || 0;
+  return 0;
+}
 function mergeCellFromRemote(lc, rc) {
   if (!rc || typeof rc !== "object") return false;
   let cellChanged = false;
-  ["plan", "real", "planYes", "planJustif", "planBy", "realBy", "planAt", "realAt", "planConfirm", "realConfirm"].forEach(k => {
-    const remoteHas = Object.prototype.hasOwnProperty.call(rc, k);
-    if (remoteHas) {
-      if (rc[k] === null || rc[k] === "") {
-        if (Object.prototype.hasOwnProperty.call(lc, k)) { delete lc[k]; cellChanged = true; }
-      } else if (rc[k] !== lc[k]) {
-        lc[k] = rc[k];
+  const dataKeys = ["plan", "real", "planYes", "planJustif"];
+  const metaKeys = ["planBy", "realBy", "planAt", "realAt", "planConfirm", "realConfirm"];
+  dataKeys.forEach(k => {
+    if (!Object.prototype.hasOwnProperty.call(rc, k)) return;
+    if (rc[k] === null || rc[k] === "") {
+      const remoteAt = cellFieldAt(rc, k);
+      const localAt = cellFieldAt(lc, k);
+      if (remoteAt >= localAt && Object.prototype.hasOwnProperty.call(lc, k)) {
+        delete lc[k];
+        if (lc[k + "By"]) delete lc[k + "By"];
+        if (lc[k + "At"]) delete lc[k + "At"];
+        const ck = k === "plan" ? "planConfirm" : k === "real" ? "realConfirm" : null;
+        if (ck && lc[ck]) delete lc[ck];
         cellChanged = true;
       }
-    } else if (Object.prototype.hasOwnProperty.call(lc, k)) {
-      delete lc[k];
+      return;
+    }
+    const remoteAt = cellFieldAt(rc, k);
+    const localAt = cellFieldAt(lc, k);
+    if (remoteAt >= localAt && rc[k] !== lc[k]) {
+      lc[k] = rc[k];
+      cellChanged = true;
+    }
+  });
+  metaKeys.forEach(k => {
+    if (!Object.prototype.hasOwnProperty.call(rc, k)) return;
+    if (rc[k] === null || rc[k] === "") {
+      if (Object.prototype.hasOwnProperty.call(lc, k)) { delete lc[k]; cellChanged = true; }
+    } else if (rc[k] !== lc[k]) {
+      lc[k] = rc[k];
       cellChanged = true;
     }
   });
@@ -2208,13 +2233,7 @@ function mergeDailyFromRemote(remoteMonths) {
           }
           const rc = remoteDays[day];
           const hadLocal = localDays[day];
-          if (rc == null) {
-            if (hadLocal) {
-              delete md.daily[sid][fid][day];
-              changed = true;
-            }
-            return;
-          }
+          if (rc == null) return;
           if (typeof rc !== "object") return;
           md.daily[sid] = md.daily[sid] || {};
           md.daily[sid][fid] = md.daily[sid][fid] || {};
@@ -2258,7 +2277,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v68"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v69"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -2422,9 +2441,42 @@ function arvMetaForTotal(localInd, lojas, days, periodo, subTpl) {
 
 /* Sistema */
 function getSystem(sellerId, fieldId, m = currentMonth) { const md = monthData(m); return (md.system[sellerId] && md.system[sellerId][fieldId] != null) ? Number(md.system[sellerId][fieldId]) : null; }
-/** Soma dos check-outs do indicador no período (cada fieldId soma só os seus valores no diário). */
+function normKpiName(s) {
+  return String(s || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+}
+function nameHasHoje(name) {
+  return /hoje/.test(normKpiName(name));
+}
+/** Sub “de hoje” que alimenta o indicador principal (ex.: Agendamentos ← Agendamentos p/ HOJE). */
+function parentRollupHojeSub(parentInd) {
+  if (!parentInd || parentInd.pctOnly) return null;
+  const subs = (parentInd.subs || []).filter(cfgHasDiario);
+  if (!subs.length) return null;
+  const pn = normKpiName(parentInd.name);
+  const pick = pred => subs.find(s => pred(normKpiName(s.name)));
+  if (/agendament/.test(pn)) return pick(n => /agendament/.test(n) && nameHasHoje(n));
+  if (/compareciment/.test(pn)) return pick(n => /compareciment/.test(n) && nameHasHoje(n));
+  if (/ficha/.test(pn) || /f&i/.test(pn) || /\bfi\b/.test(pn)) return pick(n => /ficha/.test(n) && /financ/.test(n) && nameHasHoje(n));
+  if (/troca/.test(pn)) return pick(n => /troca/.test(n) && nameHasHoje(n));
+  if (/venda/.test(pn)) return pick(n => /venda/.test(n) && nameHasHoje(n));
+  return pick(n => nameHasHoje(n));
+}
+function mainIndicatorById(fieldId) {
+  return state.indicators.find(i => i.id === fieldId) || null;
+}
+function checkoutFieldId(fieldId) {
+  const ind = mainIndicatorById(fieldId);
+  const sub = ind ? parentRollupHojeSub(ind) : null;
+  return sub ? sub.id : fieldId;
+}
+/** Soma dos check-outs do indicador no período (principal usa sub “hoje” quando existir). */
 function checkoutSum(sellerId, fieldId, days, m = currentMonth) {
-  return accum(sellerId, fieldId, "real", days, m);
+  return accum(sellerId, checkoutFieldId(fieldId), "real", days, m);
+}
+function diarioCheckoutSum(sellerId, cfg, days, m = currentMonth) {
+  const ind = mainIndicatorById(cfg.id);
+  const fid = ind ? checkoutFieldId(cfg.id) : cfg.id;
+  return accum(sellerId, fid, "real", days, m) ?? 0;
 }
 function setSystem(sellerId, fieldId, val, m = currentMonth) {
   const md = monthData(m);
@@ -4271,8 +4323,7 @@ function weekMetaSeller(cfg, sellerId, days) {
 function diarioLojaWeek(cfg, days) {
   let real = 0, meta = 0;
   orderedSellers().forEach(s => {
-    const r = accum(s.id, cfg.id, "real", days);
-    if (r != null) real += r;
+    real += diarioCheckoutSum(s.id, cfg, days);
     meta += weekMetaSeller(cfg, s.id, days);
   });
   return { real, meta };
@@ -4476,7 +4527,7 @@ function diarioRow(cfg, color, isSub) {
     cell += '</div>';
     row += `<td class="${dayCls(d)}${editable ? "" : " dio-locked-day"}" data-dio-day="${d}">${cell}</td>`;
   });
-  const realSum = accum(diarioSeller, cfg.id, "real", days) ?? 0;
+  const realSum = diarioCheckoutSum(diarioSeller, cfg, days);
   const metaSum = weekMeta(cfg, days);
   const loja = diarioLojaWeek(cfg, days);
   row += `<td class="dio-week-col" data-sum="${cfg.id}">${diarioWeekCellHtml(realSum, metaSum)}</td>`;
@@ -4488,7 +4539,7 @@ function updateDiarioSummary(fieldId) {
   const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
   const cfg = cfgById(fieldId);
   if (!cfg) return;
-  const realSum = accum(diarioSeller, fieldId, "real", days) ?? 0;
+  const realSum = diarioCheckoutSum(diarioSeller, cfg, days);
   const metaSum = weekMeta(cfg, days);
   const loja = diarioLojaWeek(cfg, days);
   const cell = document.querySelector(`#diarioTable [data-sum="${fieldId}"]`);
