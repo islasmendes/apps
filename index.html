@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v91";
+  var BUILD = "v92";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -1427,6 +1427,29 @@ function afterKpiStructureChange() {
   if (canPushOperationalConfig()) pushConfigTemplate();
   else queueConfigPush();
 }
+function pickKpiMetaField(local, tplField, key) {
+  if (local != null && local[key] != null && local[key] !== "") return Number(local[key]) || 0;
+  if (tplField != null && tplField[key] != null && tplField[key] !== "") return Number(tplField[key]) || 0;
+  return 0;
+}
+/** Preserva cfg local quando o template ainda usa nome antigo (ex.: após renomear no KPI). */
+function resolveLocalCfgForTemplate(st, reg, tInd) {
+  const hit = reg[tInd.name];
+  if (hit?.cfg) return hit;
+  const ab = String(tInd.abbr || "").trim();
+  if (ab) {
+    for (const ind of st.indicators || []) {
+      if (ind.abbr && ind.abbr === ab) return { id: ind.id, cfg: ind };
+    }
+  }
+  const want = String(tInd.name || "").trim().toLowerCase();
+  if (want) {
+    for (const ind of st.indicators || []) {
+      if (String(ind.name || "").trim().toLowerCase() === want) return { id: ind.id, cfg: ind };
+    }
+  }
+  return { id: null, cfg: null };
+}
 function extractOperationalConfig(st) {
   const indicators = (st.indicators || []).map(ind => ({
     name: ind.name,
@@ -1438,6 +1461,10 @@ function extractOperationalConfig(st) {
     pctOnly: !!ind.pctOnly,
     lowerBetter: !!ind.lowerBetter,
     openQuestion: !!ind.openQuestion,
+    metaDay: Number(ind.metaDay) || 0,
+    metaSat: Number(ind.metaSat) || 0,
+    metaSun: Number(ind.metaSun) || 0,
+    metaMonth: Number(ind.metaMonth) || 0,
     planCrossNames: normalizePlanCrossIds(ind).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean),
     subs: (ind.subs || []).map(s => ({
       name: s.name,
@@ -1446,6 +1473,10 @@ function extractOperationalConfig(st) {
       lowerBetter: !!s.lowerBetter,
       sundayOnly: !!s.sundayOnly,
       openQuestion: !!s.openQuestion,
+      metaDay: Number(s.metaDay) || 0,
+      metaSat: Number(s.metaSat) || 0,
+      metaSun: Number(s.metaSun) || 0,
+      metaMonth: Number(s.metaMonth) || 0,
       planCrossNames: normalizePlanCrossIds(s).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean)
     })),
     rates: (ind.rates || []).map(r => ({
@@ -1507,9 +1538,10 @@ function applyOperationalConfig(st, tpl, opts) {
   mergeKpiIdHistory(st);
   const reg = buildLocalFieldRegistry(st);
   const newIndicators = tpl.indicators.map(tInd => {
-    const local = reg[tInd.name]?.cfg;
+    const localHit = resolveLocalCfgForTemplate(st, reg, tInd);
+    const local = localHit.cfg;
     const ind = {
-      id: reg[tInd.name]?.id || uid(),
+      id: localHit.id || uid(),
       name: tInd.name,
       abbr: tInd.abbr || local?.abbr || "",
       color: tInd.color || local?.color,
@@ -1522,19 +1554,20 @@ function applyOperationalConfig(st, tpl, opts) {
       showInMatriz: showInMatrizFromLocal(local),
       planCrossId: local?.planCrossId || "",
       planCrossIds: Array.isArray(local?.planCrossIds) ? local.planCrossIds.slice() : (local?.planCrossId ? [local.planCrossId] : []),
-      metaDay: local?.metaDay ?? 0,
-      metaSat: local?.metaSat ?? 0,
-      metaSun: local?.metaSun ?? 0,
-      metaMonth: local?.metaMonth ?? 0,
+      metaDay: pickKpiMetaField(local, tInd, "metaDay"),
+      metaSat: pickKpiMetaField(local, tInd, "metaSat"),
+      metaSun: pickKpiMetaField(local, tInd, "metaSun"),
+      metaMonth: pickKpiMetaField(local, tInd, "metaMonth"),
       cvHint: local?.cvHint || "",
       subs: [],
       rates: []
     };
     const tplSubNames = new Set((tInd.subs || []).map(s => s.name));
     ind.subs = (tInd.subs || []).map(ts => {
-      const ls = reg[ts.name]?.cfg;
+      const subHit = resolveLocalCfgForTemplate(st, reg, ts);
+      const ls = subHit.cfg;
       return {
-        id: reg[ts.name]?.id || uid(),
+        id: subHit.id || reg[ts.name]?.id || uid(),
         name: ts.name,
         checkin: ts.checkin,
         checkout: ts.checkout,
@@ -1544,10 +1577,10 @@ function applyOperationalConfig(st, tpl, opts) {
         showInMatriz: showInMatrizFromLocal(ls),
         planCrossId: ls?.planCrossId || "",
         planCrossIds: Array.isArray(ls?.planCrossIds) ? ls.planCrossIds.slice() : (ls?.planCrossId ? [ls.planCrossId] : []),
-        metaDay: ls?.metaDay ?? 0,
-        metaSat: ls?.metaSat ?? 0,
-        metaSun: ls?.metaSun ?? 0,
-        metaMonth: ls?.metaMonth ?? 0,
+        metaDay: pickKpiMetaField(ls, ts, "metaDay"),
+        metaSat: pickKpiMetaField(ls, ts, "metaSat"),
+        metaSun: pickKpiMetaField(ls, ts, "metaSun"),
+        metaMonth: pickKpiMetaField(ls, ts, "metaMonth"),
         cvHint: ls?.cvHint || ""
       };
     });
@@ -1626,6 +1659,7 @@ function applyOperationalConfig(st, tpl, opts) {
   if (before === after && !opts?.ignoreVersion) return false;
   applyMatrizShowUi(st);
   autoRecoverOrphanKpiData(st);
+  repairBlockMetasFromSubsInState(st);
   if (!opts?.ignoreVersion) lastAppliedConfigVersion = tpl.updatedAt;
   return true;
 }
@@ -2512,7 +2546,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v91"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v92"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -6952,6 +6986,25 @@ function bindCvHintField(inp, onSave) {
   inp.addEventListener("change", persist);
   inp.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(persist, 450); });
 }
+function flushCardMetaFields(card, cfg) {
+  if (!card || !cfg) return;
+  card.querySelectorAll("[data-meta]").forEach(f => {
+    const k = f.dataset.meta;
+    if (k) cfg[k] = Number(f.value) || 0;
+  });
+}
+function bindKpiMetaField(inp, cfg, key, fieldId) {
+  if (!inp || inp.dataset.metaBound) return;
+  inp.dataset.metaBound = "1";
+  let timer = null;
+  const persist = () => {
+    cfg[key] = Number(inp.value) || 0;
+    save();
+    if (fieldId) refreshMetaAdherence(fieldId);
+  };
+  inp.addEventListener("change", persist);
+  inp.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(persist, 400); });
+}
 function bindIndicatorEvents() {
   const list = document.getElementById("indicatorList");
   list.querySelectorAll(".ind-card").forEach(card => { const ind = state.indicators.find(i=>i.id===card.dataset.ind); if(!ind) return;
@@ -6960,6 +7013,7 @@ function bindIndicatorEvents() {
     card.querySelectorAll(".ind-field").forEach(f => f.addEventListener("change", () => {
       const k = f.dataset.k;
       if (k === "cvHint") return;
+      flushCardMetaFields(card, ind);
       ind[k] = f.type === "checkbox" ? f.checked : f.value;
       if (k === "lowerBetter") {
         if (ind[k]) syncLowerBetterChildren(ind, true);
@@ -6971,22 +7025,49 @@ function bindIndicatorEvents() {
       save();
       renderIndicatorConfig();
     }));
-    card.querySelectorAll("[data-meta]").forEach(f => f.addEventListener("change", () => { ind[f.dataset.meta]=Number(f.value)||0; save(); refreshMetaAdherence(ind.id); }));
-    card.querySelectorAll(".metaloja-inp[data-field]").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
+    card.querySelectorAll("[data-meta]").forEach(f => bindKpiMetaField(f, ind, f.dataset.meta, ind.id));
+    card.querySelectorAll(".metaloja-inp[data-field]").forEach(f => {
+      if (f.dataset.metalojaBound) return;
+      f.dataset.metalojaBound = "1";
+      let timer = null;
+      const persist = () => onMetaLojaInput(f.dataset.field, f.value);
+      f.addEventListener("change", persist);
+      f.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(persist, 400); });
+    }); });
   list.querySelectorAll("[data-demote-ind]").forEach(b => b.addEventListener("click", () => openDemoteModal(b.dataset.demoteInd)));
   list.querySelectorAll("[data-promote-sub]").forEach(b => b.addEventListener("click", () => openPromoteModal(b.dataset.promoteSub)));
   list.querySelectorAll("[data-del-ind]").forEach(b => b.addEventListener("click", () => { if(confirm("Excluir este indicador?")){ const id = b.dataset.delInd; state.indicators = state.indicators.filter(i=>i.id!==id); if (state.order.indicators) state.order.indicators = state.order.indicators.filter(x => x !== id); save(); renderIndicatorConfig(); } }));
   list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false, openQuestion:false, showInMatriz:true, planCrossId:"", planCrossIds:[] }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".sub-row").forEach(row => { const ind = findIndBySub(row.dataset.sub); const s = ind && ind.subs.find(x=>x.id===row.dataset.sub); if(!s) return;
-    row.querySelectorAll(".sub-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => {
+    const flushSubMeta = () => {
+      ["metaDay", "metaSat", "metaSun", "metaMonth"].forEach(k => {
+        const inp = row.querySelector(`.sub-field[data-sk="${k}"]`);
+        if (inp) s[k] = Number(inp.value) || 0;
+      });
+    };
+    row.querySelectorAll(".sub-field:not(.metaloja-inp)").forEach(f => {
       const k = f.dataset.sk;
-      s[k] = f.type === "checkbox" ? f.checked : (["metaDay", "metaSat", "metaSun", "metaMonth"].includes(k) ? Number(f.value) || 0 : f.value);
-      if (k === "cvHint") { save(); return; }
-      if (k === "lowerBetter") { renderMatrizLegend(); renderMatrizLegend("arvoreLegend", "arvoreLegendHint"); matrizUiRerender(); }
-      if (k === "showInMatriz") { saveMatrizVisibility(); return; }
-      save(); renderIndicatorConfig();
-    }));
-    row.querySelectorAll(".metaloja-inp").forEach(f => f.addEventListener("input", () => onMetaLojaInput(f.dataset.field, f.value))); });
+      if (["metaDay", "metaSat", "metaSun", "metaMonth"].includes(k)) {
+        bindKpiMetaField(f, s, k, s.id);
+        return;
+      }
+      f.addEventListener("change", () => {
+        flushSubMeta();
+        s[k] = f.type === "checkbox" ? f.checked : f.value;
+        if (k === "cvHint") { save(); return; }
+        if (k === "lowerBetter") { renderMatrizLegend(); renderMatrizLegend("arvoreLegend", "arvoreLegendHint"); matrizUiRerender(); }
+        if (k === "showInMatriz") { saveMatrizVisibility(); return; }
+        save(); renderIndicatorConfig();
+      });
+    });
+    row.querySelectorAll(".metaloja-inp").forEach(f => {
+      if (f.dataset.metalojaBound) return;
+      f.dataset.metalojaBound = "1";
+      let timer = null;
+      const persist = () => onMetaLojaInput(f.dataset.field, f.value);
+      f.addEventListener("change", persist);
+      f.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(persist, 400); });
+    }); });
   list.querySelectorAll("[data-sub-hint]").forEach(row => {
     const s = findIndBySub(row.dataset.subHint)?.subs.find(x => x.id === row.dataset.subHint);
     const inp = row.querySelector("input");
