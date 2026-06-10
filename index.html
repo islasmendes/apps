@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v73";
+  var BUILD = "v74";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2430,7 +2430,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v73"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v74"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -2643,25 +2643,44 @@ function subCorrelacaoScore(parentInd, sub) {
   if (pn && sn && (sn.includes(pn) || pn.includes(sn))) score += 12;
   return score;
 }
-/** Sub “de hoje” correlato ao principal (ex.: Fichas F&I ← Fichas F&I de HOJE). */
+function isAuxDiarioSub(sub) {
+  if (!sub) return false;
+  if (sub.sundayOnly) return true;
+  const sn = normKpiName(sub.name);
+  if (/sabado|domingo/.test(sn)) return true;
+  const metaSat = Number(sub.metaSat) || 0;
+  const metaDay = Number(sub.metaDay) || 0;
+  const metaSun = Number(sub.metaSun) || 0;
+  if (metaSat > 0 && !sub.checkin && sub.checkout && metaDay <= 1 && metaSun === 0) return true;
+  return false;
+}
+/** Sub correlato ao principal para soma de check-out na matriz (prefere “hoje”, senão o mais parecido). */
 function parentRollupHojeSub(parentInd) {
   if (!parentInd || parentInd.pctOnly) return null;
-  const hojeSubs = (parentInd.subs || []).filter(cfgHasDiario).filter(s => nameHasHoje(s.name));
-  if (!hojeSubs.length) return null;
-  if (hojeSubs.length === 1) return hojeSubs[0];
-  let best = null, bestScore = 0;
-  hojeSubs.forEach(s => {
-    const sc = subCorrelacaoScore(parentInd, s);
+  const allDiario = (parentInd.subs || []).filter(cfgHasDiario);
+  if (!allDiario.length) return null;
+  const checkoutSubs = allDiario.filter(s => s.checkout);
+  let pool = checkoutSubs.length ? checkoutSubs : allDiario;
+  const dailyPool = pool.filter(s => !isAuxDiarioSub(s));
+  if (dailyPool.length) pool = dailyPool;
+  const hojeSubs = pool.filter(s => nameHasHoje(s.name));
+  const searchPool = hojeSubs.length ? hojeSubs : pool;
+  if (searchPool.length === 1) return searchPool[0];
+  let best = null, bestScore = -1;
+  searchPool.forEach(s => {
+    let sc = subCorrelacaoScore(parentInd, s);
+    if (nameHasHoje(s.name)) sc += 25;
     if (sc > bestScore) { bestScore = sc; best = s; }
   });
-  if (best && bestScore >= 10) return best;
+  if (best && bestScore >= 8) return best;
+  if (checkoutSubs.length === 1 && !isAuxDiarioSub(checkoutSubs[0])) return checkoutSubs[0];
   const pStems = parentCorrelStems(parentInd);
-  const stemHit = hojeSubs.find(s => {
+  const stemHit = searchPool.find(s => {
     const sStems = new Set(kpiNameTokens(s.name).map(kpiStem));
     for (const p of pStems) if (sStems.has(p)) return true;
     return false;
   });
-  return stemHit || hojeSubs[0];
+  return stemHit || searchPool[0];
 }
 function mainIndicatorById(fieldId) {
   return state.indicators.find(i => i.id === fieldId) || null;
