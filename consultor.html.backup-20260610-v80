@@ -1,0 +1,3039 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+(function () {
+  var BUILD = "v80";
+  var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
+  function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
+  function failKey(b) { return b + "@" + BUILD; }
+  function norm(b) {
+    var u = new URL(location.href);
+    if (u.searchParams.get("v") !== b) { u.searchParams.set("v", b); history.replaceState(null, "", u.toString()); }
+  }
+  function jump(b) {
+    if (sessionStorage.getItem("gc_force_reload")) {
+      sessionStorage.removeItem("gc_force_reload");
+    } else if (sessionStorage.getItem("gc_build_fail") === failKey(b)) {
+      return;
+    } else {
+      sessionStorage.setItem("gc_build_fail", failKey(b));
+    }
+    var u = new URL(location.href);
+    u.searchParams.set("v", b);
+    u.searchParams.set("_", String(Date.now()));
+    location.replace(u.toString());
+  }
+  fetch(FB, { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (remote) {
+    if (!remote) { norm(BUILD); return; }
+    if (num(remote) > num(BUILD)) jump(remote);
+    else { sessionStorage.removeItem("gc_build_fail"); norm(BUILD); }
+  }).catch(function () { norm(BUILD); });
+})();
+</script>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://gestao-altaperformance-default-rtdb.firebaseio.com">
+<link rel="dns-prefetch" href="https://www.gstatic.com">
+<link rel="dns-prefetch" href="https://gestao-altaperformance-default-rtdb.firebaseio.com">
+<meta name="theme-color" content="#050506">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Meu Dia — Gestão Alta Performance</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<style>
+  :root {
+    --bg: #050506; --bg-soft: #0d0d11; --panel: #111114; --panel-2: #18181d;
+    --border: #30313a; --text: #f0f2f7; --text-dim: #a3a9ba; --text-faint: #717889;
+    --accent: #4f8cff; --accent-2: #22d3aa; --danger: #ff5d6c; --warn: #ffb74d; --ok: #46d39a;
+    --dio-in-bg: #152238; --dio-in-bd: #3d6ec4; --dio-out-bg: #122820; --dio-out-bd: #1f9a72;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+  body {
+    background:
+      radial-gradient(900px 500px at 90% -5%, color-mix(in srgb, var(--accent) 22%, transparent), transparent),
+      radial-gradient(700px 400px at -10% 30%, color-mix(in srgb, var(--accent-2) 14%, transparent), transparent),
+      var(--bg);
+  }
+  .app { max-width: 480px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; padding: 14px 16px 10px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, transparent), color-mix(in srgb, var(--panel) 82%, transparent));
+    backdrop-filter: blur(14px); border-bottom: 1px solid var(--border);
+  }
+  .topbar-row { display: flex; align-items: center; gap: 10px; }
+  .logo {
+    width: 36px; height: 36px; border-radius: 11px; flex: none;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center; font-weight: 800; font-size: 15px; color: #fff;
+    box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .top-titles { flex: 1; min-width: 0; }
+  .top-titles .t1 { font-weight: 800; font-size: 12px; letter-spacing: .12px; line-height: 1.25; }
+  .top-titles .t1-sep { color: var(--text-faint); font-weight: 600; margin: 0 2px; }
+  .top-titles .app-ver {
+    font-size: 8.5px; font-weight: 600; letter-spacing: .35px; margin-top: 2px;
+    color: color-mix(in srgb, var(--text-faint) 55%, transparent); opacity: .65;
+  }
+  .live-pill {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .4px; padding: 4px 9px; border-radius: 99px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text-dim);
+  }
+  .live-pill.on { border-color: color-mix(in srgb, var(--ok) 50%, var(--border)); color: var(--ok); }
+  .live-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .live-pill.on .dot { animation: pulse 1.8s ease infinite; }
+  @keyframes pulse { 0%,100%{opacity:1; transform:scale(1)} 50%{opacity:.45; transform:scale(.85)} }
+  .urgency-pill {
+    display: none; flex-direction: column; align-items: center; gap: 1px; font-weight: 800;
+    font-variant-numeric: tabular-nums; letter-spacing: .3px; padding: 5px 10px; border-radius: 99px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--danger) 28%, #1a0808), color-mix(in srgb, var(--danger) 12%, var(--panel)));
+    border: 1px solid color-mix(in srgb, var(--danger) 65%, var(--border)); color: #ff8a94;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--danger) 35%, transparent);
+    animation: urgency-glow 1.2s ease-in-out infinite;
+  }
+  .urgency-pill.show { display: inline-flex; }
+  .urgency-pill.urgent {
+    animation: urgency-glow 1.2s ease-in-out infinite;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--danger) 28%, #1a0808), color-mix(in srgb, var(--danger) 12%, var(--panel)));
+    border-color: color-mix(in srgb, var(--danger) 65%, var(--border));
+    color: #ff8a94;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--danger) 35%, transparent);
+  }
+  .urgency-pill.warmup {
+    animation: none;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--warn) 22%, var(--panel)), var(--panel-2));
+    border-color: color-mix(in srgb, var(--warn) 55%, var(--border));
+    color: var(--warn);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--warn) 18%, transparent);
+  }
+  .urgency-pill.warmup #urgencyLbl { color: color-mix(in srgb, var(--warn) 80%, var(--text)); }
+  .urgency-pill.ended { animation: none; opacity: .9; color: #ff8a94; border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); background: var(--panel-2); box-shadow: none; }
+  .urgency-pill #urgencyLbl { font-size: 8px; letter-spacing: .5px; opacity: .9; }
+  .urgency-pill #urgencyTxt { font-size: 12px; }
+  @keyframes urgency-glow { 0%,100%{ box-shadow: 0 0 12px color-mix(in srgb, var(--danger) 25%, transparent); } 50%{ box-shadow: 0 0 22px color-mix(in srgb, var(--danger) 50%, transparent); } }
+  .screen { display: none; flex: 1; flex-direction: column; }
+  .screen.active { display: flex; }
+  .content { flex: 1; padding: 16px 16px calc(20px + var(--safe-b)); }
+  .card {
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    border: 1px solid var(--border); border-radius: 18px; padding: 18px;
+    box-shadow: 0 16px 48px rgba(0,0,0,.35);
+  }
+  .card h2 { margin: 0 0 6px; font-size: 18px; }
+  .sub { color: var(--text-dim); font-size: 13px; line-height: 1.55; margin: 0 0 14px; }
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+  .field label { font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; }
+  input {
+    background: var(--bg-soft); border: 1px solid var(--border); color: var(--text);
+    border-radius: 12px; padding: 12px 14px; font-size: 16px; font-family: var(--font); outline: none;
+  }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+  .btn {
+    cursor: pointer; border: none; border-radius: 12px; padding: 13px 18px; font-size: 15px; font-weight: 800;
+    font-family: var(--font); background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff;
+    width: 100%; margin-top: 6px;
+  }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); margin-top: 10px; }
+  .err { color: var(--danger); font-size: 12px; min-height: 18px; margin-top: 6px; }
+  .hero { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .progress-ring { flex: none; width: 56px; height: 56px; transition: filter .3s; }
+  .progress-ring circle { fill: none; stroke-width: 5; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
+  .progress-ring .track { stroke: var(--border); }
+  .progress-ring .fill { stroke: url(#grad); transition: stroke-dashoffset .45s ease, stroke .35s ease; }
+  .progress-ring.complete .fill { stroke: var(--ok); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--ok) 55%, transparent)); }
+  .progress-ring.checkout-pending { animation: ring-pulse 1.6s ease-in-out infinite; }
+  .progress-ring.complete .prog-center { fill: var(--ok); font-size: 20px; }
+  @keyframes ring-pulse {
+    0%, 100% { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--warn) 25%, transparent)); }
+    50% { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--warn) 55%, transparent)); }
+  }
+  .progress-ring .prog-center { fill: var(--text); font-size: 11px; font-weight: 800; font-family: var(--font); }
+  .hero-mid { flex: 1; min-width: 0; }
+  .hero-mid h1 { margin: 0; font-size: 18px; font-weight: 800; line-height: 1.15; }
+  .hero-mid .hero-mat { margin: 3px 0 0; font-size: 11px; color: var(--text-faint); font-weight: 700; line-height: 1.2; }
+  .hero-mid .hero-loja { margin: 2px 0 0; font-size: 12px; color: var(--accent-2); font-weight: 800; letter-spacing: .2px; line-height: 1.2; }
+  .hero-pills {
+    flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
+    width: 132px; min-width: 132px;
+  }
+  .hero-pill, .hero-pills .urgency-pill, .hero-pills .btn-resumo {
+    display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .3px;
+    padding: 4px 6px; border-radius: 99px; min-width: 0; min-height: 42px;
+    font-family: var(--font); text-align: center;
+  }
+  .hero-pill .pill-lbl, .hero-pills .urgency-pill #urgencyLbl {
+    font-size: 7px; letter-spacing: .45px; opacity: .92; line-height: 1.1;
+  }
+  .hero-pill .pill-txt, .hero-pills .urgency-pill #urgencyTxt {
+    font-size: 11px; line-height: 1.1;
+  }
+  .hero-pill.date-pill {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-2) 18%, var(--panel)), var(--panel-2));
+    border: 1px solid color-mix(in srgb, var(--accent-2) 50%, var(--border));
+    color: var(--accent-2);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--accent-2) 16%, transparent);
+  }
+  .hero-pills .urgency-pill { min-width: 0; width: 100%; }
+  .hero-pills .btn-resumo {
+    cursor: pointer; grid-column: span 2; flex-direction: row; gap: 7px;
+    width: 100%; min-height: 46px; padding: 8px 10px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 24%, var(--panel)), var(--panel-2));
+    border: 1.5px solid color-mix(in srgb, var(--accent) 50%, var(--border));
+    color: var(--text);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 16%, transparent);
+    animation: resumo-neon-pulse 2.2s ease-in-out infinite;
+    transition: transform .12s;
+  }
+  .hero-pills .btn-resumo .resumo-txt {
+    font-size: 12px; font-weight: 800; letter-spacing: .15px; line-height: 1.15;
+    white-space: nowrap; color: var(--text);
+  }
+  .hero-pills .btn-resumo .resumo-ico { font-size: 15px; line-height: 1; flex: none; }
+  @keyframes resumo-neon-pulse {
+    0%, 100% {
+      border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+      box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+    50% {
+      border-color: color-mix(in srgb, var(--accent-2) 72%, var(--border));
+      box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 38%, transparent), 0 0 32px color-mix(in srgb, var(--accent-2) 16%, transparent);
+    }
+  }
+  .hero-pills .btn-resumo:active {
+    transform: scale(.98);
+    animation: none;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .resumo-overlay {
+    position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.62); backdrop-filter: blur(6px);
+    display: none; align-items: flex-end; justify-content: center; padding: 0;
+  }
+  .resumo-overlay.show { display: flex; }
+  .resumo-sheet {
+    width: 100%; max-width: 480px; max-height: 88dvh; overflow: auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 20px 20px 0 0;
+    padding: 16px 16px calc(20px + var(--safe-b)); box-shadow: 0 -20px 60px rgba(0,0,0,.5);
+    animation: resumo-up .28s ease;
+  }
+  @keyframes resumo-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .resumo-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .resumo-head h2 { margin: 0; font-size: 17px; }
+  .resumo-close {
+    cursor: pointer; border: 1px solid var(--border); background: var(--panel-2); color: var(--text-dim);
+    width: 32px; height: 32px; border-radius: 99px; font-size: 14px; font-family: var(--font);
+  }
+  .resumo-hero {
+    border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin-bottom: 12px;
+    background: var(--panel-2); width: 100%; box-sizing: border-box;
+  }
+  .resumo-hero-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .resumo-hero-left { flex: 1; min-width: 0; }
+  .resumo-hero .hero-label { margin: 0 0 4px; font-weight: 800; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-size: 10px; }
+  .resumo-hero .big { font-size: 30px; font-weight: 800; line-height: 1; flex-shrink: 0; text-align: right; }
+  .resumo-hero-pct.pulse-bad { animation: resumo-pct-pulse 1.35s ease-in-out infinite; }
+  @keyframes resumo-pct-pulse {
+    0%, 100% { opacity: 1; text-shadow: 0 0 10px color-mix(in srgb, var(--danger) 35%, transparent); }
+    50% { opacity: .72; text-shadow: 0 0 22px color-mix(in srgb, var(--danger) 65%, transparent); }
+  }
+  .resumo-hero .subline { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+  .resumo-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 10px; margin-top: 10px; }
+  .resumo-chip-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; align-items: stretch; }
+  .resumo-chip {
+    font-size: 9px; font-weight: 800; padding: 5px 6px; border-radius: 99px; width: 100%; text-align: center;
+    border: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 40%, transparent);
+    white-space: normal; line-height: 1.3;
+  }
+  .resumo-chip-leg {
+    font-size: 8px; font-weight: 600; line-height: 1.3; color: var(--text-faint);
+    opacity: .62; padding: 0 1px; text-align: center;
+  }
+  .resumo-escala-line {
+    margin-top: 10px; padding-top: 8px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+    font-size: 9px; font-weight: 600; line-height: 1.45; color: var(--text-dim);
+    white-space: normal; word-break: break-word;
+  }
+  .resumo-sec { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .45px; color: var(--text-faint); margin: 14px 0 8px; }
+  .resumo-card {
+    border: 2px solid color-mix(in srgb, var(--rc) 58%, var(--border));
+    border-radius: 14px; margin-bottom: 10px; overflow: hidden; background: var(--panel);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--rc) 14%, transparent);
+  }
+  .resumo-row {
+    padding: 10px 12px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+  .resumo-row:last-child { border-bottom: none; }
+  .resumo-row.sub { padding-left: 20px; opacity: .95; }
+  .resumo-row.rate { padding-left: 20px; }
+  .resumo-row-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .resumo-row-top b { font-size: 13px; }
+  .resumo-row-top .pct { font-size: 14px; font-weight: 800; white-space: nowrap; }
+  .resumo-row-meta { font-size: 10px; color: var(--text-faint); margin-top: 3px; font-weight: 700; line-height: 1.45; }
+  .resumo-track-line { font-size: 10px; font-weight: 700; line-height: 1.45; color: var(--text-faint); }
+  .resumo-track-line + .resumo-track-line { margin-top: 4px; }
+  .resumo-track-line.relato { color: var(--text-dim); }
+  .resumo-track-line.gestor { color: color-mix(in srgb, var(--accent) 75%, var(--text-dim)); }
+  .resumo-meta-sep { color: var(--text-faint); opacity: .55; font-weight: 800; margin: 0 1px; }
+  .resumo-bar { height: 5px; border-radius: 99px; background: var(--border); margin-top: 8px; overflow: hidden; }
+  .resumo-bar i { display: block; height: 100%; border-radius: 99px; background: var(--bc); max-width: 100%; }
+  .resumo-rank { font-size: 10px; font-weight: 800; color: var(--accent-2); margin-top: 4px; }
+  .resumo-rank-note {
+    margin-top: 6px; padding: 8px 10px; border-radius: 10px; font-size: 10px; font-weight: 700;
+    line-height: 1.4; color: var(--warn);
+    background: color-mix(in srgb, var(--warn) 10%, var(--panel));
+    border: 1px solid color-mix(in srgb, var(--warn) 32%, var(--border));
+  }
+  .resumo-callout {
+    margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; line-height: 1.45;
+    border: 1px solid var(--border);
+  }
+  .resumo-callout.ok { background: color-mix(in srgb, var(--ok) 12%, var(--panel)); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--border)); }
+  .resumo-callout.warn { background: color-mix(in srgb, var(--warn) 12%, var(--panel)); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--border)); }
+  .resumo-callout.bad { background: color-mix(in srgb, var(--danger) 14%, var(--panel)); color: #ff8a94; border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+  .resumo-callout.muted { background: var(--panel-2); color: var(--text-dim); }
+  .resumo-callout.mini { margin-top: 8px; padding: 8px 10px; font-size: 11px; font-weight: 600; }
+  .resumo-ind-main { cursor: default; }
+  .resumo-ind-main.toggle { cursor: pointer; }
+  .resumo-ind-main.toggle:active { opacity: .92; }
+  .resumo-chev { font-size: 11px; color: var(--text-faint); margin-left: 6px; }
+  .resumo-expand { display: none; }
+  .resumo-expand.open { display: block; }
+  .resumo-pct-only-head .pct { font-size: 12px; color: var(--text-dim); font-weight: 700; }
+  .ind-card {
+    border: 1px solid var(--border); border-radius: 16px; padding: 14px; margin-bottom: 12px;
+    background: var(--panel); position: relative; overflow: hidden;
+  }
+  .ind-card::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--ic);
+  }
+  .ind-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 12px; padding-left: 6px; }
+  .ind-head b { font-size: 15px; color: var(--ic); }
+  .ind-cv-hint { font-size: 11px; color: var(--text-dim); font-weight: 500; line-height: 1.4; margin-top: 3px; opacity: .9; }
+  .ind-meta { font-size: 9px; color: var(--text-faint); font-weight: 600; line-height: 1.45; opacity: .55; }
+  .ind-meta .meta-sep { opacity: .45; font-weight: 800; }
+  .dio-grid { display: grid; gap: 10px; }
+  .dio-box {
+    border-radius: 12px; padding: 10px 12px; border: 1.5px solid;
+  }
+  .dio-box.in { background: var(--dio-in-bg); border-color: var(--dio-in-bd); }
+  .dio-box.out { background: var(--dio-out-bg); border-color: var(--dio-out-bd); }
+  .dio-box.locked { opacity: .68; }
+  .dio-box.mine { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 25%, transparent); }
+  .dio-lbl { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .35px; margin-bottom: 6px; display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; overflow: hidden; min-width: 0; }
+  .dio-box.in .dio-lbl { color: #7eb4ff; }
+  .dio-box.out .dio-lbl { color: #5ee4b8; }
+  .dio-lbl-sep { opacity: .45; font-weight: 700; flex: none; font-size: 9px; }
+  .dio-soon-banner {
+    display: flex; align-items: center; gap: 7px; width: 100%; box-sizing: border-box;
+    margin: 0 0 8px; padding: 8px 10px; border-radius: 9px;
+    font-size: 11px; font-weight: 700; line-height: 1.35; text-transform: none; letter-spacing: 0;
+    color: var(--warn);
+    background: color-mix(in srgb, var(--warn) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--warn) 48%, var(--border));
+    box-shadow: 0 0 10px color-mix(in srgb, var(--warn) 22%, transparent);
+    animation: soon-pulse 1.35s ease-in-out infinite;
+  }
+  .dio-soon-banner .hourglass {
+    display: inline-block; flex: none; font-size: 15px; line-height: 1;
+    animation: hourglass-flip 2.6s ease-in-out infinite;
+  }
+  @keyframes soon-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px color-mix(in srgb, var(--warn) 18%, transparent); }
+    50% { opacity: .88; box-shadow: 0 0 18px color-mix(in srgb, var(--warn) 42%, transparent); }
+  }
+  @keyframes hourglass-flip {
+    0%, 42% { transform: rotate(0deg); }
+    50%, 92% { transform: rotate(180deg); }
+    100% { transform: rotate(360deg); }
+  }
+  .dio-box input {
+    width: 100%; text-align: center; font-weight: 800; font-size: 18px; padding: 10px;
+    background: color-mix(in srgb, var(--bg) 40%, transparent); border-radius: 10px; border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  }
+  .dio-box input:disabled { cursor: not-allowed; color: var(--text-dim); opacity: .75; }
+  .dio-box.mine input { color: var(--text); opacity: 1; }
+  .dio-box.open-q .open-yn { display: flex; gap: 8px; margin-bottom: 10px; }
+  .open-yn-btn {
+    flex: 1; cursor: pointer; border: 1.5px solid var(--border); background: var(--panel-2); color: var(--text-dim);
+    border-radius: 10px; padding: 10px 8px; font-size: 14px; font-weight: 800; font-family: var(--font); transition: .15s;
+  }
+  .open-yn-btn.active.yes { border-color: var(--ok); color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, var(--panel-2)); }
+  .open-yn-btn.active.no { border-color: var(--danger); color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, var(--panel-2)); }
+  .open-yn-btn:disabled { cursor: not-allowed; opacity: .65; }
+  .open-qty { margin-bottom: 8px; }
+  .open-qty label, .open-justif label { display: block; font-size: 11px; font-weight: 700; color: var(--text-dim); margin-bottom: 4px; }
+  .open-qty input { width: 100%; text-align: center; font-weight: 800; font-size: 16px; padding: 8px; border-radius: 10px; border: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 40%, transparent); color: var(--text); font-family: var(--font); }
+  .open-justif textarea {
+    width: 100%; min-height: 72px; resize: vertical; padding: 10px; border-radius: 10px; border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 40%, transparent); color: var(--text); font-size: 13px; font-family: var(--font); line-height: 1.4;
+  }
+  .open-justif textarea:disabled, .open-qty input:disabled { opacity: .85; cursor: not-allowed; }
+  .open-qty.hidden { display: none; }
+  .open-save, .dio-save { width: 100%; margin-top: 8px; padding: 10px; font-size: 13px; }
+  .dio-save-hint { margin-top: 6px; font-size: 10px; font-weight: 600; line-height: 1.35; color: var(--text-faint); text-align: center; }
+  .dio-saved-row { margin-top: 8px; display: flex; justify-content: center; }
+  .dio-saved-chip {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 800; padding: 8px 14px; border-radius: 99px;
+    color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, var(--panel-2));
+    border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--border));
+  }
+  .open-qty input.below-target { color: var(--danger) !important; border-color: var(--danger) !important; font-weight: 800; }
+  .open-qty input.at-target { color: var(--ok) !important; border-color: var(--ok) !important; font-weight: 800; }
+  .dio-box.open-q.locked .open-qty input:disabled.below-target { color: var(--danger) !important; border-color: var(--danger) !important; opacity: 1; -webkit-text-fill-color: var(--danger); }
+  .dio-box.open-q.locked .open-qty input:disabled.at-target { color: var(--ok) !important; border-color: var(--ok) !important; opacity: 1; -webkit-text-fill-color: var(--ok); }
+  .open-cross-msg { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 12px; line-height: 1.45; font-weight: 600; }
+  .open-cross-msg.bad { background: color-mix(in srgb, var(--danger) 14%, var(--panel-2)); border: 1.5px solid color-mix(in srgb, var(--danger) 55%, var(--border)); color: #ff8a94; }
+  .open-cross-msg.good { background: color-mix(in srgb, var(--ok) 14%, var(--panel-2)); border: 1.5px solid color-mix(in srgb, var(--ok) 55%, var(--border)); color: var(--ok); }
+  .prog-run-hint { font-size: 11px; margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, var(--panel-2)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); color: var(--text-dim); line-height: 1.35; transition: opacity .12s ease; }
+  .prog-run-hint b { color: var(--accent-2); font-weight: 800; transition: color .15s ease, transform .15s ease; display: inline-block; }
+  .prog-run-hint.prog-sum-pulse b { transform: scale(1.06); }
+  .lock-tag {
+    font-size: 9px; font-weight: 800; padding: 2px 7px; border-radius: 99px;
+    background: color-mix(in srgb, var(--text-faint) 20%, transparent); color: var(--text-dim);
+  }
+  .lock-tag.gestor { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+  .lock-tag.consultor { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .lock-tag.soon { background: color-mix(in srgb, var(--warn) 22%, transparent); color: color-mix(in srgb, var(--warn) 85%, var(--text)); }
+  .toast {
+    position: fixed; bottom: calc(16px + var(--safe-b)); left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text); padding: 11px 18px;
+    border-radius: 99px; font-size: 13px; font-weight: 600; opacity: 0; transition: .3s; z-index: 100;
+    box-shadow: 0 12px 40px rgba(0,0,0,.45); max-width: 90%; text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .app-stale-banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+    padding: 10px 14px calc(10px + env(safe-area-inset-top, 0px));
+    background: color-mix(in srgb, var(--warn) 22%, #1a1208);
+    border-bottom: 1px solid color-mix(in srgb, var(--warn) 55%, var(--border));
+    color: var(--text); font-size: 12px; font-weight: 700; text-align: center;
+    box-shadow: 0 8px 28px rgba(0,0,0,.45);
+  }
+  .app-stale-banner button {
+    margin-left: 8px; cursor: pointer; border: 1px solid color-mix(in srgb, var(--warn) 60%, var(--border));
+    background: color-mix(in srgb, var(--warn) 18%, var(--panel)); color: var(--warn);
+    border-radius: 99px; padding: 4px 10px; font-size: 11px; font-weight: 800; font-family: var(--font);
+  }
+  .empty { text-align: center; color: var(--text-dim); padding: 32px 12px; font-size: 14px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="topbar-row">
+      <div class="logo">GC</div>
+      <div class="top-titles">
+        <div class="t1">Gestão Alta Performance <span class="t1-sep">—</span> Meu Dia</div>
+        <div class="app-ver" id="appVerLbl"></div>
+      </div>
+      <div class="live-pill" id="livePill"><span class="dot"></span><span id="liveTxt">offline</span></div>
+    </div>
+  </header>
+
+  <section class="screen active" id="screenLogin">
+    <div class="content">
+      <div class="card">
+        <h2>Entrar</h2>
+        <p class="sub">Use a <b>matrícula</b> e o <b>PIN</b> definidos pelo gestor em Regras de Negócio. Requer internet para sincronizar ao vivo. Em celulares antigos, prefira o <b>Google Chrome</b>. Se a tela parecer antiga, peça ao gestor um <b>link novo</b> ou force atualizar (puxe para baixo / recarregar).</p>
+        <div class="field"><label>Loja</label><input id="inLoja" placeholder="VCANT" autocapitalize="characters" autocomplete="organization"></div>
+        <div class="field"><label>Matrícula</label><input id="inMat" placeholder="Ex.: 10482" inputmode="numeric" autocomplete="username"></div>
+        <div class="field"><label>PIN</label><input id="inPin" type="password" placeholder="••••" inputmode="numeric" maxlength="8" autocomplete="current-password"></div>
+        <div class="err" id="loginErr"></div>
+        <button class="btn" id="btnLogin">Acessar meu dia</button>
+        <button type="button" class="btn sec sm" id="btnRetryCloud" style="display:none;margin-top:10px;width:100%">↺ Tentar conexão com a nuvem</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="screenMain">
+    <div class="content">
+      <div class="hero">
+        <svg class="progress-ring" viewBox="0 0 64 64" aria-hidden="true">
+          <defs><linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#4f8cff"/><stop offset="100%" stop-color="#22d3aa"/></linearGradient></defs>
+          <circle class="track" cx="32" cy="32" r="26"/>
+          <circle class="fill" id="progArc" cx="32" cy="32" r="26" stroke-dasharray="163.36" stroke-dashoffset="163.36"/>
+          <text id="progCenter" class="prog-center" x="32" y="35" text-anchor="middle">—</text>
+        </svg>
+        <div class="hero-mid">
+          <h1 id="helloName">—</h1>
+          <div class="hero-mat" id="helloMat"></div>
+          <div class="hero-loja" id="helloStore">—</div>
+        </div>
+        <div class="hero-pills">
+          <div class="hero-pill date-pill" id="datePill">
+            <span class="pill-lbl" id="datePillLbl">HOJE</span>
+            <span class="pill-txt" id="datePillTxt">—</span>
+          </div>
+          <div class="urgency-pill" id="urgencyPill"><span id="urgencyLbl">CHECK-OUT</span><span id="urgencyTxt">—:—:—</span></div>
+          <button type="button" class="btn-resumo" id="btnResumo" aria-label="Abrir resumo do mês">
+            <span class="resumo-ico" aria-hidden="true">📊</span>
+            <span class="resumo-txt">Resumo do mês</span>
+          </button>
+        </div>
+      </div>
+      <div id="fieldsRoot"></div>
+      <button class="btn ghost" id="btnLogout">Sair</button>
+    </div>
+  </section>
+</div>
+<div class="resumo-overlay" id="resumoOverlay" aria-hidden="true">
+  <div class="resumo-sheet" role="dialog" aria-labelledby="resumoTitle">
+    <div class="resumo-head">
+      <h2 id="resumoTitle">Resumo do mês</h2>
+      <button type="button" class="resumo-close" id="resumoClose" aria-label="Fechar">✕</button>
+    </div>
+    <div id="resumoRoot"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDZHUUAzhK5VDyrgpj4wcFJhrtMoJB2lnY",
+  authDomain: "gestao-altaperformance.firebaseapp.com",
+  databaseURL: "https://gestao-altaperformance-default-rtdb.firebaseio.com",
+  projectId: "gestao-altaperformance",
+  storageBucket: "gestao-altaperformance.firebasestorage.app",
+  messagingSenderId: "943349612077",
+  appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
+};
+const APP_BUILD = "v80"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+document.getElementById("appVerLbl").textContent = APP_BUILD;
+const SESSION_KEY = "gc_consultor_session";
+const PBKDF2_ITER = 310000;
+let fbDb = null, fbReady = false, connected = false, fbConnecting = false;
+const FB_CONNECT_MAX = 6;
+const FB_CONNECT_BASE_MS = 1200;
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+let lojaData = null, lojaCode = "", seller = null, lojaListener = null, lojaDailyListener = null;
+let tickTimer = null, lastRenderDay = null, lastTimePhase = null;
+let fieldsEditDepth = 0, renderFieldsQueued = false, lojaListenerTimer = null;
+const fieldSaveTimers = new Map();
+const CONSULTOR_SAVE_DEBOUNCE_MS = 200;
+const consultorPendingPushes = new Map();
+const consultorMergeGuard = new Map();
+const OFFLINE_QUEUE_LS = "gc_consultor_offline_queue";
+let wasConnected = false;
+let offlineFlushing = false;
+let confirmsRestored = false;
+const CONFIRM_LS_PREFIX = "gc_cell_confirm_";
+const CONSULTOR_SCHEDULE_DEFAULTS = {
+  checkinOpen: "07:00",
+  checkinClose: "12:00",
+  checkinGraceEnd: "12:30",
+  checkoutVisible: "12:30",
+  checkoutOpen: "16:00",
+  checkoutClose: "20:00",
+  checkinOverride: null,
+  checkoutOverride: null
+};
+function normScheduleOverride(v) {
+  return v === "open" || v === "closed" ? v : null;
+}
+function parseScheduleHM(str) {
+  const m = String(str || "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = +m[1], min = +m[2];
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  return h * 60 + min;
+}
+function fmtScheduleHM(mins) {
+  const h = Math.floor(mins / 60) % 24;
+  const m = Math.round(mins % 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+function normalizeConsultorSchedule(raw) {
+  const s = { ...CONSULTOR_SCHEDULE_DEFAULTS, ...(raw || {}) };
+  ["checkinOpen", "checkinClose", "checkinGraceEnd", "checkoutVisible", "checkoutOpen", "checkoutClose"].forEach(k => {
+    const p = parseScheduleHM(s[k]);
+    s[k] = p != null ? fmtScheduleHM(p) : CONSULTOR_SCHEDULE_DEFAULTS[k];
+  });
+  if (raw && raw.override != null && raw.checkinOverride == null && raw.checkoutOverride == null) {
+    const leg = normScheduleOverride(raw.override);
+    s.checkinOverride = leg;
+    s.checkoutOverride = leg;
+  }
+  s.checkinOverride = normScheduleOverride(s.checkinOverride);
+  s.checkoutOverride = normScheduleOverride(s.checkoutOverride);
+  delete s.override;
+  return s;
+}
+function consultorSchedule() { return normalizeConsultorSchedule(lojaData?.consultorSchedule); }
+function scheduleMins(key) {
+  return parseScheduleHM(consultorSchedule()[key]) ?? parseScheduleHM(CONSULTOR_SCHEDULE_DEFAULTS[key]);
+}
+function scheduleCheckinOverride() { return consultorSchedule().checkinOverride; }
+function scheduleCheckoutOverride() { return consultorSchedule().checkoutOverride; }
+function scheduleTimeLabel(key) { return consultorSchedule()[key] || CONSULTOR_SCHEDULE_DEFAULTS[key]; }
+function nowMins() {
+  const n = new Date();
+  return n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60;
+}
+function dateAtScheduleMins(mins) {
+  const d = new Date();
+  d.setHours(Math.floor(mins / 60), Math.round(mins % 60), 0, 0);
+  return d;
+}
+function checkinWindowOpen() {
+  const ov = scheduleCheckinOverride();
+  if (ov === "open") return true;
+  if (ov === "closed") return false;
+  const m = nowMins();
+  return m >= scheduleMins("checkinOpen") && m < scheduleMins("checkinGraceEnd");
+}
+function checkinGraceActive() {
+  if (scheduleCheckinOverride()) return false;
+  const m = nowMins();
+  return m >= scheduleMins("checkinClose") && m < scheduleMins("checkinGraceEnd");
+}
+function checkinWindowEnded() {
+  const ov = scheduleCheckinOverride();
+  if (ov === "open") return false;
+  if (ov === "closed") return true;
+  return nowMins() >= scheduleMins("checkinGraceEnd");
+}
+function consultorCheckoutVisible() {
+  const ov = scheduleCheckoutOverride();
+  if (ov === "open") return true;
+  if (ov === "closed") return false;
+  return nowMins() >= scheduleMins("checkoutVisible");
+}
+function checkoutWindowOpen() {
+  const ov = scheduleCheckoutOverride();
+  if (ov === "open") return true;
+  if (ov === "closed") return false;
+  const m = nowMins();
+  return m >= scheduleMins("checkoutOpen") && m < scheduleMins("checkoutClose");
+}
+function checkoutWindowEnded() {
+  const ov = scheduleCheckoutOverride();
+  if (ov === "open") return false;
+  if (ov === "closed") return true;
+  return nowMins() >= scheduleMins("checkoutClose");
+}
+function timePhase() {
+  const m = nowMins();
+  if (m < scheduleMins("checkinOpen")) return "pre-checkin";
+  if (m < scheduleMins("checkinClose")) return "checkin";
+  if (m < scheduleMins("checkinGraceEnd")) return "checkin-grace";
+  if (m < scheduleMins("checkoutOpen")) return "pre-checkout";
+  if (m < scheduleMins("checkoutClose")) return "checkout";
+  return "ended";
+}
+function planUsesCheckoutWindow(cfg, day, month) {
+  if (!cfg || !cfgOpenQuestion(cfg)) return false;
+  const needs = consultorFieldNeeds(seller.id, cfg, day, month);
+  return openQuestionCheckoutOnly(cfg, needs);
+}
+function planWindowOpen(cfg, day, month) {
+  return planUsesCheckoutWindow(cfg, day, month) ? checkoutWindowOpen() : checkinWindowOpen();
+}
+
+const params = new URLSearchParams(location.search);
+if (params.get("loja")) document.getElementById("inLoja").value = params.get("loja").toUpperCase();
+
+function todayISO() { return new Date().toISOString().slice(0, 7); }
+function todayDay() { return new Date().getDate(); }
+function fmt(n, dec) {
+  if (n == null || n === "") return "—";
+  if (dec != null) return Number(n).toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  return Number(n).toLocaleString("pt-BR");
+}
+function toast(msg, bad) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.style.borderColor = bad ? "var(--danger)" : "var(--border)";
+  el.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("show"), 2800);
+}
+function bytesToHex(buf) { return Array.from(buf).map(b => b.toString(16).padStart(2, "0")).join(""); }
+function hexToBytes(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+function timingSafeEqual(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  let r = 0;
+  for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return r === 0;
+}
+async function verifyPin(pin, record) {
+  if (!record || !record.hash || !record.salt) return false;
+  const enc = new TextEncoder();
+  const salt = hexToBytes(record.salt);
+  const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(pin), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: PBKDF2_ITER, hash: "SHA-256" }, keyMaterial, 256);
+  return timingSafeEqual(bytesToHex(new Uint8Array(bits)), record.hash);
+}
+function setLive(on, txt) {
+  const pill = document.getElementById("livePill");
+  pill.classList.toggle("on", on);
+  document.getElementById("liveTxt").textContent = txt || (on ? "ao vivo" : "offline");
+}
+function updateLoginCloudUi(msg) {
+  const err = document.getElementById("loginErr");
+  const btn = document.getElementById("btnLogin");
+  const retry = document.getElementById("btnRetryCloud");
+  if (fbReady) {
+    if (btn) { btn.disabled = false; btn.textContent = "Acessar meu dia"; }
+    if (retry) retry.style.display = "none";
+    if (err && err.dataset.cloudMsg) { err.textContent = ""; delete err.dataset.cloudMsg; err.style.color = ""; }
+    return;
+  }
+  if (fbConnecting) {
+    if (btn) { btn.disabled = true; btn.textContent = "Conectando à nuvem…"; }
+    if (retry) retry.style.display = "none";
+    if (err) {
+      err.textContent = msg || "Inicializando conexão com a nuvem…";
+      err.dataset.cloudMsg = "1";
+      err.style.color = "var(--text-dim)";
+    }
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = "Acessar meu dia"; }
+    if (retry) retry.style.display = "inline-flex";
+    if (err && err.dataset.cloudMsg) {
+      err.textContent = msg || "Sem conexão com a nuvem. Toque em Tentar de novo ou abra no Chrome.";
+      err.style.color = "var(--danger)";
+    }
+  }
+}
+async function waitForFbReady(timeoutMs = 22000) {
+  const t0 = Date.now();
+  while (!fbReady && Date.now() - t0 < timeoutMs) {
+    if (!fbConnecting) connectCloud();
+    await sleep(450);
+  }
+  return fbReady;
+}
+function attachFbConnectionListener() {
+  if (!fbDb || window._fbConnListener) return;
+  window._fbConnListener = true;
+  fbDb.ref(".info/connected").on("value", s => {
+    const nowConnected = !!(s && s.val());
+    if (nowConnected && !wasConnected) {
+      flushPendingFieldSaves();
+      flushOfflineQueue();
+    }
+    wasConnected = nowConnected;
+    connected = nowConnected;
+    setLive(connected, connected ? "ao vivo" : "reconectando…");
+    if (!connected && fbDb) {
+      clearTimeout(window._fbGoOnlineT);
+      window._fbGoOnlineT = setTimeout(() => { try { fbDb.goOnline(); } catch (e) {} }, 2800);
+    }
+  });
+}
+async function connectCloud() {
+  if (fbReady) return true;
+  if (fbConnecting) return waitForFbReady();
+  if (typeof firebase === "undefined") {
+    setLive(false, "offline");
+    updateLoginCloudUi("Biblioteca da nuvem não carregou. Use o Google Chrome ou atualize o navegador.");
+    return false;
+  }
+  fbConnecting = true;
+  updateLoginCloudUi("Conectando à nuvem…");
+  try {
+    if (!fbDb) {
+      try { firebase.initializeApp(FIREBASE_CONFIG); } catch (e) {
+        if (!/already exists/i.test(String(e && e.message))) throw e;
+      }
+      fbDb = firebase.database();
+    }
+    for (let i = 0; i < FB_CONNECT_MAX; i++) {
+      updateLoginCloudUi(`Conectando à nuvem… (${i + 1}/${FB_CONNECT_MAX})`);
+      try {
+        await firebase.auth().signInAnonymously();
+        fbReady = true;
+        setLive(false, "conectando…");
+        watchAppBuild();
+        attachFbConnectionListener();
+        startTickLoop();
+        tryRestore().then(ok => { if (!ok) showScreen("screenLogin"); });
+        updateLoginCloudUi();
+        return true;
+      } catch (e) {
+        console.warn("nuvem tentativa", i + 1, e);
+        await sleep(FB_CONNECT_BASE_MS * Math.pow(1.45, i));
+      }
+    }
+    setLive(false, "offline");
+    updateLoginCloudUi("Sem conexão com a nuvem. Rede lenta ou navegador antigo — tente de novo ou use o Chrome.");
+    return false;
+  } catch (e) {
+    console.warn(e);
+    setLive(false, "offline");
+    updateLoginCloudUi("Erro ao iniciar a nuvem. Tente de novo ou use o Google Chrome.");
+    return false;
+  } finally {
+    fbConnecting = false;
+    if (!fbReady) updateLoginCloudUi();
+  }
+}
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+function saveSession() {
+  localStorage.setItem(SESSION_KEY, JSON.stringify({
+    loja: lojaCode, sellerId: seller.id, matricula: seller.matricula,
+    exp: Date.now() + 7 * 24 * 60 * 60 * 1000
+  }));
+}
+function loadSession() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+    if (!s || s.exp < Date.now()) return null;
+    return s;
+  } catch (e) { return null; }
+}
+function clearSession() { localStorage.removeItem(SESSION_KEY); }
+
+function getCell(sellerId, fieldId, day, month) {
+  const d = lojaData?.months?.[month]?.daily;
+  const dayKey = String(day);
+  return (d?.[sellerId]?.[fieldId]?.[dayKey]) || (d?.[sellerId]?.[fieldId]?.[day]) || {};
+}
+function localCellRef(sellerId, fieldId, day, month) {
+  if (!lojaData.months) lojaData.months = {};
+  if (!lojaData.months[month]) lojaData.months[month] = { daily: {} };
+  const md = lojaData.months[month];
+  if (!md.daily) md.daily = {};
+  if (!md.daily[sellerId]) md.daily[sellerId] = {};
+  if (!md.daily[sellerId][fieldId]) md.daily[sellerId][fieldId] = {};
+  const dayKey = String(day);
+  if (!md.daily[sellerId][fieldId][dayKey]) md.daily[sellerId][fieldId][dayKey] = {};
+  return md.daily[sellerId][fieldId][dayKey];
+}
+function setLocalCell(sellerId, fieldId, day, month, key, val) {
+  const cell = localCellRef(sellerId, fieldId, day, month);
+  if (val == null) {
+    delete cell[key];
+    delete cell[key + "By"];
+    delete cell[key + "At"];
+  } else {
+    cell[key] = val;
+    cell[key + "By"] = "consultor";
+    cell[key + "At"] = Date.now();
+  }
+}
+function setLocalCellFlag(sellerId, fieldId, day, month, flagKey, val) {
+  const cell = localCellRef(sellerId, fieldId, day, month);
+  if (val == null) delete cell[flagKey];
+  else cell[flagKey] = val;
+}
+function consultorGuardKey(sellerId, fieldId, day, month) {
+  return `${month}|${sellerId}|${fieldId}|${String(day)}`;
+}
+function armConsultorMergeGuard(sellerId, fieldId, day, month) {
+  consultorMergeGuard.set(consultorGuardKey(sellerId, fieldId, day, month), Date.now() + 12000);
+}
+function releaseConsultorMergeGuard(sellerId, fieldId, day, month) {
+  consultorMergeGuard.delete(consultorGuardKey(sellerId, fieldId, day, month));
+}
+function isConsultorMergeGuarded(sellerId, fieldId, day, month) {
+  const exp = consultorMergeGuard.get(consultorGuardKey(sellerId, fieldId, day, month));
+  if (!exp) return false;
+  if (Date.now() > exp) { consultorMergeGuard.delete(consultorGuardKey(sellerId, fieldId, day, month)); return false; }
+  return true;
+}
+function consultorPushKey(sellerId, fieldId, day, key, month) {
+  return `push|${month}|${sellerId}|${fieldId}|${String(day)}|${key}`;
+}
+function consultorCellAt(cell, key) {
+  if (!cell) return 0;
+  if (key === "plan" || key === "real") return Number(cell[key + "At"]) || 0;
+  return 0;
+}
+function consultorCellLatestAt(cell) {
+  return Math.max(consultorCellAt(cell, "plan"), consultorCellAt(cell, "real"));
+}
+function mergeConsultorCellFromRemote(lc, rc) {
+  if (!rc || typeof rc !== "object") return false;
+  let cellChanged = false;
+  const dataKeys = ["plan", "real", "planYes", "planJustif"];
+  const metaKeys = ["planBy", "realBy", "planAt", "realAt", "planConfirm", "realConfirm"];
+  dataKeys.forEach(k => {
+    if (!Object.prototype.hasOwnProperty.call(rc, k)) return;
+    if (rc[k] === null || rc[k] === "") {
+      const remoteAt = consultorCellAt(rc, k);
+      const localAt = consultorCellAt(lc, k);
+      if (remoteAt >= localAt && Object.prototype.hasOwnProperty.call(lc, k)) {
+        delete lc[k];
+        if (lc[k + "By"]) delete lc[k + "By"];
+        if (lc[k + "At"]) delete lc[k + "At"];
+        const ck = k === "plan" ? "planConfirm" : k === "real" ? "realConfirm" : null;
+        if (ck && lc[ck]) delete lc[ck];
+        cellChanged = true;
+      }
+      return;
+    }
+    const remoteAt = consultorCellAt(rc, k);
+    const localAt = consultorCellAt(lc, k);
+    if (remoteAt >= localAt && rc[k] !== lc[k]) { lc[k] = rc[k]; cellChanged = true; }
+  });
+  metaKeys.forEach(k => {
+    if (!Object.prototype.hasOwnProperty.call(rc, k)) return;
+    const field = k.startsWith("plan") ? "plan" : k.startsWith("real") ? "real" : null;
+    if (field) {
+      const remoteAt = consultorCellAt(rc, field);
+      const localAt = consultorCellAt(lc, field);
+      if (remoteAt < localAt) return;
+    }
+    if (rc[k] === null || rc[k] === "") {
+      if (Object.prototype.hasOwnProperty.call(lc, k)) { delete lc[k]; cellChanged = true; }
+    } else if (rc[k] !== lc[k]) { lc[k] = rc[k]; cellChanged = true; }
+  });
+  return cellChanged;
+}
+function mergeSellerDailyFromRemote(remoteFields, sellerId, month) {
+  if (!remoteFields || typeof remoteFields !== "object" || !lojaData) return false;
+  if (!lojaData.months) lojaData.months = {};
+  if (!lojaData.months[month]) lojaData.months[month] = { daily: {} };
+  if (!lojaData.months[month].daily) lojaData.months[month].daily = {};
+  const localFields = lojaData.months[month].daily[sellerId] || {};
+  lojaData.months[month].daily[sellerId] = localFields;
+  let changed = false;
+  Object.keys(remoteFields).forEach(fid => {
+    const remoteDays = remoteFields[fid] || {};
+    if (!localFields[fid]) localFields[fid] = {};
+    Object.keys(remoteDays).forEach(day => {
+      const dayKey = String(day);
+      if (isConsultorMergeGuarded(sellerId, fid, dayKey, month)) return;
+      const focused = document.querySelector(`input[data-fid="${fid}"][data-key]:focus`);
+      if (focused) return;
+      if ([...consultorPendingPushes.keys()].some(k => k.includes(`|${sellerId}|${fid}|${dayKey}|`))) return;
+      const lc = localFields[fid][dayKey] || {};
+      localFields[fid][dayKey] = lc;
+      const rc = remoteDays[day] ?? remoteDays[dayKey];
+      if (!rc || typeof rc !== "object") return;
+      const localAt = consultorCellLatestAt(lc);
+      const remoteAt = consultorCellLatestAt(rc);
+      if (localAt > remoteAt) return;
+      if (mergeConsultorCellFromRemote(lc, rc)) changed = true;
+      if (!Object.keys(lc).length) { delete localFields[fid][dayKey]; changed = true; }
+    });
+  });
+  return changed;
+}
+function mergeConsultorLojaFromRemote(remote) {
+  if (!remote) return;
+  if (!lojaData) { lojaData = remote; normalizeLojaIndicators(); return; }
+  ["sellers", "indicators", "consultorSchedule", "blocks", "ui", "templateId"].forEach(k => {
+    if (remote[k] !== undefined) lojaData[k] = remote[k];
+  });
+  const month = todayISO();
+  if (remote.months?.[month]?.daily?.[seller?.id]) {
+    mergeSellerDailyFromRemote(remote.months[month].daily[seller.id], seller.id, month);
+  }
+  normalizeLojaIndicators();
+}
+function patchConsultorFieldInputs() {
+  if (!seller) return;
+  const month = todayISO(), day = todayDay();
+  document.querySelectorAll("input[data-fid][data-key]").forEach(inp => {
+    if (document.activeElement === inp) return;
+    const fieldId = inp.dataset.fid, key = inp.dataset.key;
+    const c = getCell(seller.id, fieldId, day, month);
+    const v = c[key];
+    const display = v != null && v !== "" ? String(v) : "";
+    if (inp.value !== display) inp.value = display;
+    refreshDioSaveBtn(inp.closest(".dio-box"));
+  });
+  updateProgress();
+}
+function loadOfflineQueue() {
+  try { return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_LS) || "{}"); } catch (e) { return {}; }
+}
+function saveOfflineQueue(q) {
+  try { localStorage.setItem(OFFLINE_QUEUE_LS, JSON.stringify(q)); } catch (e) { /* ignore */ }
+}
+function enqueueOfflinePush(item) {
+  const q = loadOfflineQueue();
+  const id = `${item.month}|${item.sellerId}|${item.fieldId}|${item.day}|${item.key}`;
+  q[id] = { ...item, ts: Date.now() };
+  saveOfflineQueue(q);
+  if (!connected) setLive(false, "offline · salvo local");
+}
+async function flushOfflineQueue() {
+  if (offlineFlushing || !fbReady || !fbDb) return;
+  const q = loadOfflineQueue();
+  const items = Object.values(q).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  if (!items.length) return;
+  offlineFlushing = true;
+  let synced = 0;
+  try {
+    for (const item of items) {
+      const id = `${item.month}|${item.sellerId}|${item.fieldId}|${item.day}|${item.key}`;
+      const ok = await pushConsultorDailyCell(item.sellerId, item.fieldId, item.day, item.key, item.val, item.month, { confirm: item.confirm, skipOffline: true, silent: true });
+      if (ok) {
+        const cur = loadOfflineQueue();
+        delete cur[id];
+        saveOfflineQueue(cur);
+        synced++;
+      }
+    }
+    if (synced && connected) setLive(true, "ao vivo");
+    if (synced) toast("Dados offline sincronizados");
+  } catch (e) {
+    console.warn("flushOfflineQueue", e);
+  } finally {
+    offlineFlushing = false;
+  }
+}
+async function pushConsultorDailyCell(sellerId, fieldId, day, key, val, month, opts) {
+  opts = opts || {};
+  const dayKey = String(day);
+  if (!seller || !lojaCode || !fbReady || !fbDb) return false;
+  const path = `lojas/${lojaCode}/data/months/${month}/daily/${sellerId}/${fieldId}/${dayKey}`;
+  const ref = fbDb.ref(path);
+  const cell = getCell(sellerId, fieldId, dayKey, month);
+  const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
+  try {
+    if (val === "" || val === null || (typeof val === "number" && isNaN(val))) {
+      if (cell[key + "By"] === "gestor" && hasCellValue(cell, key)) return false;
+      const next = { ...cell };
+      delete next[key]; delete next[key + "By"]; delete next[key + "At"];
+      delete next[cellConfirmKey(key)];
+      const stillHas = (cfg && hasPlanValue(next, cfg)) || hasCellValue(next, "real") || next.planYes === true || next.planYes === false || (next.planJustif && String(next.planJustif).trim());
+      const ck = cellConfirmKey(key);
+      if (!stillHas) await ref.remove();
+      else await ref.update({ [key]: null, [key + "By"]: null, [key + "At"]: null, [ck]: null });
+      setLocalCell(sellerId, fieldId, dayKey, month, key, null);
+    } else {
+      const payload = { [key]: val, [key + "By"]: "consultor", [key + "At"]: Date.now() };
+      if (opts.confirm) payload[cellConfirmKey(key)] = true;
+      await ref.update(payload);
+      setLocalCell(sellerId, fieldId, dayKey, month, key, val);
+      if (opts.confirm) {
+        setLocalCellFlag(sellerId, fieldId, dayKey, month, cellConfirmKey(key), true);
+        persistConfirmLocal(sellerId, fieldId, dayKey, month, key);
+      }
+    }
+    await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
+    armConsultorMergeGuard(sellerId, fieldId, dayKey, month);
+    return true;
+  } catch (e) {
+    console.warn("pushConsultorDailyCell", e);
+    return false;
+  }
+}
+function flushPendingFieldSaves() {
+  fieldSaveTimers.forEach(timer => clearTimeout(timer));
+  fieldSaveTimers.clear();
+  document.querySelectorAll("input[data-fid]").forEach(inp => {
+    if (inp.value.trim() !== "") saveField(inp);
+  });
+}
+function cellFilledFromDom(cfg, key, cell) {
+  if (key === "plan" && cfgOpenQuestion(cfg)) {
+    const box = document.querySelector(`.dio-box.open-q[data-open-fid="${cfg.id}"]`);
+    if (!box) return hasPlanValue(cell, cfg);
+    const yes = box.querySelector('[data-yn="1"]')?.classList.contains("active");
+    const no = box.querySelector('[data-yn="0"]')?.classList.contains("active");
+    if (!yes && !no) return hasPlanValue(cell, cfg);
+    const justif = (box.querySelector("[data-open-justif]")?.value || "").trim();
+    if (justif.length < OPEN_JUSTIF_MIN) return false;
+    if (yes) {
+      const q = box.querySelector("[data-open-qty]")?.value.trim();
+      return q !== "" && !isNaN(Number(q)) && Number(q) >= 0;
+    }
+    return true;
+  }
+  const inp = document.querySelector(`input[data-fid="${cfg.id}"][data-key="${key}"]`);
+  if (inp) return inp.value.trim() !== "";
+  return hasCellValue(cell, key);
+}
+function cfgHasDiario(cfg) { return !!(cfg && (cfg.checkin || cfg.checkout)); }
+const OPEN_JUSTIF_MIN = 10;
+function cfgOpenQuestion(cfg) { return !!(cfg && cfg.openQuestion); }
+function openQuestionCheckoutOnly(cfg, needs) {
+  return cfgOpenQuestion(cfg) && needs.checkout && !needs.checkin;
+}
+function openQuestionCheckin(cfg, needs) {
+  return cfgOpenQuestion(cfg) && needs.checkin;
+}
+function openConfirmedQty(cell) {
+  if (cell.planYes !== true) return null;
+  const n = cell.plan;
+  return n != null && n !== "" && !isNaN(Number(n)) ? Number(n) : null;
+}
+function buildOpenQuestionBox(cfg, c, slot, day, month) {
+  const planLocked = cellLockedForConsultor(c, "plan", day, month, cfg);
+  const planMine = cellIsMine(c, "plan", cfg);
+  const yes = c.planYes === true, no = c.planYes === false;
+  const justif = c.planJustif || "";
+  const qty = c.plan != null ? c.plan : "";
+  const slotLbl = slot === "out" ? "Check-out" : "Check-in";
+  const crossHit = yes && planLocked ? crossPlanHit(seller.id, cfg, day, month) : null;
+  const crossTgt = crossHit?.value ?? null;
+  const qtyNum = openConfirmedQty(c);
+  const qtyCls = planLocked && crossTgt != null && qtyNum != null ? (qtyNum < crossTgt ? "below-target" : "at-target") : "";
+  const planSoon = fieldSoonKind(c, "plan", day, month, cfg);
+  let html = `<div class="dio-box ${slot} open-q${planLocked ? " locked" : ""}${planMine && !planLocked ? " mine" : ""}" data-open-fid="${cfg.id}">`;
+  html += `<div class="dio-lbl">${slotLbl} ${lockLabel(c, "plan", day, month, cfg)}</div>`;
+  if (planSoon) html += soonBannerHtml(planSoon);
+  else if (checkinGraceActive() && slot === "in") html += graceBannerHtml();
+  html += `<div class="open-yn"><button type="button" class="open-yn-btn${yes ? " active yes" : ""}" data-yn="1" ${planLocked ? "disabled" : ""}>Sim</button>`;
+  html += `<button type="button" class="open-yn-btn${no ? " active no" : ""}" data-yn="0" ${planLocked ? "disabled" : ""}>Não</button></div>`;
+  html += `<div class="open-qty${yes ? "" : " hidden"}"><label>Quantas confirmações?</label>`;
+  html += `<input type="number" inputmode="numeric" data-open-qty${qtyCls ? ` class="${qtyCls}"` : ""} value="${qty}" placeholder="0" min="0" ${planLocked ? "disabled" : ""}></div>`;
+  const justLbl = no ? "Por que não fez? Qual dificuldade?" : yes ? "Complemento / detalhe" : "Justificativa";
+  html += `<div class="open-justif"><label>${justLbl} <span class="hint">mín. ${OPEN_JUSTIF_MIN} caracteres</span></label>`;
+  html += `<textarea data-open-justif rows="3" placeholder="Descreva com clareza…" ${planLocked ? "disabled" : ""}>${escText(justif)}</textarea></div>`;
+  const crossMsg = yes && planLocked && crossTgt != null && qtyNum != null
+    ? openCrossFeedbackHtml(qtyNum, crossTgt, crossHit?.ref?.name, crossHit) : "";
+  html += `<div class="open-cross-msg-wrap">${crossMsg}</div>`;
+  if (!planLocked) html += `<button type="button" class="btn open-save" data-open-save>Salvar resposta</button>`;
+  html += `</div>`;
+  return html;
+}
+function isOpenPlanComplete(cell) {
+  if (cell.planYes !== true && cell.planYes !== false) return false;
+  const j = String(cell.planJustif || "").trim();
+  if (j.length < OPEN_JUSTIF_MIN) return false;
+  if (cell.planYes === true) {
+    const n = cell.plan;
+    return n != null && n !== "" && !isNaN(Number(n)) && Number(n) >= 0;
+  }
+  return true;
+}
+function hasPlanValue(cell, cfg) {
+  if (cfgOpenQuestion(cfg)) return isOpenPlanComplete(cell);
+  return hasCellValue(cell, "plan");
+}
+function escText(s) { return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+function normName(s) { return String(s || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase(); }
+function cfgByIdLoqa(id) {
+  for (const ind of orderedIndicators()) {
+    if (ind.id === id) return ind;
+    const sub = (ind.subs || []).find(x => x.id === id);
+    if (sub) return sub;
+  }
+  return null;
+}
+function parentIndOfCfg(cfg) {
+  for (const ind of orderedIndicators()) {
+    if (ind.id === cfg.id) return ind;
+    if ((ind.subs || []).some(s => s.id === cfg.id)) return ind;
+  }
+  return null;
+}
+/** Último dia trabalhado antes de `day` (pula folgas na escala). */
+function prevWorkedDay(sellerId, day, month) {
+  for (let d = day - 1; d >= 1; d--) {
+    if (sellerWorks(sellerId, d, month)) return d;
+  }
+  return null;
+}
+function normalizePlanCrossIds(cfg) {
+  if (!cfg) return cfg;
+  if (!Array.isArray(cfg.planCrossIds)) cfg.planCrossIds = cfg.planCrossId ? [cfg.planCrossId] : [];
+  if (cfg.planCrossId && !cfg.planCrossIds.includes(cfg.planCrossId)) cfg.planCrossIds.push(cfg.planCrossId);
+  cfg.planCrossIds = cfg.planCrossIds.filter(Boolean);
+  cfg.planCrossId = cfg.planCrossIds[0] || "";
+  return cfg;
+}
+function planCrossRefsAll(cfg) {
+  normalizePlanCrossIds(cfg);
+  if (cfg.planCrossIds?.length) {
+    return cfg.planCrossIds.map(id => cfgByIdLoqa(id)).filter(Boolean);
+  }
+  const parent = parentIndOfCfg(cfg);
+  if (!parent) return [];
+  const refs = [];
+  (parent.subs || []).forEach(s => {
+    if (s.id !== cfg.id && !cfgOpenQuestion(s) && (s.checkin || s.checkout)) refs.push(s);
+  });
+  if (parent.id !== cfg.id && !cfgOpenQuestion(parent) && (parent.checkin || parent.checkout)) {
+    if (!refs.some(r => r.id === parent.id)) refs.push(parent);
+  }
+  return refs;
+}
+function orderCrossRefs(refs, day, month) {
+  if (!refs.length) return [];
+  const m = month || todayISO();
+  const d = day != null ? day : todayDay();
+  const wd = weekday(m, d);
+  const pool = [...refs];
+  const ordered = [];
+  const pick = re => pool.find(s => re.test(normName(s.name)));
+  if (wd === 0) {
+    const dom = pick(/domingo|\bdom\b/);
+    if (dom) ordered.push(dom);
+  } else if (wd === 6) {
+    const sab = pick(/sabado|\bsab\b/);
+    if (sab) ordered.push(sab);
+  } else {
+    const prox = pick(/prox|proxim|amanh|seguinte|agend/);
+    if (prox) ordered.push(prox);
+  }
+  pool.forEach(c => { if (!ordered.includes(c)) ordered.push(c); });
+  return ordered;
+}
+function planCrossRefCandidates(cfg, day, month) {
+  return orderCrossRefs(planCrossRefsAll(cfg), day, month);
+}
+function planCrossRefCfg(cfg, day, month) {
+  const cands = planCrossRefCandidates(cfg, day, month);
+  return cands[0] || null;
+}
+const WD_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+/** KPI de programação futura (sábado / domingo / próx dia). */
+function programacaoKind(cfg) {
+  if (!cfg) return null;
+  if (cfg.sundayOnly) return "domingo";
+  if (consultorIsSaturdaySub(cfg)) return "sabado";
+  const n = normName(cfg.name);
+  if (/domingo|\bdom\b/.test(n)) return "domingo";
+  if (/sabado|\bsab\b/.test(n)) return "sabado";
+  if (/prox|proxim|amanh|seguinte/.test(n)) return "prox";
+  return null;
+}
+function programacaoTargetDay(sellerId, ref, month, day) {
+  const kind = programacaoKind(ref);
+  const m = month || todayISO();
+  const week = weekForDay(day != null ? day : todayDay(), m);
+  if (kind === "sabado") return week.find(d => weekday(m, d) === 6 && sellerWorks(sellerId, d, m)) ?? null;
+  if (kind === "domingo") return week.find(d => weekday(m, d) === 0 && sellerWorks(sellerId, d, m)) ?? null;
+  return null;
+}
+function programacaoAccumSourceDays(sellerId, ref, targetDay, month) {
+  const kind = programacaoKind(ref);
+  const m = month || todayISO();
+  const week = weekForDay(targetDay, m);
+  if (kind === "sabado") return week.filter(d => d < targetDay && weekday(m, d) >= 1 && weekday(m, d) <= 5);
+  if (kind === "domingo") return week.filter(d => d < targetDay);
+  return [];
+}
+function crossPlanValueLive(sellerId, fieldId, day, month, liveInp) {
+  const c = getCell(sellerId, fieldId, day, month);
+  if (!liveInp || liveInp.dataset.fid !== fieldId || +liveInp.dataset.day !== day) return crossPlanValueFromCell(c);
+  const key = liveInp.dataset.key;
+  const raw = liveInp.value.trim();
+  const merged = { ...c };
+  if (raw === "" || raw === "-" || isNaN(Number(raw))) delete merged[key];
+  else merged[key] = Number(raw);
+  return crossPlanValueFromCell(merged);
+}
+/** Soma declarações da semana para o dia-alvo (sábado ou domingo). */
+function programacaoAcumulada(sellerId, ref, targetDay, month, liveInp) {
+  const kind = programacaoKind(ref);
+  if (kind !== "sabado" && kind !== "domingo") return null;
+  const m = month || todayISO();
+  const wd = weekday(m, targetDay);
+  if ((kind === "sabado" && wd !== 6) || (kind === "domingo" && wd !== 0)) return null;
+  let sum = 0, has = false;
+  const parts = [];
+  for (const d of programacaoAccumSourceDays(sellerId, ref, targetDay, m)) {
+    if (!sellerWorks(sellerId, d, m)) continue;
+    const needs = consultorFieldNeeds(sellerId, ref, d, m);
+    if (!needs.checkin && !needs.checkout) continue;
+    const v = crossPlanValueLive(sellerId, ref.id, d, m, liveInp && +liveInp.dataset.day === d ? liveInp : null);
+    if (v == null) continue;
+    sum += v;
+    has = true;
+    parts.push({ day: d, label: WD_SHORT[weekday(m, d)], value: v });
+  }
+  return has ? { value: sum, parts, kind } : null;
+}
+function programacaoAccumBreakdownText(hit) {
+  if (!hit?.accumulated || !hit.accumParts?.length) return "";
+  const parts = hit.accumParts.map(p => `${p.label} ${p.value}`).join(" + ");
+  return ` <span class="hint">(soma: ${parts} = ${hit.value})</span>`;
+}
+function programacaoRunningHint(sellerId, ref, month, day, liveInp) {
+  const kind = programacaoKind(ref);
+  if (kind !== "sabado" && kind !== "domingo") return "";
+  const target = programacaoTargetDay(sellerId, ref, month, day);
+  if (target == null || day >= target) return "";
+  const acc = programacaoAcumulada(sellerId, ref, target, month, liveInp);
+  if (!acc?.parts?.length) return "";
+  const label = kind === "sabado" ? "sábado" : "domingo";
+  const parts = acc.parts.map(p => `${p.label} ${p.value}`).join(" + ");
+  return `<div class="prog-run-hint">Total p/ ${label}: <b>${acc.value}</b> <span class="hint">(${parts})</span></div>`;
+}
+function pulseProgRunHint(el) {
+  if (!el) return;
+  el.classList.remove("prog-sum-pulse");
+  void el.offsetWidth;
+  el.classList.add("prog-sum-pulse");
+  clearTimeout(el._progPulseT);
+  el._progPulseT = setTimeout(() => el.classList.remove("prog-sum-pulse"), 280);
+}
+function updateProgramacaoRunningHint(liveInp) {
+  if (!seller || !liveInp?.dataset.fid) return;
+  const cfg = fieldList().find(f => f.cfg.id === liveInp.dataset.fid)?.cfg;
+  if (!cfg || !programacaoKind(cfg)) return;
+  const month = todayISO(), day = todayDay();
+  const box = liveInp.closest(".dio-box");
+  if (!box) return;
+  const html = programacaoRunningHint(seller.id, cfg, month, day, liveInp);
+  let hint = box.querySelector(".prog-run-hint");
+  if (!html) { hint?.remove(); return; }
+  const prev = hint?.querySelector("b")?.textContent;
+  if (hint) {
+    hint.outerHTML = html;
+    hint = box.querySelector(".prog-run-hint");
+  } else {
+    liveInp.insertAdjacentHTML("afterend", html);
+    hint = box.querySelector(".prog-run-hint");
+  }
+  const next = hint?.querySelector("b")?.textContent;
+  if (prev !== next) pulseProgRunHint(hint);
+}
+/** plan (check-in) ou real (check-out) — gestor ou consultor. */
+function crossPlanValueFromCell(c) {
+  if (!c || typeof c !== "object") return null;
+  const p = c.plan;
+  if (p != null && p !== "" && !isNaN(Number(p))) return Number(p);
+  const r = c.real;
+  if (r != null && r !== "" && !isNaN(Number(r))) return Number(r);
+  return null;
+}
+/** Busca agendamentos: soma semanal (programação) ou valor pontual (último dia trabalhado / hoje). */
+function crossPlanHit(sellerId, cfg, day, month) {
+  const m = month || todayISO();
+  const d = day != null ? day : todayDay();
+  const refs = planCrossRefCandidates(cfg, d, m);
+  if (!refs.length) return null;
+  const wd = weekday(m, d);
+  for (const ref of refs) {
+    const kind = programacaoKind(ref);
+    if (kind === "sabado" && wd === 6) {
+      const acc = programacaoAcumulada(sellerId, ref, d, m);
+      if (acc != null) return { ref, value: acc.value, prevDay: d, accumulated: true, accumParts: acc.parts, accumKind: acc.kind };
+    }
+    if (kind === "domingo" && wd === 0) {
+      const acc = programacaoAcumulada(sellerId, ref, d, m);
+      if (acc != null) return { ref, value: acc.value, prevDay: d, accumulated: true, accumParts: acc.parts, accumKind: acc.kind };
+    }
+  }
+  const daysToTry = [];
+  const prev = prevWorkedDay(sellerId, d, m);
+  if (prev != null) daysToTry.push(prev);
+  if (!daysToTry.includes(d)) daysToTry.push(d);
+  for (const tryDay of daysToTry) {
+    for (const ref of refs) {
+      const kind = programacaoKind(ref);
+      if ((kind === "sabado" && wd === 6) || (kind === "domingo" && wd === 0)) continue;
+      const value = crossPlanValueFromCell(getCell(sellerId, ref.id, tryDay, m));
+      if (value != null) return { ref, value, prevDay: tryDay, accumulated: false };
+    }
+  }
+  return null;
+}
+function crossPlanTarget(sellerId, cfg, day, month) {
+  const hit = crossPlanHit(sellerId, cfg, day, month);
+  return hit ? hit.value : null;
+}
+function openCrossFeedbackHtml(confirmed, target, refName, hit) {
+  if (target == null || confirmed == null || isNaN(confirmed)) return "";
+  const nome = escText(refName || "agendamentos");
+  const sumLbl = hit?.accumulated
+    ? (hit.accumKind === "domingo" ? "programados para este domingo" : "programados para este sábado")
+    : "que você declarou";
+  const sumDetail = hit?.accumulated && hit.accumParts?.length
+    ? ` (${hit.accumParts.map(p => `${p.label} ${p.value}`).join(" + ")} = ${target})`
+    : "";
+  if (confirmed < target) {
+    return `<div class="open-cross-msg bad"><b>Que pena!</b> Você está perdendo cliente pro concorrente — importante confirmar todas as suas visitas! Seriam <b>${target}</b> ${sumLbl} em <b>${nome}</b>${sumDetail}. A disciplina te levará a lugares onde o talento não alcança.</div>`;
+  }
+  return `<div class="open-cross-msg good"><b>Sensacional!</b> Você programou <b>${target}</b> ${sumLbl}${sumDetail} e confirmou com qualidade! Nada resiste ao trabalho bem feito! Continue assim.</div>`;
+}
+function updateOpenCrossUi(box) {
+  if (!box || !seller) return;
+  const fieldId = box.dataset.openFid;
+  const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
+  if (!cfg) return;
+  const month = todayISO(), day = todayDay();
+  const cell = getCell(seller.id, cfg.id, day, month);
+  const locked = cellLockedForConsultor(cell, "plan", day, month, cfg);
+  const qtyInp = box.querySelector("[data-open-qty]");
+  let wrap = box.querySelector(".open-cross-msg-wrap");
+  if (!locked) {
+    if (wrap) wrap.innerHTML = "";
+    if (qtyInp) qtyInp.classList.remove("below-target", "at-target");
+    return;
+  }
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.className = "open-cross-msg-wrap";
+    const anchor = box.querySelector(".open-justif");
+    if (anchor) anchor.after(wrap);
+    else return;
+  }
+  if (cell.planYes !== true) {
+    wrap.innerHTML = "";
+    if (qtyInp) qtyInp.classList.remove("below-target", "at-target");
+    return;
+  }
+  const target = crossPlanTarget(seller.id, cfg, day, month);
+  const confirmed = openConfirmedQty(cell);
+  if (target == null || confirmed == null || isNaN(confirmed)) {
+    wrap.innerHTML = "";
+    if (qtyInp) qtyInp.classList.remove("below-target", "at-target");
+    return;
+  }
+  const hit = crossPlanHit(seller.id, cfg, day, month);
+  if (qtyInp) {
+    qtyInp.classList.toggle("below-target", confirmed < target);
+    qtyInp.classList.toggle("at-target", confirmed >= target);
+  }
+  wrap.innerHTML = openCrossFeedbackHtml(confirmed, target, hit?.ref?.name, hit);
+}
+function refreshOpenCrossAll() {
+  document.querySelectorAll(".dio-box.open-q").forEach(updateOpenCrossUi);
+}
+function normalizeCfgMeta(cfg) {
+  if (!cfg) return cfg;
+  cfg.metaDay = Number(cfg.metaDay) || 0;
+  cfg.metaSat = Number(cfg.metaSat) || 0;
+  cfg.metaSun = Number(cfg.metaSun) || 0;
+  cfg.metaMonth = Number(cfg.metaMonth) || 0;
+  return cfg;
+}
+function normalizeLojaIndicators() {
+  if (lojaData) lojaData.consultorSchedule = normalizeConsultorSchedule(lojaData.consultorSchedule);
+  (lojaData?.indicators || []).forEach(ind => {
+    normalizeCfgMeta(ind);
+    if (ind.openQuestion == null) ind.openQuestion = false;
+    if (ind.planCrossId == null) ind.planCrossId = "";
+    if (!Array.isArray(ind.planCrossIds)) ind.planCrossIds = ind.planCrossId ? [ind.planCrossId] : [];
+    normalizePlanCrossIds(ind);
+    (ind.subs || []).forEach(sub => {
+      normalizeCfgMeta(sub);
+      if (sub.openQuestion == null) sub.openQuestion = false;
+      if (sub.planCrossId == null) sub.planCrossId = "";
+      if (!Array.isArray(sub.planCrossIds)) sub.planCrossIds = sub.planCrossId ? [sub.planCrossId] : [];
+      normalizePlanCrossIds(sub);
+    });
+    (ind.rates || []).forEach(r => { if (r.absolute == null) r.absolute = false; });
+  });
+}
+function metaForDay(cfg, month, day) {
+  const wd = weekday(month, day);
+  if (wd === 6) return Number(cfg.metaSat) || 0;
+  if (wd === 0) return cfg.sundayOnly ? (Number(cfg.metaDay) || 0) : (Number(cfg.metaSun) || 0);
+  return Number(cfg.metaDay) || 0;
+}
+/** Meta exibida no app do consultor (sub-indicadores com meta própria). */
+function metaForConsultorDay(cfg, month, day) {
+  const direct = metaForDay(cfg, month, day);
+  if (direct > 0) return direct;
+  const wd = weekday(month, day);
+  const metaDay = Number(cfg.metaDay) || 0;
+  const metaSat = Number(cfg.metaSat) || 0;
+  if (cfg.sundayOnly) return wd === 0 ? metaDay : 0;
+  if (wd === 0 && metaDay > 0) return metaDay;
+  if (wd === 6 && metaSat > 0) return metaSat;
+  return 0;
+}
+function fieldList() {
+  const list = [];
+  orderedIndicators().forEach(ind => {
+    if (ind.pctOnly) return;
+    if (cfgHasDiario(ind)) list.push({ cfg: ind, color: ind.color, sub: false });
+    (ind.subs || []).filter(cfgHasDiario).forEach(s => list.push({ cfg: s, color: ind.color, sub: true }));
+  });
+  return list;
+}
+function weeksOf(m) {
+  const n = daysInMonth(m);
+  const weeks = [];
+  for (let d = 1; d <= n; d += 7) {
+    const w = [];
+    for (let k = d; k < Math.min(d + 7, n + 1); k++) w.push(k);
+    weeks.push(w);
+  }
+  return weeks;
+}
+function weekForDay(day, m = todayISO()) {
+  return weeksOf(m).find(w => w.includes(day)) || [day];
+}
+/** Sub "Agendamentos p/ sábado": check-in/out seg–sex; oculto no sábado. */
+function consultorIsSaturdaySub(cfg) {
+  if (!cfg || cfg.sundayOnly) return false;
+  const metaSat = Number(cfg.metaSat) || 0;
+  const metaDay = Number(cfg.metaDay) || 0;
+  const metaSun = Number(cfg.metaSun) || 0;
+  return metaSat > 0 && !cfg.checkin && cfg.checkout && metaDay <= 1 && metaSun === 0;
+}
+function consultorWeekSatForSeller(week, sellerId, m) {
+  return week.find(d => weekday(m, d) === 6 && sellerWorks(sellerId, d, m));
+}
+function consultorWeekSunForSeller(week, sellerId, m) {
+  return week.find(d => isSunday(m, d) && sellerWorks(sellerId, d, m));
+}
+function consultorSaturdaySubActive(sellerId, day, m = todayISO()) {
+  if (!sellerWorks(sellerId, day, m)) return false;
+  const wd = weekday(m, day);
+  if (wd < 1 || wd > 5) return false;
+  const week = weekForDay(day, m);
+  return !!consultorWeekSatForSeller(week, sellerId, m);
+}
+/** Sub só domingo: check-in/out seg–sáb; oculto no domingo e se CV não trabalha domingo na semana. */
+function consultorSundaySubActive(sellerId, day, m = todayISO()) {
+  if (isSunday(m, day)) return false;
+  if (!sellerWorks(sellerId, day, m)) return false;
+  const week = weekForDay(day, m);
+  const sunDay = consultorWeekSunForSeller(week, sellerId, m);
+  if (!sunDay || day >= sunDay) return false;
+  return true;
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function consultorCvHint(cfg) {
+  const t = String(cfg?.cvHint || "").trim();
+  return t ? `<div class="ind-cv-hint">${escapeHtml(t)}</div>` : "";
+}
+function consultorMetaSummary(cfg, sellerId, m = todayISO()) {
+  const parts = [];
+  const metaDay = Number(cfg.metaDay) || 0;
+  const metaSat = Number(cfg.metaSat) || 0;
+  const metaSun = Number(cfg.metaSun) || 0;
+  const metaMonth = Number(cfg.metaMonth) || 0;
+  if (cfg.sundayOnly) {
+    const domMeta = metaSun > 0 ? metaSun : metaDay;
+    if (domMeta > 0) parts.push(`Meta do Domingo: ${fmt(domMeta)}`);
+    if (metaDay > 0 && metaSun > 0) parts.unshift(`Meta do dia: ${fmt(metaDay)}`);
+  } else {
+    if (metaDay > 0) parts.push(`Meta do dia: ${fmt(metaDay)}`);
+    if (metaSat > 0) parts.push(`Meta do Sábado: ${fmt(metaSat)}`);
+    if (metaSun > 0) parts.push(`Meta do Domingo: ${fmt(metaSun)}`);
+  }
+  if (metaMonth > 0) parts.push(`Meta Consultor: ${fmt(metaMonth)}`);
+  return parts.join('<span class="meta-sep"> &gt; </span>');
+}
+function consultorFieldNeeds(sellerId, cfg, day, m = todayISO()) {
+  if (!sellerWorks(sellerId, day, m)) return { checkin: false, checkout: false };
+  if (cfg.sundayOnly) {
+    if (!consultorSundaySubActive(sellerId, day, m)) return { checkin: false, checkout: false };
+    return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
+  }
+  if (consultorIsSaturdaySub(cfg)) {
+    if (!consultorSaturdaySubActive(sellerId, day, m)) return { checkin: false, checkout: false };
+    return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
+  }
+  return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
+}
+function activeFieldList(sellerId, day, month) {
+  return fieldList().filter(({ cfg }) => {
+    const n = consultorFieldNeeds(sellerId, cfg, day, month);
+    if (!n.checkin && !n.checkout) return false;
+    if (consultorCheckoutVisible()) return true;
+    return !!n.checkin;
+  });
+}
+function parseMonth(m) { const [y, mo] = m.split("-").map(Number); return { y, mo }; }
+function daysInMonth(m) { const { y, mo } = parseMonth(m); return new Date(y, mo, 0).getDate(); }
+function weekday(m, day) { const { y, mo } = parseMonth(m); return new Date(y, mo - 1, day).getDay(); }
+function isSunday(m, d) { return weekday(m, d) === 0; }
+function monthDays(m = todayISO()) { return Array.from({ length: daysInMonth(m) }, (_, i) => i + 1); }
+function monthData(m = todayISO()) { return lojaData?.months?.[m] || {}; }
+function metaMonthFor(cfg) { return Number(cfg?.metaMonth) || 0; }
+function countWeekdays(m) { let c = 0; const n = daysInMonth(m); for (let d = 1; d <= n; d++) { const w = weekday(m, d); if (w >= 1 && w <= 5) c++; } return c; }
+function countSaturdays(m) { let c = 0; const n = daysInMonth(m); for (let d = 1; d <= n; d++) if (weekday(m, d) === 6) c++; return c; }
+function diasUteisOf(m = todayISO()) { const md = monthData(m); return md.diasUteis != null ? Number(md.diasUteis) : countWeekdays(m); }
+function sabadosOf(m = todayISO()) { const md = monthData(m); return md.sabados != null ? Number(md.sabados) : countSaturdays(m); }
+function sched(sellerId, m = todayISO()) { return monthData(m).sched?.[sellerId]; }
+function sellerWorks(sellerId, day, m = todayISO()) {
+  const s = sched(sellerId, m);
+  if (s) return !!s[day];
+  return !isSunday(m, day);
+}
+function sellerWorkedCount(sellerId, m = todayISO()) {
+  let c = 0; const n = daysInMonth(m);
+  for (let d = 1; d <= n; d++) if (sellerWorks(sellerId, d, m)) c++;
+  return c;
+}
+function sellerElapsedWorked(sellerId, m = todayISO()) {
+  const n = daysInMonth(m); const last = todayISO() === m ? new Date().getDate() : n;
+  let c = 0; for (let d = 1; d <= Math.min(last, n); d++) if (sellerWorks(sellerId, d, m)) c++;
+  return Math.max(c, 1);
+}
+function sellerWorkedSplit(sellerId, m = todayISO()) {
+  const n = daysInMonth(m); const isCurrent = todayISO() === m; const today = isCurrent ? new Date().getDate() : n + 1;
+  let done = 0, ahead = 0;
+  for (let d = 1; d <= n; d++) {
+    if (!sellerWorks(sellerId, d, m)) continue;
+    if (isCurrent && d >= today) ahead++; else done++;
+  }
+  return { done, ahead };
+}
+function accum(sellerId, fieldId, key, days, m = todayISO()) {
+  let sum = 0, has = false;
+  days.forEach(d => {
+    const c = getCell(sellerId, fieldId, d, m);
+    if (c[key] != null && c[key] !== "") { sum += Number(c[key]); has = true; }
+  });
+  return has ? sum : null;
+}
+function getSystem(sellerId, fieldId, m = todayISO()) {
+  const v = monthData(m).system?.[sellerId]?.[fieldId];
+  return v != null ? Number(v) : null;
+}
+function getSystemRate(sellerId, rateId, m = todayISO()) {
+  const v = monthData(m).systemRate?.[sellerId]?.[rateId];
+  return v != null ? Number(v) : null;
+}
+function nameHasHoje(name) {
+  return /hoje/.test(normName(name));
+}
+function cfgHasDiarioLoqa(cfg) {
+  return !!(cfg && (cfg.checkin || cfg.checkout));
+}
+const KPI_STOP_WORDS = new Set(["de", "do", "da", "dos", "das", "p", "para", "o", "a", "os", "as", "e", "em", "no", "na", "nos", "nas", "hoje"]);
+function kpiNameTokens(name) {
+  return normName(name).replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter(t => t.length > 1 && !KPI_STOP_WORDS.has(t));
+}
+function kpiStem(tok) {
+  if (/^agend/.test(tok)) return "agend";
+  if (/^compar/.test(tok)) return "compar";
+  if (/^vend/.test(tok)) return "vend";
+  if (/^fich/.test(tok) || /^fi$/.test(tok)) return "fich";
+  if (/^financ/.test(tok)) return "fich";
+  if (/^troca/.test(tok)) return "troca";
+  if (/^efetiv/.test(tok)) return "efetiv";
+  if (/^carro/.test(tok)) return "carro";
+  return tok;
+}
+function parentCorrelStems(parentInd) {
+  const stems = new Set();
+  kpiNameTokens(parentInd.name).forEach(t => stems.add(kpiStem(t)));
+  const pn = normName(parentInd.name);
+  if (/agendament/.test(pn)) stems.add("agend");
+  if (/compareciment/.test(pn)) stems.add("compar");
+  if (/ficha|f&i|financ|\bfi\b/.test(pn)) stems.add("fich");
+  if (/troca/.test(pn)) { stems.add("troca"); stems.add("efetiv"); }
+  if (/venda/.test(pn)) stems.add("vend");
+  if (parentInd.role === "fichas") stems.add("fich");
+  if (parentInd.role === "venda") stems.add("vend");
+  return stems;
+}
+function subCorrelacaoScore(parentInd, sub) {
+  const pStems = parentCorrelStems(parentInd);
+  const sStems = new Set(kpiNameTokens(sub.name).map(kpiStem));
+  let score = 0;
+  pStems.forEach(ps => {
+    if (sStems.has(ps)) score += 18;
+    sStems.forEach(ss => {
+      if (ss !== ps && (ss.includes(ps) || ps.includes(ss))) score += 10;
+    });
+  });
+  const pn = normName(parentInd.name);
+  const sn = normName(sub.name);
+  if (pn && sn && (sn.includes(pn) || pn.includes(sn))) score += 12;
+  return score;
+}
+function isAuxDiarioSubLoqa(sub) {
+  if (!sub) return false;
+  if (sub.sundayOnly) return true;
+  const sn = normName(sub.name);
+  if (/sabado|domingo/.test(sn)) return true;
+  const metaSat = Number(sub.metaSat) || 0;
+  const metaDay = Number(sub.metaDay) || 0;
+  const metaSun = Number(sub.metaSun) || 0;
+  if (metaSat > 0 && !sub.checkin && sub.checkout && metaDay <= 1 && metaSun === 0) return true;
+  return false;
+}
+/** Sub correlato ao principal para soma de check-out na matriz (prefere “hoje”, senão o mais parecido). */
+function parentRollupHojeSub(parentInd) {
+  if (!parentInd || parentInd.pctOnly) return null;
+  const allDiario = (parentInd.subs || []).filter(cfgHasDiarioLoqa);
+  if (!allDiario.length) return null;
+  const checkoutSubs = allDiario.filter(s => s.checkout);
+  let pool = checkoutSubs.length ? checkoutSubs : allDiario;
+  const dailyPool = pool.filter(s => !isAuxDiarioSubLoqa(s));
+  if (dailyPool.length) pool = dailyPool;
+  const hojeSubs = pool.filter(s => nameHasHoje(s.name));
+  const searchPool = hojeSubs.length ? hojeSubs : pool;
+  if (searchPool.length === 1) return searchPool[0];
+  let best = null, bestScore = -1;
+  searchPool.forEach(s => {
+    let sc = subCorrelacaoScore(parentInd, s);
+    if (nameHasHoje(s.name)) sc += 25;
+    if (sc > bestScore) { bestScore = sc; best = s; }
+  });
+  if (best && bestScore >= 8) return best;
+  if (checkoutSubs.length === 1 && !isAuxDiarioSubLoqa(checkoutSubs[0])) return checkoutSubs[0];
+  const pStems = parentCorrelStems(parentInd);
+  const stemHit = searchPool.find(s => {
+    const sStems = new Set(kpiNameTokens(s.name).map(kpiStem));
+    for (const p of pStems) if (sStems.has(p)) return true;
+    return false;
+  });
+  return stemHit || searchPool[0];
+}
+function mainIndicatorById(fieldId) {
+  return orderedIndicators().find(i => i.id === fieldId) || null;
+}
+function checkoutFieldId(fieldId) {
+  const ind = mainIndicatorById(fieldId);
+  const sub = ind ? parentRollupHojeSub(ind) : null;
+  return sub ? sub.id : fieldId;
+}
+/** Soma dos check-outs do indicador no período (principal usa sub “hoje” quando existir). */
+function checkoutSum(sellerId, fieldId, days, m = todayISO()) {
+  return accum(sellerId, checkoutFieldId(fieldId), "real", days, m);
+}
+function matrizFieldValue(sellerId, fieldId, days, periodo, m = todayISO()) {
+  return checkoutSum(sellerId, fieldId, days, m);
+}
+function sellerProjFromReal(sellerId, fieldId, realVal, m = todayISO()) {
+  if (realVal == null || isNaN(realVal)) return null;
+  if (todayISO() !== m) return realVal;
+  const { done, ahead } = sellerWorkedSplit(sellerId, m);
+  if (done > 0) return realVal + (realVal / done) * ahead;
+  const elapsed = sellerElapsedWorked(sellerId, m), total = sellerWorkedCount(sellerId, m);
+  if (!elapsed || !total) return null;
+  return (realVal / elapsed) * total;
+}
+function sellerMetaCapacity(cfg, sellerId, m = todayISO()) {
+  let s = 0; const n = daysInMonth(m);
+  for (let d = 1; d <= n; d++) if (sellerWorks(sellerId, d, m)) s += metaForDay(cfg, m, d);
+  return s;
+}
+function sellerMetaFor(cfg, sellerId, m = todayISO()) {
+  const mm = metaMonthFor(cfg);
+  if (mm > 0) return mm;
+  const cap = sellerMetaCapacity(cfg, sellerId, m);
+  return cap > 0 ? cap : null;
+}
+function rateIsFunnelConversion(rate) {
+  return !!(rate && !rate.manual && !rate.absolute && /\s+p\/\s+/i.test(String(rate.name || "")));
+}
+function rateABFromSums(rate, numSum, denSum) {
+  let A = numSum, B = denSum;
+  if (rateIsFunnelConversion(rate)) { const t = A; A = B; B = t; }
+  else if (rate.invert) { const t = A; A = B; B = t; }
+  return { A, B };
+}
+function rateValueForSeller(rate, sellerId, m = todayISO()) {
+  if (rate.manual) return getSystemRate(sellerId, rate.id, m);
+  const days = monthDays(m);
+  let num = 0, den = 0, hasN = false, hasD = false;
+  const a = matrizFieldValue(sellerId, rate.numId, days, "mes", m);
+  const b = matrizFieldValue(sellerId, rate.denId, days, "mes", m);
+  if (a != null) { num = a; hasN = true; }
+  if (b != null) { den = b; hasD = true; }
+  if (!hasN && !hasD) return null;
+  const { A, B } = rateABFromSums(rate, num, den);
+  if (!B) return null;
+  if (rate.absolute) return A;
+  return (A / B) * 100;
+}
+function fieldAccuracy(sellerId, fieldId, days, m = todayISO()) {
+  const sys = getSystem(sellerId, fieldId, m);
+  if (sys == null) return null;
+  const r = checkoutSum(sellerId, fieldId, days, m) ?? 0;
+  if (sys > 0) return Math.max(0, 1 - Math.abs(r - sys) / sys);
+  return r === 0 ? 1 : 0;
+}
+function pctTxt(p) { return p == null ? "—" : Math.round(p * 100) + "%"; }
+function cfgLowerBetter(cfg, parentInd) {
+  return !!(cfg && cfg.lowerBetter) || !!(parentInd && parentInd.lowerBetter);
+}
+function rateLowerBetter(rate, ind) {
+  return !!(rate && rate.lowerBetter) || !!(ind && ind.lowerBetter);
+}
+function rateIsAbsolute(rate) { return !!(rate && rate.absolute); }
+function rateIsPercent(rate) { return !rateIsAbsolute(rate); }
+function rateFmtValue(rate, val, ind) {
+  if (val == null) return "—";
+  const lb = rateLowerBetter(rate, ind);
+  if (rateIsAbsolute(rate)) return fmt(val, 0);
+  return lb ? fmtPctFineUnit(val) : fmt(val, 0) + "%";
+}
+function rateFmtTarget(rate, tgt, ind) {
+  if (!tgt) return "—";
+  const lb = rateLowerBetter(rate, ind);
+  if (rateIsAbsolute(rate)) return fmt(tgt, 0);
+  return lb ? fmtPctFineUnit(tgt) : tgt + "%";
+}
+const MATRIZ_LOWER_WARN_PP = 0.5;
+function matrizLowerWarnMargin(target, isPercent) {
+  if (isPercent) return MATRIZ_LOWER_WARN_PP;
+  return Math.max(0.5, target * 0.05);
+}
+function matrizLowerBetterBand(actual, target, margin, isPercent) {
+  if (actual == null || target == null || !target) return null;
+  actual = Number(actual); target = Number(target);
+  if (isNaN(actual) || isNaN(target)) return null;
+  if (actual >= target) return "danger";
+  if (actual > target - margin) return "warn";
+  return "ok";
+}
+function heatMatrizLowerBetterColor(actual, target, isPercent) {
+  const band = matrizLowerBetterBand(actual, target, matrizLowerWarnMargin(target, isPercent), isPercent);
+  if (band === "danger") return "var(--danger)";
+  if (band === "warn") return "var(--warn)";
+  if (band === "ok") return "var(--ok)";
+  return "var(--text-faint)";
+}
+function matrizPerfRatio(actual, target, lowerBetter) {
+  if (actual == null || target == null || !target) return null;
+  if (lowerBetter) return actual <= 0 ? 2 : target / actual;
+  return actual / target;
+}
+function matrizProjPerfRatio(proj, metaProj, lowerBetter) {
+  if (proj == null || !metaProj) return null;
+  if (lowerBetter) return proj <= 0 ? 2 : metaProj / proj;
+  return proj / metaProj;
+}
+function matrizRateRatio(valuePct, targetPct, lowerBetter) {
+  if (valuePct == null || !targetPct) return null;
+  return matrizPerfRatio(valuePct, targetPct, lowerBetter);
+}
+function heatVsMeta(ratio) {
+  if (ratio == null || isNaN(ratio)) return null;
+  if (ratio >= 1) return "var(--ok)";
+  if (ratio >= 0.7) return "var(--warn)";
+  return "var(--danger)";
+}
+function heatMatrizText(ratio) { return heatVsMeta(ratio) || "var(--text-faint)"; }
+function resumoHeatColor(actual, target, perfRatio, lowerBetter, isPercent) {
+  if (lowerBetter && actual != null && target) return heatMatrizLowerBetterColor(actual, target, isPercent);
+  return heatMatrizText(perfRatio);
+}
+function resumoBarWidth(actual, target, perfRatio, lowerBetter, isPercent) {
+  if (lowerBetter && actual != null && target) {
+    const band = matrizLowerBetterBand(actual, target, matrizLowerWarnMargin(target, isPercent), isPercent);
+    if (band === "ok") return 100;
+    if (band === "warn") return 55;
+    if (band === "danger") return 28;
+    return 0;
+  }
+  return Math.min(100, Math.round((perfRatio || 0) * 100));
+}
+function getMetaLoja(fieldId, m = todayISO()) {
+  const v = monthData(m).metaLoja?.[fieldId];
+  return v != null ? Number(v) : null;
+}
+function matrizRateTarget(rate, m = todayISO()) {
+  const ml = getMetaLoja(rate.id, m);
+  const t = Number(rate.target) || 0;
+  return ml != null && ml > 0 ? ml : t;
+}
+function matrizPctRound(n) {
+  if (n == null || isNaN(n)) return null;
+  return Math.round(Number(n) * 100) / 100;
+}
+function fmtPctFine(n) {
+  if (n == null || isNaN(n)) return "—";
+  const v = matrizPctRound(n);
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+function fmtPctFineUnit(n) {
+  const s = fmtPctFine(n);
+  return s === "—" ? s : s + "%";
+}
+function orderedIndicators() {
+  const inds = lojaData?.indicators || [];
+  const ord = lojaData?.order?.indicators;
+  if (!ord) return inds;
+  const byId = Object.fromEntries(inds.map(i => [i.id, i]));
+  const res = ord.map(id => byId[id]).filter(Boolean);
+  inds.forEach(i => { if (!ord.includes(i.id)) res.push(i); });
+  return res;
+}
+function orderedSellers() {
+  const sellers = (lojaData?.sellers || []).slice();
+  const ord = lojaData?.order?.sellers;
+  if (!ord) return sellers;
+  const byId = Object.fromEntries(sellers.map(s => [s.id, s]));
+  const res = ord.map(id => byId[id]).filter(Boolean);
+  sellers.forEach(s => { if (!ord.includes(s.id)) res.push(s); });
+  return res;
+}
+function findVendaIndicator() {
+  const inds = lojaData?.indicators || [];
+  return inds.find(i => i.role === "venda") || inds.find(i => /venda/i.test(i.name || ""));
+}
+function isVendaIndicator(cfg) {
+  if (!cfg) return false;
+  if (cfg.role === "venda") return true;
+  return /venda/i.test(cfg.name || "");
+}
+/** Score % no ranking: indicador pode ser ↓ (ex. vendas 2,2 vs meta 2,9 → 132%), mas maior % sempre vence. */
+function rankScoreLowerBetter(cfg, parentInd) {
+  return cfgLowerBetter(cfg, parentInd);
+}
+function fieldProjStats(cfg, sellerId, m = todayISO(), parentInd = null) {
+  const days = monthDays(m);
+  const lb = cfgLowerBetter(cfg, parentInd);
+  const meta = sellerMetaFor(cfg, sellerId, m);
+  const { done } = sellerWorkedSplit(sellerId, m);
+  const relato = accum(sellerId, cfg.id, "real", days, m);
+  const sistema = getSystem(sellerId, cfg.id, m);
+  const real = checkoutSum(sellerId, cfg.id, days, m);
+  const proj = real != null ? sellerProjFromReal(sellerId, cfg.id, real, m) : null;
+  const relatoProj = relato != null ? sellerProjFromReal(sellerId, cfg.id, relato, m) : null;
+  const perfRatio = meta && proj != null ? matrizProjPerfRatio(proj, meta, lb) : null;
+  const relatoPerfRatio = meta && relatoProj != null ? matrizProjPerfRatio(relatoProj, meta, lb) : null;
+  const gap = meta != null && proj != null ? Math.round(proj - meta) : null;
+  const relatoGap = meta != null && relatoProj != null ? Math.round(relatoProj - meta) : null;
+  const ritmo = done > 0 && real != null ? real / done : null;
+  const relatoRitmo = done > 0 && relato != null ? relato / done : null;
+  return { real, relato, sistema, meta, proj, relatoProj, perfRatio, relatoPerfRatio, lb, gap, relatoGap, ritmo, relatoRitmo, done };
+}
+function resumoCallout(cfg, sellerId, m = todayISO(), mini, parentInd = null) {
+  const st = fieldProjStats(cfg, sellerId, m, parentInd);
+  const { proj, meta, perfRatio, lb } = st;
+  const nome = cfg.name || "indicador";
+  if (proj == null) return { html: `<div class="resumo-callout muted${mini ? " mini" : ""}">Sem dados na matriz para projetar ${nome}.</div>`, tone: "muted" };
+  if (!meta) return { html: `<div class="resumo-callout muted${mini ? " mini" : ""}">Real ${fmt(st.real)} na matriz — meta não definida.</div>`, tone: "muted" };
+  const projR = lb ? fmtPctFine(proj) : String(Math.round(proj));
+  const metaR = lb ? fmtPctFine(meta) : String(Math.round(meta));
+  let tone = "ok", text = "";
+  if (lb) {
+    const band = matrizLowerBetterBand(proj, meta, matrizLowerWarnMargin(meta, false), false);
+    if (band === "ok") {
+      text = `No ritmo atual, projeta ${projR} ${nome} — teto ${metaR}. Abaixo do alvo, continue assim!`;
+      tone = "ok";
+    } else if (band === "danger") {
+      text = `Se continuar neste ritmo, ficará em ${projR} ${nome} — estoura o alvo ${metaR}. VOCÊ PRECISA MUDAR ATITUDE JÁ!`;
+      tone = "bad";
+    } else {
+      text = `Se continuar neste ritmo, projeta ${projR} ${nome} — perto do teto ${metaR}. Reduza antes de estourar!`;
+      tone = "warn";
+    }
+  } else if (perfRatio >= 1) {
+    text = `No ritmo atual, fecha com ${projR} ${nome} — meta ${metaR}. Continue assim!`;
+    tone = "ok";
+  } else if (perfRatio < 0.7) {
+    text = `Se continuar neste ritmo, entregará apenas ${projR} ${nome} — meta ${metaR}. VOCÊ PRECISA MUDAR ATITUDE JÁ!`;
+    tone = "bad";
+  } else {
+    const falta = Math.max(0, Math.round(meta - proj));
+    text = `Se continuar neste ritmo, entregará ${projR} ${nome} — faltam ${fmt(falta)} para a meta (${metaR}). Acelere!`;
+    tone = "warn";
+  }
+  return { html: `<div class="resumo-callout ${tone}${mini ? " mini" : ""}">${text}</div>`, tone, perfRatio };
+}
+/** Dias na escala já encerrados (até ontem) — só lê sched do mês. */
+function sellerScaleClosedDays(sellerId, m = todayISO()) {
+  const n = daysInMonth(m);
+  const isCurrent = todayISO() === m;
+  const today = isCurrent ? todayDay() : n + 1;
+  let closed = 0;
+  for (let d = 1; d <= n; d++) {
+    if (!sellerWorks(sellerId, d, m)) continue;
+    if (isCurrent && d >= today) continue;
+    closed++;
+  }
+  return closed;
+}
+/** Aderência consultor: % de dias encerrados na escala com check-in e check-out completos. */
+function consultantDisciplineStats(sellerId, m = todayISO()) {
+  const n = daysInMonth(m);
+  const isCurrent = todayISO() === m;
+  const today = isCurrent ? todayDay() : n + 1;
+  const fields = fieldList();
+  let scheduled = 0, closed = 0, complete = 0;
+  if (!fields.length) return { pct: null, complete: 0, closed: sellerScaleClosedDays(sellerId, m), scheduled: 0 };
+  for (let d = 1; d <= n; d++) {
+    if (!sellerWorks(sellerId, d, m)) continue;
+    scheduled++;
+    if (isCurrent && d >= today) continue;
+    closed++;
+    const gaps = [];
+    fields.forEach(({ cfg }) => {
+      const needs = consultorFieldNeeds(sellerId, cfg, d, m);
+      if (!needs.checkin && !needs.checkout) return;
+      const c = getCell(sellerId, cfg.id, d, m);
+      if (needs.checkin && !hasPlanValue(c, cfg)) gaps.push(1);
+      if (needs.checkout && !hasCellValue(c, "real")) gaps.push(1);
+    });
+    if (!gaps.length) complete++;
+  }
+  return { pct: closed ? complete / closed : null, complete, closed, scheduled };
+}
+function formatDayListPt(days) {
+  if (!days.length) return "";
+  if (days.length === 1) return String(days[0]);
+  return days.slice(0, -1).join(", ") + " e " + days[days.length - 1];
+}
+/** Resumo da escala do CV (dados de monthData.sched no mês). */
+function consultorEscalaSummary(sellerId, m = todayISO()) {
+  const n = daysInMonth(m);
+  const WD_FULL = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+  const workCount = sellerWorkedCount(sellerId, m);
+  const closedDays = sellerScaleClosedDays(sellerId, m);
+  const parts = [`Trabalha ${workCount} ${workCount === 1 ? "dia" : "dias"}`];
+  const folgaBits = [];
+  for (let wd = 0; wd <= 6; wd++) {
+    const ds = [];
+    for (let d = 1; d <= n; d++) if (weekday(m, d) === wd) ds.push(d);
+    if (!ds.length || !ds.every(d => !sellerWorks(sellerId, d, m))) continue;
+    folgaBits.push(wd === 0 ? "todo domingo" : "toda " + WD_FULL[wd]);
+  }
+  const sunOff = [], sunOn = [];
+  for (let d = 1; d <= n; d++) {
+    if (!isSunday(m, d)) continue;
+    (sellerWorks(sellerId, d, m) ? sunOn : sunOff).push(d);
+  }
+  if (sunOff.length && sunOn.length) folgaBits.push("domingo " + formatDayListPt(sunOff));
+  if (folgaBits.length) parts.push("Folga " + folgaBits.join(" + "));
+  if (sunOn.length && sunOff.length) parts.push("Trabalha domingo " + formatDayListPt(sunOn));
+  parts.push(`Já foram ${closedDays} ${closedDays === 1 ? "dia completo na escala" : "dias completos na escala"}`);
+  return parts.join(" · ");
+}
+function sellerMetrics(sellerId, m = todayISO()) {
+  const days = monthDays(m);
+  let projSum = 0, projN = 0, accSum = 0, accN = 0;
+  orderedIndicators().forEach(ind => {
+    if (ind.pctOnly) return;
+    const meta = sellerMetaFor(ind, sellerId, m);
+    const real = matrizFieldValue(sellerId, ind.id, days, "mes", m);
+    if (meta && real != null) {
+      const proj = sellerProjFromReal(sellerId, ind.id, real, m);
+      if (proj != null) { projSum += proj / meta; projN++; }
+    }
+    if (ind.checkout) {
+      const acc = fieldAccuracy(sellerId, ind.id, days, m);
+      if (acc != null) { accSum += acc; accN++; }
+    }
+    (ind.subs || []).forEach(sub => {
+      if (!sub.checkout) return;
+      const acc = fieldAccuracy(sellerId, sub.id, days, m);
+      if (acc != null) { accSum += acc; accN++; }
+    });
+  });
+  return {
+    ritmo: projN ? projSum / projN : null,
+    acc: accN ? accSum / accN : null
+  };
+}
+function teamSellerTotal() { return orderedSellers().length; }
+function rankScoresTied(a, b) {
+  if (a === -Infinity || b === -Infinity) return false;
+  return Math.abs(a - b) < 1e-9;
+}
+function compareTeamRankRows(a, b, lb, isVenda) {
+  if (b.score !== a.score) return b.score - a.score;
+  if (isVenda) {
+    const rA = a.score === -Infinity ? -Infinity : Math.round(a.score * 10000) / 100;
+    const rB = b.score === -Infinity ? -Infinity : Math.round(b.score * 10000) / 100;
+    if (rB !== rA) return rB - rA;
+  }
+  const adA = a.adherence ?? -1, adB = b.adherence ?? -1;
+  if (adB !== adA) return adB - adA;
+  const accA = a.accuracy ?? -1, accB = b.accuracy ?? -1;
+  if (accB !== accA) return accB - accA;
+  if (lb) return a.projAbs - b.projAbs;
+  return b.projAbs - a.projAbs;
+}
+function buildTeamRankRows(fieldId, cfg, m = todayISO(), parentInd = null) {
+  const isVenda = isVendaIndicator(cfg);
+  const lb = rankScoreLowerBetter(cfg, parentInd);
+  const days = monthDays(m);
+  return orderedSellers().map(s => {
+    const real = matrizFieldValue(s.id, fieldId, days, "mes", m);
+    const meta = sellerMetaFor(cfg, s.id, m);
+    const proj = real != null ? sellerProjFromReal(s.id, fieldId, real, m) : null;
+    const score = meta && proj != null ? matrizProjPerfRatio(proj, meta, lb) : null;
+    const discipline = consultantDisciplineStats(s.id, m);
+    const metrics = sellerMetrics(s.id, m);
+    return {
+      id: s.id,
+      score: score ?? -Infinity,
+      adherence: discipline.pct,
+      accuracy: metrics.acc,
+      projAbs: proj ?? (lb ? Infinity : -Infinity)
+    };
+  }).sort((a, b) => compareTeamRankRows(a, b, lb, isVenda))
+    .map((r, i) => ({ ...r, pos: i + 1, isVenda }));
+}
+function rankDisciplineNote(rows, sellerId, lb, isVenda) {
+  const my = rows.find(r => r.id === sellerId);
+  if (!my || my.pos <= 1 || my.score === -Infinity) return null;
+  const sameScoreAbove = rows.filter(r => r.pos < my.pos && rankScoresTied(r.score, my.score));
+  if (!sameScoreAbove.length) return null;
+  const ref = sameScoreAbove[0];
+  const myProjBetter = lb ? my.projAbs < ref.projAbs : my.projAbs > ref.projAbs;
+  if (!myProjBetter) return null;
+  const myAd = my.adherence ?? -1, myAcc = my.accuracy ?? -1;
+  const refAd = ref.adherence ?? -1, refAcc = ref.accuracy ?? -1;
+  if (myAd >= refAd && myAcc >= refAcc) return null;
+  if (isVenda) {
+    return "Você está com maior projeção de vendas, mas perdeu posição no ranking porque sua aderência e acurácia estão muito baixas — precisa, urgentemente, ajustar!";
+  }
+  return "Você está com maior projeção absoluta neste indicador, mas perdeu posição porque sua aderência e acurácia estão muito baixas — precisa, urgentemente, ajustar!";
+}
+function teamRankByProjPct(fieldId, cfg, sellerId, m = todayISO(), parentInd = null) {
+  const rows = buildTeamRankRows(fieldId, cfg, m, parentInd);
+  const total = rows.length;
+  if (!total) return { pos: 0, total: 0, note: null };
+  const isVenda = isVendaIndicator(cfg);
+  const lb = rankScoreLowerBetter(cfg, parentInd);
+  const mine = rows.find(r => r.id === sellerId);
+  return {
+    pos: mine ? mine.pos : 0,
+    total,
+    note: mine ? rankDisciplineNote(rows, sellerId, lb, isVenda) : null
+  };
+}
+function teamRitmoRank(sellerId, m = todayISO()) {
+  const sellers = orderedSellers();
+  const total = sellers.length;
+  if (!total) return { pos: 0, total: 0 };
+  const rows = sellers.map(s => ({ id: s.id, ritmo: sellerMetrics(s.id, m).ritmo ?? -Infinity }))
+    .sort((a, b) => b.ritmo - a.ritmo);
+  return { pos: rows.findIndex(r => r.id === sellerId) + 1, total };
+}
+function rateDisplayName(rate, ind) {
+  const raw = String(rate?.name || "").trim();
+  if (!raw || raw === "%") return ind?.name || "Taxa";
+  return raw.replace(/^%+\s*/, "");
+}
+function resumoTrackingLine(label, base, ritmo, meta, proj, gap, lb, cls) {
+  if (base == null && proj == null) return "";
+  const sep = '<span class="resumo-meta-sep">&gt;</span>';
+  const parts = [];
+  const baseDisp = base != null ? (lb ? fmtPctFine(base) : fmt(base)) : "—";
+  parts.push(`${label} ${baseDisp}`);
+  if (ritmo != null) parts.push(`Média de ${fmt(ritmo, ritmo % 1 ? 1 : 0)}/dia`);
+  if (meta != null) parts.push(`Meta é ${lb ? fmtPctFine(meta) : fmt(meta)}`);
+  if (proj != null) parts.push(`Projetando ${lb ? fmtPctFine(proj) : fmt(proj)}`);
+  if (gap != null) {
+    const gapTxt = gap >= 0 ? `+${gap}` : String(gap);
+    const gapColor = gap >= 0 ? "var(--ok)" : "var(--danger)";
+    parts.push(`<span style="color:${gapColor}">${gapTxt}</span>`);
+  }
+  return `<div class="resumo-track-line ${cls}">${parts.join(" " + sep + " ")}</div>`;
+}
+function resumoMetaLine(st) {
+  let html = resumoTrackingLine("Check-out", st.relato, st.relatoRitmo, st.meta, st.relatoProj, st.relatoGap, st.lb, "relato");
+  if (st.sistema != null) {
+    html += resumoTrackingLine("Gestor", st.sistema, st.ritmo, st.meta, st.proj, st.gap, st.lb, "gestor");
+  }
+  return html || resumoTrackingLine("Check-out", st.real, st.ritmo, st.meta, st.proj, st.gap, st.lb, "relato");
+}
+function resumoFieldRow(cfg, color, sellerId, opts, m = todayISO()) {
+  const parentInd = opts.parentInd || null;
+  const st = fieldProjStats(cfg, sellerId, m, parentInd);
+  const { real, meta, proj, perfRatio, lb } = st;
+  const heatColor = resumoHeatColor(proj, meta, perfRatio, lb, false);
+  const barW = resumoBarWidth(proj, meta, perfRatio, lb, false);
+  const pctDisp = perfRatio != null ? pctTxt(perfRatio) : "—";
+  const lbTag = lb ? " ↓" : "";
+  let rankHtml = "";
+  if (opts.showRank) {
+    const { pos, total, note } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
+    if (pos > 0 && total > 1) {
+      rankHtml = `<div class="resumo-rank">${pos}º de ${total} na equipe</div>`;
+      if (note) rankHtml += `<div class="resumo-rank-note">${note}</div>`;
+    }
+  }
+  const callout = opts.main ? resumoCallout(cfg, sellerId, m, true, parentInd).html : "";
+  const chev = opts.toggle ? `<span class="resumo-chev">${opts.open ? "▾" : "▸"}</span>` : "";
+  const cls = `resumo-row${opts.sub ? " sub" : ""}${opts.main ? " resumo-ind-main" : ""}${opts.toggle ? " toggle" : ""}${opts.open ? " open" : ""}`;
+  const attrs = opts.main && opts.indId ? ` data-ind-toggle="${opts.indId}"` : "";
+  return `<div class="${cls}" style="--rc:${color};--bc:${heatColor}"${attrs}>
+    <div class="resumo-row-top"><b>${opts.sub ? "↳ " : ""}${cfg.name}${lbTag}${chev}</b><span class="pct" style="color:${heatColor}">${pctDisp}</span></div>
+    <div class="resumo-row-meta">${resumoMetaLine(st)}</div>
+    <div class="resumo-bar"><i style="width:${barW}%"></i></div>${rankHtml}${callout}</div>`;
+}
+function resumoAtingTxt(perfRatio, lowerBetter) {
+  if (perfRatio == null) return "";
+  return pctTxt(perfRatio) + (lowerBetter ? " atingido ↓" : " do alvo");
+}
+function resumoRateRow(rate, ind, color, sellerId, m = todayISO(), sub) {
+  const val = rateValueForSeller(rate, sellerId, m);
+  const target = matrizRateTarget(rate, m);
+  const lb = rateLowerBetter(rate, ind);
+  const perfRatio = matrizRateRatio(val, target, lb);
+  const isPct = rateIsPercent(rate);
+  const heatColor = resumoHeatColor(val, target, perfRatio, lb, isPct);
+  const barW = resumoBarWidth(val, target, perfRatio, lb, isPct);
+  const label = rateDisplayName(rate, ind);
+  const valDisp = rateFmtValue(rate, val, ind);
+  const tgtDisp = rateFmtTarget(rate, target, ind);
+  const pctDisp = perfRatio != null ? pctTxt(perfRatio) : "—";
+  const atingMeta = resumoAtingTxt(perfRatio, lb);
+  return `<div class="resumo-row rate${sub ? " sub" : ""}" style="--rc:${color};--bc:${heatColor}">
+    <div class="resumo-row-top"><b>${sub ? "↳ " : ""}${label}${lb ? " ↓" : ""}</b><span class="pct" style="color:${heatColor}">${pctDisp}</span></div>
+    <div class="resumo-row-meta">Valor ${valDisp} · Alvo ${tgtDisp}${atingMeta ? " · " + atingMeta : ""}</div>
+    <div class="resumo-bar"><i style="width:${barW}%"></i></div></div>`;
+}
+function resumoPctOnlyHead(ind, color, isOpen) {
+  const rates = ind.rates || [];
+  const chev = rates.length ? `<span class="resumo-chev">${isOpen ? "▾" : "▸"}</span>` : "";
+  const hint = rates.length ? `${rates.length} taxa${rates.length > 1 ? "s" : ""}` : "—";
+  return `<div class="resumo-row resumo-ind-main resumo-pct-only-head${rates.length ? " toggle" : ""}"${rates.length ? ` data-ind-toggle="${ind.id}"` : ""} style="--rc:${color}">
+    <div class="resumo-row-top"><b>${ind.name}${ind.lowerBetter ? " ↓" : ""}${chev}</b><span class="pct">${hint}</span></div>
+    <div class="resumo-row-meta">${rates.length ? "Toque para ver taxas · dados da matriz" : "Sem taxas configuradas"}</div></div>`;
+}
+let resumoExpanded = {};
+function bindResumoToggles() {
+  document.querySelectorAll("[data-ind-toggle]").forEach(el => {
+    el.onclick = () => {
+      const id = el.dataset.indToggle;
+      resumoExpanded[id] = !resumoExpanded[id];
+      renderResumo();
+    };
+  });
+}
+function renderResumo() {
+  if (!seller || !lojaData) return;
+  const m = todayISO(), sid = seller.id;
+  const metrics = sellerMetrics(sid, m);
+  const discipline = consultantDisciplineStats(sid, m);
+  const venda = findVendaIndicator();
+  const vendaSt = venda ? fieldProjStats(venda, sid, m) : null;
+  const vendaCallout = venda ? resumoCallout(venda, sid, m, false) : { html: '<div class="resumo-callout muted">Indicador Vendas não configurado.</div>', tone: "muted" };
+  const vendaRank = venda ? teamRankByProjPct(venda.id, venda, sid, m) : { pos: 0, total: teamSellerTotal(), note: null };
+  const cards = [];
+  orderedIndicators().forEach(ind => {
+    const color = ind.color || "var(--accent)";
+    const rates = ind.rates || [];
+    const subs = (ind.subs || []).filter(s => s.checkout || s.checkin);
+    const hasExpandable = subs.length > 0 || rates.length > 0;
+    const isOpen = !!resumoExpanded[ind.id];
+    if (ind.pctOnly) {
+      let expandHtml = "";
+      if (rates.length) {
+        expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
+        rates.forEach(rate => {
+          const target = matrizRateTarget(rate, m);
+          const val = rateValueForSeller(rate, sid, m);
+          const lb = rateLowerBetter(rate, ind);
+          expandHtml += resumoRateRow(rate, ind, color, sid, m, true);
+        });
+        expandHtml += "</div>";
+      }
+      const body = resumoPctOnlyHead(ind, color, isOpen) + expandHtml;
+      if (body) cards.push(`<div class="resumo-card" style="--rc:${color}">${body}</div>`);
+      return;
+    }
+    let mainHtml = "";
+    let expandHtml = "";
+    if (ind.checkout || ind.checkin) {
+      mainHtml = resumoFieldRow(ind, color, sid, {
+        sub: false, showRank: true, main: true, toggle: hasExpandable, open: isOpen, indId: ind.id
+      }, m);
+    }
+    if (hasExpandable) {
+      expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
+      subs.forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false, parentInd: ind }, m); });
+      rates.forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
+      expandHtml += "</div>";
+    }
+    const body = mainHtml + expandHtml;
+    if (body) cards.push(`<div class="resumo-card" style="--rc:${color}">${body}</div>`);
+  });
+  const monthLbl = new Date(m + "-02").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const vendaPct = vendaSt?.perfRatio;
+  const vendaHeat = vendaSt ? resumoHeatColor(vendaSt.proj, vendaSt.meta, vendaSt.perfRatio, vendaSt.lb, false) : "var(--text-faint)";
+  const vendaPulse = vendaCallout.tone === "bad" ? " pulse-bad" : "";
+  const vendaRankTxt = vendaRank.pos > 0 && vendaRank.total > 1 ? `${vendaRank.pos}º de ${vendaRank.total} em vendas` : "—";
+  document.getElementById("resumoRoot").innerHTML = `
+    <div class="resumo-hero">
+      <div class="resumo-hero-head">
+        <div class="resumo-hero-left">
+          <div class="hero-label">Foco Principal - VENDAS!</div>
+          <div class="subline" style="margin-top:0;">Projeção · ${monthLbl} · dados da matriz</div>
+        </div>
+        <div class="big resumo-hero-pct${vendaPulse}" style="color:${vendaHeat}">${pctTxt(vendaPct)}</div>
+      </div>
+      ${vendaCallout.html}
+      <div class="resumo-chips">
+        <div class="resumo-chip-item">
+          <span class="resumo-chip" style="color:${heatMatrizText(discipline.pct)}">Aderência ${pctTxt(discipline.pct)}${discipline.closed ? " · " + discipline.complete + "/" + discipline.closed + " dias" : ""}</span>
+          <span class="resumo-chip-leg">Dias da escala com check-in e check-out completos.</span>
+        </div>
+        <div class="resumo-chip-item">
+          <span class="resumo-chip" style="color:${heatMatrizText(metrics.acc)}">Acurácia ${pctTxt(metrics.acc)}</span>
+          <span class="resumo-chip-leg">Seu check-out batendo com o que o gestor lançou.</span>
+        </div>
+        <div class="resumo-chip-item">
+          <span class="resumo-chip" style="color:var(--accent-2)">${vendaRankTxt}</span>
+          <span class="resumo-chip-leg">Score % (↓ no valor, maior % melhor) · empate: score, aderência, acurácia, projeção.</span>
+        </div>
+      </div>
+      <div class="resumo-escala-line">${escText(consultorEscalaSummary(sid, m))}</div>
+    </div>
+    <div class="resumo-sec">Indicadores · toque para ver subs e taxas</div>
+    ${cards.length ? cards.join("") : '<div class="empty">Sem indicadores configurados.</div>'}`;
+  bindResumoToggles();
+}
+function openResumo() {
+  if (!seller) return;
+  renderResumo();
+  const ov = document.getElementById("resumoOverlay");
+  ov.classList.add("show");
+  ov.setAttribute("aria-hidden", "false");
+}
+function closeResumo() {
+  const ov = document.getElementById("resumoOverlay");
+  ov.classList.remove("show");
+  ov.setAttribute("aria-hidden", "true");
+}
+function hasCellValue(cell, key) {
+  const v = cell[key];
+  return v != null && v !== "";
+}
+function isViewingToday(day, month) {
+  return month === todayISO() && day === todayDay();
+}
+function cellConfirmKey(key) { return key === "plan" ? "planConfirm" : "realConfirm"; }
+function cellIsConfirmed(cell, key) { return !!cell[cellConfirmKey(key)]; }
+/** Consultor: janelas em consultorSchedule (gestor) + confirmação explícita ao Salvar */
+function cellLockedForConsultor(cell, key, day, month, cfg) {
+  if (!isViewingToday(day, month)) return true;
+  if (key === "plan" && !planWindowOpen(cfg, day, month)) return true;
+  if (key === "real" && !checkoutWindowOpen()) return true;
+  if (key === "plan" && cfg && cfgOpenQuestion(cfg)) {
+    if (cell.planBy === "gestor") return true;
+    if (isOpenPlanComplete(cell) && cell.planBy === "consultor") return true;
+    return false;
+  }
+  if (!hasCellValue(cell, key)) return false;
+  if (cell[key + "By"] === "gestor") return true;
+  if (cell[key + "By"] === "consultor" && cellIsConfirmed(cell, key)) return true;
+  return false;
+}
+function cellIsMine(cell, key, cfg) {
+  if (key === "plan" && cfg && cfgOpenQuestion(cfg)) return isOpenPlanComplete(cell) && cell.planBy === "consultor";
+  return hasCellValue(cell, key) && cell[key + "By"] === "consultor";
+}
+function dioSaveFooterHtml(cfg, c, key, day, month, slotLabel) {
+  const locked = cellLockedForConsultor(c, key, day, month, cfg);
+  if (locked && cellIsConfirmed(c, key)) {
+    return `<div class="dio-saved-row"><span class="dio-saved-chip">✓ ${slotLabel} salvo</span></div>`;
+  }
+  if (locked) return "";
+  return `<button type="button" class="btn dio-save" data-dio-save data-fid="${cfg.id}" data-key="${key}" data-slot="${slotLabel}" disabled>Salvar ${slotLabel.toLowerCase()}</button>` +
+    `<div class="dio-save-hint">Ao vivo na nuvem · toque em Salvar para confirmar e travar</div>`;
+}
+function refreshDioSaveBtn(box) {
+  const btn = box?.querySelector("[data-dio-save]");
+  const inp = box?.querySelector("input[data-fid][data-key]");
+  if (!btn || !inp) return;
+  btn.disabled = !inp.value.trim();
+}
+function fieldSoonKind(cell, key, day, month, cfg) {
+  if (key === "plan" && !planWindowOpen(cfg, day, month)) {
+    if (cell.planBy === "gestor" || cell[key + "By"] === "gestor") return null;
+    if (planUsesCheckoutWindow(cfg, day, month)) {
+      if (nowMins() < scheduleMins("checkoutOpen")) return "checkout";
+    } else if (nowMins() < scheduleMins("checkinOpen")) return "checkin";
+  }
+  if (key === "real" && !checkoutWindowOpen()) {
+    if (cell[key + "By"] === "gestor") return null;
+    if (!checkoutWindowEnded() && nowMins() < scheduleMins("checkoutOpen")) return "checkout";
+  }
+  return null;
+}
+function soonBannerHtml(kind) {
+  const label = kind === "checkout" ? "Check-out" : "Check-in";
+  return `<div class="dio-soon-banner"><span class="hourglass" aria-hidden="true">⏳</span><span>${label} abre em breve — veja o cronômetro.</span></div>`;
+}
+function graceBannerHtml() {
+  return `<div class="dio-soon-banner"><span class="hourglass" aria-hidden="true">⏳</span><span>Prorrogação — check-in encerra às ${scheduleTimeLabel("checkinGraceEnd")}. Veja o cronômetro.</span></div>`;
+}
+function lockLabel(cell, key, day, month, cfg) {
+  if (key === "plan" && !planWindowOpen(cfg, day, month)) {
+    if (cell.planBy === "gestor" || cell[key + "By"] === "gestor") return '<span class="lock-tag gestor">👔 Gestor</span>';
+    if (planUsesCheckoutWindow(cfg, day, month)) {
+      if (fieldSoonKind(cell, key, day, month, cfg)) return "";
+      if (checkoutWindowEnded()) return '<span class="lock-tag">🔒 Check-out encerrado</span>';
+    } else {
+      if (fieldSoonKind(cell, key, day, month, cfg)) return "";
+      if (checkinWindowEnded()) return '<span class="lock-tag">🔒 Check-in encerrado</span>';
+    }
+  }
+  if (key === "real" && !checkoutWindowOpen()) {
+    if (cell[key + "By"] === "gestor") return '<span class="lock-tag gestor">👔 Gestor</span>';
+    if (checkoutWindowEnded()) return '<span class="lock-tag">🔒 Check-out encerrado</span>';
+    if (fieldSoonKind(cell, key, day, month, cfg)) return "";
+  }
+  if (key === "plan" && cfg && cfgOpenQuestion(cfg)) {
+    if (!isOpenPlanComplete(cell)) return "";
+    if (cell.planBy === "gestor") return '<span class="lock-tag gestor">👔 Gestor</span>';
+    if (!isViewingToday(day, month)) return '<span class="lock-tag">🔒 Dia encerrado</span>';
+    if (cell.planBy === "consultor") return '<span class="lock-tag">🔒 Salvo</span>';
+    return "";
+  }
+  if (!hasCellValue(cell, key)) return "";
+  const by = cell[key + "By"];
+  if (by === "gestor") return '<span class="lock-tag gestor">👔 Gestor</span>';
+  if (by === "consultor") {
+    if (cellIsConfirmed(cell, key)) return '<span class="lock-tag">🔒 Salvo</span>';
+    if (!isViewingToday(day, month)) return '<span class="lock-tag">🔒 Dia encerrado</span>';
+    return '<span class="lock-tag consultor">✎ Rascunho</span>';
+  }
+  return '<span class="lock-tag consultor">✎ Editável</span>';
+}
+function formatCountdown(ms) {
+  if (ms <= 0) return "00:00:00";
+  const t = Math.floor(ms / 1000);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  return [h, m, s].map(n => String(n).padStart(2, "0")).join(":");
+}
+function tickUrgencyAndDay() {
+  const now = new Date();
+  const pill = document.getElementById("urgencyPill");
+  const txt = document.getElementById("urgencyTxt");
+  const lbl = document.getElementById("urgencyLbl");
+  if (!pill || !txt || !lbl) return;
+  const onMain = document.getElementById("screenMain").classList.contains("active");
+  const phase = timePhase();
+  pill.classList.remove("show", "ended", "warmup", "urgent");
+  if (onMain) {
+    pill.classList.add("show");
+    if (phase === "pre-checkin") {
+      const start = dateAtScheduleMins(scheduleMins("checkinOpen"));
+      pill.classList.add("warmup");
+      lbl.textContent = "ABRE " + scheduleTimeLabel("checkinOpen");
+      txt.textContent = formatCountdown(Math.max(0, start - now));
+    } else if (phase === "checkin") {
+      const end = dateAtScheduleMins(scheduleMins("checkinClose"));
+      pill.classList.add("urgent");
+      lbl.textContent = "⏱ CHECK-IN";
+      txt.textContent = formatCountdown(Math.max(0, end - now));
+    } else if (phase === "checkin-grace") {
+      const end = dateAtScheduleMins(scheduleMins("checkinGraceEnd"));
+      pill.classList.add("urgent");
+      lbl.textContent = "⏱ PRORROGAÇÃO";
+      txt.textContent = formatCountdown(Math.max(0, end - now));
+    } else if (phase === "pre-checkout") {
+      const start = dateAtScheduleMins(scheduleMins("checkoutOpen"));
+      pill.classList.add("warmup");
+      lbl.textContent = "ABRE " + scheduleTimeLabel("checkoutOpen");
+      txt.textContent = formatCountdown(Math.max(0, start - now));
+    } else if (phase === "checkout") {
+      pill.classList.add("urgent");
+      const end = dateAtScheduleMins(scheduleMins("checkoutClose"));
+      lbl.textContent = "⏱ CHECK-OUT";
+      txt.textContent = formatCountdown(Math.max(0, end - now));
+    } else {
+      pill.classList.add("ended");
+      lbl.textContent = "ENCERRADO";
+      txt.textContent = "00:00:00";
+    }
+  }
+  const d = todayDay();
+  if (onMain && lastTimePhase !== null && phase !== lastTimePhase) scheduleRenderFields();
+  lastTimePhase = phase;
+  if (lastRenderDay != null && d !== lastRenderDay && onMain) {
+    scheduleRenderFields();
+    toast("Novo dia — ontem bloqueado");
+  }
+  lastRenderDay = d;
+}
+function startTickLoop() {
+  lastRenderDay = todayDay();
+  tickUrgencyAndDay();
+  if (!tickTimer) tickTimer = setInterval(tickUrgencyAndDay, 1000);
+}
+function stopTickLoop() {
+  if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+}
+function countProgress() {
+  const month = todayISO(), day = todayDay();
+  let total = 0, done = 0, cinT = 0, cinD = 0, coutT = 0, coutD = 0;
+  activeFieldList(seller.id, day, month).forEach(({ cfg }) => {
+    const c = getCell(seller.id, cfg.id, day, month);
+    const needs = consultorFieldNeeds(seller.id, cfg, day, month);
+    if (needs.checkin) {
+      total++; cinT++;
+      if (cellFilledFromDom(cfg, "plan", c)) { done++; cinD++; }
+    }
+    if (needs.checkout && consultorCheckoutVisible()) {
+      total++; coutT++;
+      if (cellFilledFromDom(cfg, "real", c)) { done++; coutD++; }
+    }
+  });
+  return { total, done, cinT, cinD, coutT, coutD };
+}
+function updateProgress() {
+  if (!seller) return;
+  const { total, done, cinT, cinD, coutT, coutD } = countProgress();
+  const ring = document.querySelector(".progress-ring");
+  const arc = document.getElementById("progArc");
+  const circ = 163.36;
+  const pct = total ? done / total : 0;
+  const complete = total > 0 && done >= total;
+  const checkoutPending = cinT > 0 && cinD >= cinT && coutD < coutT;
+  if (ring) {
+    ring.classList.remove("complete", "checkout-pending");
+    if (complete) ring.classList.add("complete");
+    else if (checkoutPending) ring.classList.add("checkout-pending");
+  }
+  if (arc) {
+    arc.style.strokeDashoffset = String(circ * (1 - pct));
+    if (!complete) arc.style.stroke = "url(#grad)";
+  }
+  const center = document.getElementById("progCenter");
+  if (center) {
+    if (complete) center.textContent = "✓";
+    else if (checkoutPending) center.textContent = "⏳";
+    else center.textContent = total ? `${done}/${total}` : "—";
+  }
+  document.getElementById("helloName").textContent = seller.name;
+  const sn = (lojaData.storeName || lojaCode || "").trim();
+  const lojaLbl = sn && sn.toUpperCase() !== lojaCode ? sn : lojaCode;
+  document.getElementById("helloStore").textContent = lojaLbl;
+  const matEl = document.getElementById("helloMat");
+  if (matEl) matEl.textContent = seller.matricula ? `Mat. ${seller.matricula}` : "";
+  const dt = new Date();
+  const wd = dt.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
+  const dayMo = dt.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
+  const lbl = document.getElementById("datePillLbl");
+  const txt = document.getElementById("datePillTxt");
+  if (lbl) lbl.textContent = wd.toUpperCase();
+  if (txt) txt.textContent = dayMo;
+}
+function isFieldsEditing() { return fieldsEditDepth > 0; }
+function beginFieldsEdit() { fieldsEditDepth++; }
+function endFieldsEdit() {
+  fieldsEditDepth = Math.max(0, fieldsEditDepth - 1);
+  if (fieldsEditDepth === 0 && renderFieldsQueued) scheduleRenderFields();
+}
+function initFieldsEditGuard() {
+  const root = document.getElementById("fieldsRoot");
+  if (!root || root.dataset.editGuard) return;
+  root.dataset.editGuard = "1";
+  const editSel = "input[data-fid], textarea[data-open-justif], input[data-open-qty]";
+  root.addEventListener("focusin", e => { if (e.target.matches(editSel)) beginFieldsEdit(); });
+  root.addEventListener("focusout", e => {
+    if (!e.target.matches(editSel)) return;
+    requestAnimationFrame(() => {
+      const ae = document.activeElement;
+      if (root.contains(ae) && ae.matches(editSel)) return;
+      endFieldsEdit();
+    });
+  });
+}
+function confirmLsKey(sellerId, fieldId, day, month, key) {
+  return `${CONFIRM_LS_PREFIX}${lojaCode}|${sellerId}|${fieldId}|${day}|${month}|${cellConfirmKey(key)}`;
+}
+function persistConfirmLocal(sellerId, fieldId, day, month, key) {
+  try { localStorage.setItem(confirmLsKey(sellerId, fieldId, day, month, key), String(Date.now())); } catch (e) {}
+}
+function clearConfirmLocal(sellerId, fieldId, day, month, key) {
+  try { localStorage.removeItem(confirmLsKey(sellerId, fieldId, day, month, key)); } catch (e) {}
+}
+async function restoreMissingConfirms() {
+  if (!fbReady || !seller || !lojaCode) return;
+  const month = todayISO(), day = todayDay();
+  for (const { cfg } of activeFieldList(seller.id, day, month)) {
+    for (const key of ["plan", "real"]) {
+      if (!localStorage.getItem(confirmLsKey(seller.id, cfg.id, day, month, key))) continue;
+      const c = getCell(seller.id, cfg.id, day, month);
+      if (cellIsConfirmed(c, key)) continue;
+      const hasVal = key === "plan" ? hasPlanValue(c, cfg) : hasCellValue(c, key);
+      if (!hasVal) continue;
+      try {
+        await fbDb.ref(`lojas/${lojaCode}/data/months/${month}/daily/${seller.id}/${cfg.id}/${day}`).update({ [cellConfirmKey(key)]: true });
+        setLocalCellFlag(seller.id, cfg.id, day, month, cellConfirmKey(key), true);
+      } catch (e) { console.warn("restore confirm", e); }
+    }
+  }
+}
+async function ensureConfirmsRestored() {
+  if (confirmsRestored) return;
+  confirmsRestored = true;
+  await restoreMissingConfirms();
+}
+function scheduleRenderFields() {
+  if (isFieldsEditing()) { renderFieldsQueued = true; return; }
+  renderFieldsNow();
+}
+function renderFields() { scheduleRenderFields(); }
+function patchDioBoxAfterConfirm(fieldId, key, day, month) {
+  const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
+  const inp = document.querySelector(`input[data-fid="${fieldId}"][data-key="${key}"]`);
+  if (!cfg || !inp) { scheduleRenderFields(); return; }
+  const c = getCell(seller.id, fieldId, day, month);
+  const box = inp.closest(".dio-box");
+  if (!box) { scheduleRenderFields(); return; }
+  const locked = cellLockedForConsultor(c, key, day, month, cfg);
+  inp.disabled = locked;
+  box.classList.toggle("locked", locked);
+  box.classList.toggle("mine", cellIsMine(c, key, cfg) && !locked);
+  const slotLabel = key === "real" ? "Check-out" : "Check-in";
+  const lbl = box.querySelector(".dio-lbl");
+  if (lbl) lbl.innerHTML = `${slotLabel} ${lockLabel(c, key, day, month, cfg)}`;
+  box.querySelectorAll("[data-dio-save], .dio-save-hint, .dio-saved-row").forEach(el => el.remove());
+  const footerHtml = dioSaveFooterHtml(cfg, c, key, day, month, slotLabel);
+  if (footerHtml) box.insertAdjacentHTML("beforeend", footerHtml);
+  updateProgress();
+}
+function renderFieldsNow() {
+  renderFieldsQueued = false;
+  const root = document.getElementById("fieldsRoot");
+  const month = todayISO(), day = todayDay();
+  const fields = activeFieldList(seller.id, day, month);
+  if (!fields.length) {
+    root.innerHTML = '<div class="empty">Nada para preencher hoje na sua escala.<br>Indicadores de domingo/sábado só aparecem quando você trabalha nesses dias.</div>';
+    return;
+  }
+  root.innerHTML = fields.map(({ cfg, color, sub }) => {
+    const c = getCell(seller.id, cfg.id, day, month);
+    const needs = consultorFieldNeeds(seller.id, cfg, day, month);
+    const hintHtml = consultorCvHint(cfg);
+    const metaHtml = consultorMetaSummary(cfg, seller.id, month);
+    const planLocked = cellLockedForConsultor(c, "plan", day, month, cfg);
+    const realLocked = cellLockedForConsultor(c, "real", day, month, cfg);
+    const planMine = cellIsMine(c, "plan", cfg);
+    const realMine = cellIsMine(c, "real", cfg);
+    const showCheckin = needs.checkin;
+    const showCheckout = needs.checkout && consultorCheckoutVisible();
+    if (!showCheckin && !showCheckout) return "";
+    let html = `<div class="ind-card" style="--ic:${color}"><div class="ind-head"><div><b>${sub ? "↳ " : ""}${cfg.name}</b>${hintHtml}${metaHtml ? `<div class="ind-meta">${metaHtml}</div>` : ""}</div></div><div class="dio-grid">`;
+    if (showCheckin) {
+      if (openQuestionCheckin(cfg, needs)) {
+        html += buildOpenQuestionBox(cfg, c, "in", day, month);
+      } else {
+        const progIn = programacaoRunningHint(seller.id, cfg, month, day);
+        const planSoon = fieldSoonKind(c, "plan", day, month, cfg);
+        html += `<div class="dio-box in${planLocked ? " locked" : ""}${planMine && !planLocked ? " mine" : ""}"><div class="dio-lbl">Check-in ${lockLabel(c, "plan", day, month, cfg)}</div>`;
+        if (planSoon) html += soonBannerHtml(planSoon);
+        else if (checkinGraceActive()) html += graceBannerHtml();
+        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="plan" data-day="${day}" value="${c.plan ?? ""}" placeholder="—" ${planLocked ? "disabled" : ""}>${progIn}${dioSaveFooterHtml(cfg, c, "plan", day, month, "Check-in")}</div>`;
+      }
+    }
+    if (showCheckout) {
+      if (openQuestionCheckoutOnly(cfg, needs)) {
+        html += buildOpenQuestionBox(cfg, c, "out", day, month);
+      } else {
+        const progOut = programacaoRunningHint(seller.id, cfg, month, day);
+        const realSoon = fieldSoonKind(c, "real", day, month, cfg);
+        html += `<div class="dio-box out${realLocked ? " locked" : ""}${realMine && !realLocked ? " mine" : ""}"><div class="dio-lbl">Check-out ${lockLabel(c, "real", day, month, cfg)}</div>`;
+        if (realSoon) html += soonBannerHtml(realSoon);
+        html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="real" data-day="${day}" value="${c.real ?? ""}" placeholder="—" ${realLocked ? "disabled" : ""}>${progOut}${dioSaveFooterHtml(cfg, c, "real", day, month, "Check-out")}</div>`;
+      }
+    }
+    html += "</div></div>";
+    return html;
+  }).filter(Boolean).join("");
+  root.querySelectorAll("input[data-fid]").forEach(inp => {
+    inp.addEventListener("input", () => {
+      updateProgramacaoRunningHint(inp);
+      refreshDioSaveBtn(inp.closest(".dio-box"));
+      updateProgress();
+      const saveKey = `${inp.dataset.fid}|${inp.dataset.key}`;
+      clearTimeout(fieldSaveTimers.get(saveKey));
+      fieldSaveTimers.set(saveKey, setTimeout(() => {
+        fieldSaveTimers.delete(saveKey);
+        if (!inp.isConnected || inp.disabled) return;
+        saveField(inp);
+      }, CONSULTOR_SAVE_DEBOUNCE_MS));
+    });
+    inp.addEventListener("change", () => {
+      const saveKey = `${inp.dataset.fid}|${inp.dataset.key}`;
+      clearTimeout(fieldSaveTimers.get(saveKey));
+      fieldSaveTimers.delete(saveKey);
+      saveField(inp);
+    });
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") { inp.blur(); } });
+    refreshDioSaveBtn(inp.closest(".dio-box"));
+  });
+  root.querySelectorAll("[data-dio-save]").forEach(btn => {
+    btn.addEventListener("click", () => confirmField(btn));
+  });
+  root.querySelectorAll(".dio-box.open-q").forEach(box => {
+    const qtyWrap = box.querySelector(".open-qty");
+    box.querySelectorAll(".open-yn-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (btn.disabled) return;
+        box.querySelectorAll(".open-yn-btn").forEach(b => b.classList.remove("active", "yes", "no"));
+        btn.classList.add("active", btn.dataset.yn === "1" ? "yes" : "no");
+        if (qtyWrap) qtyWrap.classList.toggle("hidden", btn.dataset.yn !== "1");
+        const justLbl = box.querySelector(".open-justif label");
+        if (justLbl) {
+          const hint = ` <span class="hint">mín. ${OPEN_JUSTIF_MIN} caracteres</span>`;
+          justLbl.innerHTML = (btn.dataset.yn === "1" ? "Complemento / detalhe" : "Por que não fez? Qual dificuldade?") + hint;
+        }
+        updateOpenCrossUi(box);
+        updateProgress();
+      });
+    });
+    box.querySelectorAll("[data-open-qty]").forEach(el => el.addEventListener("input", () => { updateOpenCrossUi(box); updateProgress(); }));
+    box.querySelectorAll("[data-open-justif]").forEach(el => el.addEventListener("input", () => updateProgress()));
+    updateOpenCrossUi(box);
+    const saveBtn = box.querySelector("[data-open-save]");
+    if (saveBtn) saveBtn.addEventListener("click", () => saveOpenPlan(box));
+  });
+  updateProgress();
+  tickUrgencyAndDay();
+}
+async function saveOpenPlan(box) {
+  if (!fbReady || !seller) return;
+  const fieldId = box.dataset.openFid;
+  const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
+  if (!cfg) return;
+  const month = todayISO(), day = todayDay();
+  if (!planWindowOpen(cfg, day, month)) {
+    toast(planUsesCheckoutWindow(cfg, day, month)
+      ? (checkoutWindowEnded() ? "Horário de check-out encerrado (" + scheduleTimeLabel("checkoutClose") + ")" : "Check-out abre às " + scheduleTimeLabel("checkoutOpen") + " — veja o cronômetro")
+      : (checkinWindowEnded() ? "Horário de check-in encerrado (" + scheduleTimeLabel("checkinGraceEnd") + ")" : "Check-in abre às " + scheduleTimeLabel("checkinOpen") + " — veja o cronômetro"), true);
+    return;
+  }
+  const yesBtn = box.querySelector('[data-yn="1"]');
+  const noBtn = box.querySelector('[data-yn="0"]');
+  const planYes = yesBtn?.classList.contains("active") ? true : noBtn?.classList.contains("active") ? false : null;
+  const justif = (box.querySelector("[data-open-justif]")?.value || "").trim();
+  const qtyRaw = box.querySelector("[data-open-qty]")?.value.trim() ?? "";
+  const path = `lojas/${lojaCode}/data/months/${month}/daily/${seller.id}/${fieldId}/${day}`;
+  const ref = fbDb.ref(path);
+  try {
+    const snap = await ref.once("value");
+    const cell = snap.val() || {};
+    if (cellLockedForConsultor(cell, "plan", day, month, cfg) && isOpenPlanComplete(cell)) {
+      toast(cell.planBy === "gestor" ? "Preenchido pelo gestor — não pode alterar" : "Resposta já salva — não pode alterar", true);
+      renderFields();
+      return;
+    }
+    if (planYes === null) { toast("Escolha Sim ou Não", true); return; }
+    if (justif.length < OPEN_JUSTIF_MIN) { toast(`Justificativa: mínimo ${OPEN_JUSTIF_MIN} caracteres`, true); return; }
+    if (planYes === true) {
+      if (qtyRaw === "" || isNaN(Number(qtyRaw)) || Number(qtyRaw) < 0) { toast("Informe quantas confirmações", true); return; }
+    }
+    const payload = { planYes, planJustif: justif, planBy: "consultor", planAt: Date.now() };
+    if (planYes === true) payload.plan = Number(qtyRaw);
+    await ref.update(payload);
+    if (planYes === false) await ref.child("plan").remove();
+    setLocalCell(seller.id, fieldId, day, month, "planYes", planYes);
+    setLocalCell(seller.id, fieldId, day, month, "planJustif", justif);
+    setLocalCell(seller.id, fieldId, day, month, "planBy", "consultor");
+    setLocalCell(seller.id, fieldId, day, month, "planAt", Date.now());
+    if (planYes === true) setLocalCell(seller.id, fieldId, day, month, "plan", Number(qtyRaw));
+    else {
+      const md = lojaData.months?.[month];
+      if (md?.daily?.[seller.id]?.[fieldId]?.[day]) delete md.daily[seller.id][fieldId][day].plan;
+    }
+    await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
+    toast(planYes ? "Sim registrado · sincronizado" : "Não registrado · sincronizado");
+    renderFields();
+    refreshOpenCrossAll();
+  } catch (e) {
+    console.warn(e);
+    toast("Erro ao salvar. Verifique a conexão.", true);
+  }
+}
+async function confirmField(btn) {
+  const box = btn.closest(".dio-box");
+  const fieldId = btn.dataset.fid, key = btn.dataset.key;
+  const slot = btn.dataset.slot || (key === "real" ? "Check-out" : "Check-in");
+  const inp = box?.querySelector(`input[data-fid="${fieldId}"][data-key="${key}"]`);
+  if (!inp) return;
+  if (!inp.value.trim()) { toast(`Informe o ${slot.toLowerCase()} antes de salvar`, true); return; }
+  await saveField(inp, { confirm: true, slotLabel: slot });
+}
+async function saveField(inp, opts) {
+  opts = opts || {};
+  if (!fbReady || !seller) return;
+  const fieldId = inp.dataset.fid, key = inp.dataset.key;
+  const month = todayISO(), day = todayDay();
+  const val = inp.value.trim();
+  const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
+  const path = `lojas/${lojaCode}/data/months/${month}/daily/${seller.id}/${fieldId}/${day}`;
+  const ref = fbDb.ref(path);
+  const cell = getCell(seller.id, fieldId, day, month);
+  try {
+    if (val === "") {
+      if (cell[key + "By"] === "gestor" && hasCellValue(cell, key)) {
+        toast("Preenchido pelo gestor — não pode apagar", true);
+        inp.value = cell[key] ?? "";
+        updateProgress();
+        return;
+      }
+      if (!hasCellValue(cell, key) && cell[key + "By"] !== "consultor") {
+        updateProgress();
+        return;
+      }
+      const next = { ...cell };
+      delete next[key]; delete next[key + "By"]; delete next[key + "At"];
+      delete next[cellConfirmKey(key)];
+      const stillHas = (cfg && hasPlanValue(next, cfg)) || hasCellValue(next, "real") || next.planYes === true || next.planYes === false || (next.planJustif && String(next.planJustif).trim());
+      const ck = cellConfirmKey(key);
+      if (!stillHas) await ref.remove();
+      else await ref.update({ [key]: null, [key + "By"]: null, [key + "At"]: null, [ck]: null });
+      setLocalCell(seller.id, fieldId, day, month, key, null);
+      if (!stillHas) {
+        const md = lojaData.months?.[month];
+        if (md?.daily?.[seller.id]?.[fieldId]) delete md.daily[seller.id][fieldId][day];
+      }
+      clearConfirmLocal(seller.id, fieldId, day, month, key);
+      setLocalCellFlag(seller.id, fieldId, day, month, cellConfirmKey(key), null);
+      await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
+      armConsultorMergeGuard(seller.id, fieldId, day, month);
+      if (opts.confirm) toast("Campo limpo");
+      scheduleRenderFields();
+      return;
+    }
+    const num = Number(val);
+    if (isNaN(num)) { toast("Valor inválido", true); return; }
+    if (key === "plan" && !planWindowOpen(cfg, day, month)) {
+      toast(planUsesCheckoutWindow(cfg, day, month)
+        ? (checkoutWindowEnded() ? "Horário de check-out encerrado (" + scheduleTimeLabel("checkoutClose") + ")" : "Check-out abre às " + scheduleTimeLabel("checkoutOpen") + " — veja o cronômetro")
+        : (checkinWindowEnded() ? "Horário de check-in encerrado (" + scheduleTimeLabel("checkinGraceEnd") + ")" : "Check-in abre às " + scheduleTimeLabel("checkinOpen") + " — veja o cronômetro"), true);
+      scheduleRenderFields();
+      return;
+    }
+    if (key === "real" && !checkoutWindowOpen()) {
+      toast(checkoutWindowEnded() ? "Horário de check-out encerrado (" + scheduleTimeLabel("checkoutClose") + ")" : "Check-out abre às " + scheduleTimeLabel("checkoutOpen") + " — veja o cronômetro", true);
+      scheduleRenderFields();
+      return;
+    }
+    if (cellLockedForConsultor(cell, key, day, month, cfg) && (key === "plan" && cfg ? hasPlanValue(cell, cfg) : hasCellValue(cell, key))) {
+      let msg = "Dia encerrado";
+      if (cell[key + "By"] === "gestor") msg = "Preenchido pelo gestor — não pode alterar";
+      else if (key === "real" && !checkoutWindowOpen()) msg = "Check-out libera em breve — veja o cronômetro";
+      toast(msg, true);
+      inp.value = cell[key] ?? "";
+      scheduleRenderFields();
+      return;
+    }
+    const payload = { [key]: num, [key + "By"]: "consultor", [key + "At"]: Date.now() };
+    if (opts.confirm) payload[cellConfirmKey(key)] = true;
+    await ref.update(payload);
+    setLocalCell(seller.id, fieldId, day, month, key, num);
+    if (opts.confirm) {
+      setLocalCellFlag(seller.id, fieldId, day, month, cellConfirmKey(key), true);
+      persistConfirmLocal(seller.id, fieldId, day, month, key);
+    }
+    await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
+    armConsultorMergeGuard(seller.id, fieldId, day, month);
+    const slot = opts.slotLabel || (key === "real" ? "Check-out" : "Check-in");
+    if (opts.confirm) {
+      toast(`${slot} salvo · travado`);
+      patchDioBoxAfterConfirm(fieldId, key, day, month);
+      if (key === "plan") refreshOpenCrossAll();
+    } else {
+      refreshDioSaveBtn(inp.closest(".dio-box"));
+      updateProgress();
+    }
+  } catch (e) {
+    console.warn("saveField", e);
+    enqueueOfflinePush({ sellerId: seller.id, fieldId, day: String(day), key, val: val === "" ? "" : Number(val), month, confirm: !!opts.confirm });
+    toast("Sem conexão — salvo local, sincroniza ao reconectar", true);
+  }
+}
+function detachLojaListeners() {
+  if (lojaListener) {
+    try { fbDb.ref("lojas/" + lojaCode).off("value", lojaListener); } catch (e) {}
+    lojaListener = null;
+  }
+  if (lojaDailyListener && seller) {
+    const month = todayISO();
+    try { fbDb.ref(`lojas/${lojaCode}/data/months/${month}/daily/${seller.id}`).off("value", lojaDailyListener); } catch (e) {}
+    lojaDailyListener = null;
+  }
+}
+function attachLojaListener() {
+  if (!fbDb || !lojaCode || !seller) return;
+  detachLojaListeners();
+  const month = todayISO();
+  lojaListener = snap => {
+    const v = snap.val();
+    if (!v?.data) return;
+    mergeConsultorLojaFromRemote(v.data);
+    const s = (lojaData.sellers || []).find(x => x.id === seller.id);
+    if (s) seller = s;
+    ensureConfirmsRestored();
+  };
+  fbDb.ref("lojas/" + lojaCode).on("value", lojaListener);
+  lojaDailyListener = snap => {
+    const remoteDaily = snap.val();
+    if (!remoteDaily) return;
+    const changed = mergeSellerDailyFromRemote(remoteDaily, seller.id, month);
+    if (!changed) return;
+    clearTimeout(lojaListenerTimer);
+    lojaListenerTimer = setTimeout(() => {
+      if (!document.getElementById("screenMain").classList.contains("active")) return;
+      if (isFieldsEditing()) {
+        renderFieldsQueued = true;
+        patchConsultorFieldInputs();
+        return;
+      }
+      patchConsultorFieldInputs();
+      if (document.getElementById("resumoOverlay").classList.contains("show")) renderResumo();
+    }, 120);
+  };
+  fbDb.ref(`lojas/${lojaCode}/data/months/${month}/daily/${seller.id}`).on("value", lojaDailyListener);
+}
+async function doLogin(loja, mat, pin) {
+  const err = document.getElementById("loginErr");
+  err.textContent = "";
+  lojaCode = loja.toUpperCase().replace(/\s+/g, "");
+  if (!/^VC[A-Z0-9]+$/.test(lojaCode) || lojaCode.length < 3) {
+    err.textContent = "Código da loja inválido (ex.: VCANT).";
+    return;
+  }
+  const matNorm = String(mat).trim();
+  if (!matNorm) { err.textContent = "Informe a matrícula."; return; }
+  if (!/^\d{4,8}$/.test(pin)) { err.textContent = "PIN deve ter 4 a 8 dígitos."; return; }
+  if (!fbReady) {
+    err.style.color = "var(--text-dim)";
+    err.textContent = "Conectando à nuvem…";
+    if (!await waitForFbReady()) {
+      err.style.color = "";
+      err.textContent = "Sem conexão com a nuvem. Toque em Tentar de novo.";
+      return;
+    }
+    err.style.color = "";
+  }
+  if (!window.crypto || !crypto.subtle) {
+    err.textContent = "Este navegador não suporta verificação de PIN. Use o Google Chrome.";
+    return;
+  }
+  err.textContent = "Verificando…";
+  try {
+    const snap = await fbDb.ref("lojas/" + lojaCode).once("value");
+    const v = snap.val();
+    if (!v || !v.data) { err.textContent = "Loja não encontrada ou sem dados na nuvem."; return; }
+    lojaData = v.data;
+    normalizeLojaIndicators();
+    const found = (lojaData.sellers || []).find(s => String(s.matricula || "").trim() === matNorm);
+    if (!found) { err.textContent = "Matrícula não encontrada nesta loja."; return; }
+    if (!found.pinHash) { err.textContent = "PIN ainda não configurado. Peça ao gestor em Regras de Negócio."; return; }
+    const ok = await verifyPin(pin, { hash: found.pinHash, salt: found.pinSalt });
+    if (!ok) { err.textContent = "PIN incorreto."; return; }
+    seller = found;
+    saveSession();
+    initFieldsEditGuard();
+    attachLojaListener();
+    await ensureConfirmsRestored();
+    showScreen("screenMain");
+    startTickLoop();
+    renderFields();
+    err.textContent = "";
+  } catch (e) {
+    console.warn(e);
+    err.textContent = "Erro ao conectar. Verifique a internet.";
+  }
+}
+async function tryRestore() {
+  const s = loadSession();
+  if (!s || !fbReady) return false;
+  lojaCode = s.loja;
+  try {
+    const snap = await fbDb.ref("lojas/" + lojaCode).once("value");
+    const v = snap.val();
+    if (!v?.data) return false;
+    lojaData = v.data;
+    normalizeLojaIndicators();
+    seller = (lojaData.sellers || []).find(x => x.id === s.sellerId);
+    if (!seller) return false;
+    initFieldsEditGuard();
+    attachLojaListener();
+    await ensureConfirmsRestored();
+    showScreen("screenMain");
+    startTickLoop();
+    renderFields();
+    return true;
+  } catch (e) { return false; }
+}
+function buildNum(v) {
+  const m = String(v || "").match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+function buildFailKey(remoteBuild) {
+  return `${remoteBuild}@${APP_BUILD}`;
+}
+function normalizeAppUrl(build = APP_BUILD) {
+  const u = new URL(location.href);
+  if (u.searchParams.get("v") !== build) {
+    u.searchParams.set("v", build);
+    history.replaceState(null, "", u.toString());
+  }
+}
+function redirectToAppBuild(remoteBuild, opts = {}) {
+  if (opts.force) {
+    sessionStorage.removeItem("gc_build_fail");
+    sessionStorage.setItem("gc_force_reload", "1");
+  }
+  const u = new URL(location.href);
+  u.searchParams.set("v", remoteBuild);
+  u.searchParams.set("_", String(Date.now()));
+  location.replace(u.toString());
+}
+function showStaleBanner(remoteBuild) {
+  let b = document.getElementById("appStaleBanner");
+  if (!b) {
+    b = document.createElement("div");
+    b.id = "appStaleBanner";
+    b.className = "app-stale-banner";
+    document.body.prepend(b);
+  }
+  b.innerHTML = `Nova versão disponível (${remoteBuild})<button type="button">Atualizar agora</button>`;
+  b.querySelector("button").onclick = () => redirectToAppBuild(remoteBuild, { force: true });
+}
+function applyRemoteAppBuild(remoteBuild) {
+  if (!remoteBuild || buildNum(remoteBuild) <= buildNum(APP_BUILD)) {
+    sessionStorage.removeItem("gc_build_fail");
+    normalizeAppUrl();
+    document.getElementById("appStaleBanner")?.remove();
+    return;
+  }
+  if (sessionStorage.getItem("gc_build_fail") === buildFailKey(remoteBuild)) {
+    showStaleBanner(remoteBuild);
+    return;
+  }
+  sessionStorage.setItem("gc_build_fail", buildFailKey(remoteBuild));
+  redirectToAppBuild(remoteBuild);
+}
+function watchAppBuild() {
+  if (!fbDb) return;
+  fbDb.ref("config/appBuild").on("value", snap => {
+    const remote = snap.val();
+    if (remote) applyRemoteAppBuild(remote);
+  });
+}
+function fbInit() {
+  connectCloud();
+}
+document.getElementById("btnRetryCloud").onclick = () => connectCloud();
+document.getElementById("btnLogin").onclick = () => {
+  doLogin(
+    document.getElementById("inLoja").value,
+    document.getElementById("inMat").value,
+    document.getElementById("inPin").value
+  );
+};
+["inLoja", "inMat", "inPin"].forEach(id => {
+  document.getElementById(id).addEventListener("keydown", e => {
+    if (e.key === "Enter") document.getElementById("btnLogin").click();
+  });
+});
+document.getElementById("btnResumo").onclick = () => openResumo();
+document.getElementById("resumoClose").onclick = () => closeResumo();
+document.getElementById("resumoOverlay").onclick = e => { if (e.target.id === "resumoOverlay") closeResumo(); };
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && seller) flushPendingFieldSaves();
+});
+document.getElementById("btnLogout").onclick = () => {
+  flushPendingFieldSaves();
+  detachLojaListeners();
+  stopTickLoop();
+  closeResumo();
+  clearSession(); seller = null; lojaData = null; confirmsRestored = false;
+  document.getElementById("inPin").value = "";
+  showScreen("screenLogin");
+  toast("Sessão encerrada");
+};
+initFieldsEditGuard();
+fbInit();
+</script>
+</body>
+</html>
