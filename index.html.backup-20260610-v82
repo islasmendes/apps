@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v83";
+  var BUILD = "v82";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2474,7 +2474,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v83"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v82"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -2638,54 +2638,12 @@ function arvMetaForTotal(localInd, lojas, days, periodo, subTpl) {
 
 /* Sistema */
 function getSystem(sellerId, fieldId, m = currentMonth) { const md = monthData(m); return (md.system[sellerId] && md.system[sellerId][fieldId] != null) ? Number(md.system[sellerId][fieldId]) : null; }
-function getSystemAt(sellerId, fieldId, m = currentMonth) {
-  const md = monthData(m);
-  const at = md.systemAt?.[sellerId]?.[fieldId];
-  return at != null ? Number(at) : null;
-}
 function getSystemCoSnap(sellerId, fieldId, m = currentMonth) {
   const md = monthData(m);
   const snap = md.systemCoSnap?.[sellerId]?.[fieldId];
-  return snap != null ? Number(snap) : null;
-}
-/** IDs de check-out a somar no delta após lançamento do gestor (principal = todos os subs de CO). */
-function systemDeltaFieldIds(fieldId) {
-  const ind = mainIndicatorById(fieldId);
-  if (ind) {
-    const coSubs = (ind.subs || []).filter(s => s.checkout).map(s => s.id);
-    if (coSubs.length) return coSubs;
-    if (ind.checkout) return [ind.id];
-    return [];
-  }
-  return [fieldId];
-}
-/** Soma check-outs com realAt posterior ao lançamento do gestor (consultor após o ⚙). */
-function checkoutRealAfterSystem(sellerId, fieldId, days, sinceAt, m = currentMonth) {
-  if (!sinceAt) return 0;
-  let sum = 0;
-  systemDeltaFieldIds(fieldId).forEach(fid => {
-    days.forEach(d => {
-      const c = getCell(sellerId, fid, d, m);
-      if (c.real == null || c.real === "") return;
-      const realAt = Number(c.realAt) || 0;
-      if (realAt > sinceAt) sum += Number(c.real);
-    });
-  });
-  return sum;
-}
-/** Delta de check-out após âncora do gestor: por timestamp; fallback snap legado. */
-function checkoutDeltaAfterSystem(sellerId, fieldId, days, m = currentMonth) {
-  const at = getSystemAt(sellerId, fieldId, m);
-  if (at) {
-    const tsDelta = checkoutRealAfterSystem(sellerId, fieldId, days, at, m);
-    if (tsDelta !== 0) return tsDelta;
-  }
-  const snap = getSystemCoSnap(sellerId, fieldId, m);
-  if (snap != null) {
-    const co = checkoutSum(sellerId, fieldId, days, m) ?? 0;
-    return co - snap;
-  }
-  return 0;
+  if (snap != null) return Number(snap);
+  if (getSystem(sellerId, fieldId, m) == null) return null;
+  return checkoutSum(sellerId, fieldId, monthDays(m), m) ?? 0;
 }
 function normKpiName(s) {
   return String(s || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
@@ -2981,13 +2939,14 @@ function matrizTipReal(fromSystem, sellerId, fieldId) {
   let detail = "";
   if (sellerId && fieldId) {
     const sys = getSystem(sellerId, fieldId);
-    const days = monthDays();
-    const delta = checkoutDeltaAfterSystem(sellerId, fieldId, days);
+    const co = checkoutSum(sellerId, fieldId, monthDays(), currentMonth) ?? 0;
+    const snap = getSystemCoSnap(sellerId, fieldId, currentMonth) ?? co;
+    const delta = co - snap;
     if (sys != null) {
-      detail = `\nÚltimo lançamento gestor ⚙ ${fmt(sys)} + check-out do CV após isso (${delta >= 0 ? "+" : ""}${fmt(delta)}) = ${fmt(sys + delta)}`;
+      detail = `\nSistema ⚙ ${fmt(sys)} + check-outs desde o lançamento (${delta >= 0 ? "+" : ""}${fmt(delta)}) = ${fmt(sys + delta)}`;
     }
   }
-  return `Real: gestor (sistema) ⚙${detail}\nAcuracidade usa só o relato do consultor, sem este ajuste.\nCor neutra — leia % (hoje) e Proj. (fechamento)`;
+  return `Real: gestor (sistema) ⚙${detail}\nCor neutra — leia % (hoje) e Proj. (fechamento)`;
 }
 function matrizTipPct(real, meta, dailyFallback, opts) {
   if (!meta || meta <= 0) return "Cadastre meta em KPIs";
@@ -3487,7 +3446,9 @@ function matrizFieldValue(sellerId, fieldId, days, periodo, m = currentMonth) {
   const fullMonth = monthDays(m);
   const isFullMonth = days.length === fullMonth.length && fullMonth.every(d => days.includes(d));
   if (!isFullMonth) return co;
-  return sys + checkoutDeltaAfterSystem(sellerId, fieldId, fullMonth, m);
+  const monthCo = checkoutSum(sellerId, fieldId, fullMonth, m) ?? 0;
+  const snap = getSystemCoSnap(sellerId, fieldId, m) ?? monthCo;
+  return sys + (monthCo - snap);
 }
 function matrizRealForSellers(ids, fieldId, days, periodo) {
   let real = 0, has = false, fromSystem = false;
