@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v88";
+  var BUILD = "v87";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -242,9 +242,8 @@
   .resumo-hero-left { flex: 1; min-width: 0; }
   .resumo-hero .hero-label { margin: 0 0 4px; font-weight: 800; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-size: 10px; }
   .resumo-hero .big { font-size: 30px; font-weight: 800; line-height: 1; flex-shrink: 0; text-align: right; }
-  .resumo-hero-pct.pulse-bad, .resumo-proj-pct.pulse-bad, .resumo-motiv.bad.pulse-bad { animation: resumo-pct-pulse-bad 1.35s ease-in-out infinite; }
-  .resumo-hero-pct.pulse-ok, .resumo-proj-pct.pulse-ok, .resumo-motiv.ok.pulse-ok { animation: resumo-pct-pulse-ok 1.6s ease-in-out infinite; }
-  .resumo-motiv.warn.pulse-warn { animation: resumo-pct-pulse-warn 1.45s ease-in-out infinite; }
+  .resumo-hero-pct.pulse-bad, .resumo-proj-pct.pulse-bad { animation: resumo-pct-pulse-bad 1.35s ease-in-out infinite; }
+  .resumo-hero-pct.pulse-ok, .resumo-proj-pct.pulse-ok { animation: resumo-pct-pulse-ok 1.6s ease-in-out infinite; }
   @keyframes resumo-pct-pulse-bad {
     0%, 100% { opacity: 1; text-shadow: 0 0 10px color-mix(in srgb, var(--danger) 35%, transparent); }
     50% { opacity: .72; text-shadow: 0 0 22px color-mix(in srgb, var(--danger) 65%, transparent); }
@@ -253,17 +252,6 @@
     0%, 100% { opacity: 1; text-shadow: 0 0 10px color-mix(in srgb, var(--ok) 40%, transparent); }
     50% { opacity: .88; text-shadow: 0 0 24px color-mix(in srgb, var(--ok) 72%, transparent); }
   }
-  @keyframes resumo-pct-pulse-warn {
-    0%, 100% { opacity: 1; text-shadow: 0 0 8px color-mix(in srgb, var(--warn) 30%, transparent); }
-    50% { opacity: .8; text-shadow: 0 0 18px color-mix(in srgb, var(--warn) 58%, transparent); }
-  }
-  .resumo-motiv {
-    font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .35px;
-    margin-top: 6px; line-height: 1.35; text-align: center;
-  }
-  .resumo-motiv.ok { color: var(--ok); }
-  .resumo-motiv.warn { color: var(--warn); }
-  .resumo-motiv.bad { color: #ff8a94; }
   .resumo-hero-venda { border-color: color-mix(in srgb, var(--accent-2) 42%, var(--border)); }
   .resumo-hero-proj { text-align: right; flex-shrink: 0; }
   .resumo-hero-abs { font-size: 15px; font-weight: 800; margin-top: 3px; font-variant-numeric: tabular-nums; }
@@ -547,7 +535,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v88"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v87"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -684,13 +672,10 @@ if (params.get("loja")) document.getElementById("inLoja").value = params.get("lo
 
 function todayISO() { return new Date().toISOString().slice(0, 7); }
 function todayDay() { return new Date().getDate(); }
-function fmt(n, dec = 0) {
-  if (n == null || n === "" || isNaN(n)) return "—";
-  return Number(n).toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
-function fmtMatrizProj(n, lb) {
-  if (n == null || isNaN(n)) return "—";
-  return lb ? fmtPctFine(n) : fmt(Math.round(n));
+function fmt(n, dec) {
+  if (n == null || n === "") return "—";
+  if (dec != null) return Number(n).toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  return Number(n).toLocaleString("pt-BR");
 }
 function toast(msg, bad) {
   const el = document.getElementById("toast");
@@ -1996,25 +1981,6 @@ function findVendaIndicator() {
   const inds = lojaData?.indicators || [];
   return inds.find(i => i.role === "venda") || inds.find(i => /venda/i.test(i.name || ""));
 }
-function findVendaScoreRate(vendaInd) {
-  if (!vendaInd) return null;
-  const pick = rates => (rates || []).find(r => /desconto|score/i.test(String(r.name || "")));
-  const direct = pick(vendaInd.rates);
-  if (direct) return direct;
-  for (const sub of (vendaInd.subs || [])) {
-    const hit = pick(sub.rates);
-    if (hit) return hit;
-  }
-  return null;
-}
-function vendaScorePerfPct(vendaInd, sellerId, m = todayISO()) {
-  const rate = findVendaScoreRate(vendaInd);
-  if (!rate) return null;
-  const val = rateValueForSeller(rate, sellerId, m);
-  const target = matrizRateTarget(rate, m);
-  if (val == null || target == null) return null;
-  return matrizRateRatio(val, target, rateLowerBetter(rate, vendaInd));
-}
 function isVendaIndicator(cfg) {
   if (!cfg) return false;
   if (cfg.role === "venda") return true;
@@ -2184,20 +2150,20 @@ function rankScoresTied(a, b) {
 }
 function compareTeamRankRows(a, b, lb, isVenda) {
   if (b.score !== a.score) return b.score - a.score;
+  if (isVenda) {
+    const rA = a.score === -Infinity ? -Infinity : Math.round(a.score * 10000) / 100;
+    const rB = b.score === -Infinity ? -Infinity : Math.round(b.score * 10000) / 100;
+    if (rB !== rA) return rB - rA;
+  }
   const adA = a.adherence ?? -1, adB = b.adherence ?? -1;
   if (adB !== adA) return adB - adA;
   const accA = a.accuracy ?? -1, accB = b.accuracy ?? -1;
   if (accB !== accA) return accB - accA;
-  if (isVenda) {
-    const vsA = a.vendaScorePct ?? -1, vsB = b.vendaScorePct ?? -1;
-    if (vsB !== vsA) return vsB - vsA;
-  }
   if (lb) return a.projAbs - b.projAbs;
   return b.projAbs - a.projAbs;
 }
 function buildTeamRankRows(fieldId, cfg, m = todayISO(), parentInd = null) {
   const isVenda = isVendaIndicator(cfg);
-  const vendaInd = isVenda ? cfg : null;
   const lb = rankScoreLowerBetter(cfg, parentInd);
   const days = monthDays(m);
   return orderedSellers().map(s => {
@@ -2212,7 +2178,6 @@ function buildTeamRankRows(fieldId, cfg, m = todayISO(), parentInd = null) {
       score: score ?? -Infinity,
       adherence: discipline.pct,
       accuracy: metrics.acc,
-      vendaScorePct: vendaInd ? vendaScorePerfPct(vendaInd, s.id, m) : null,
       projAbs: proj ?? (lb ? Infinity : -Infinity)
     };
   }).sort((a, b) => compareTeamRankRows(a, b, lb, isVenda))
@@ -2348,36 +2313,29 @@ function bindResumoToggles() {
     };
   });
 }
-function resumoMotiv(st) {
-  const { perfRatio } = st;
-  if (perfRatio == null) return { msg: "", tone: "muted", pulse: "" };
-  if (perfRatio >= 1) return { msg: "DISCIPLINA VENCE O TALENTO!", tone: "ok", pulse: " pulse-ok" };
-  if (perfRatio >= 0.7) return { msg: "ESTÁ NO CAMINHO! CONTINUE!", tone: "warn", pulse: " pulse-warn" };
-  return { msg: "MUDE A ATITUDE JÁ!", tone: "bad", pulse: " pulse-bad" };
-}
-function resumoMotivHtml(st) {
-  const m = resumoMotiv(st);
-  if (!m.msg) return "";
-  return `<div class="resumo-motiv ${m.tone}${m.pulse}">${m.msg}</div>`;
-}
-function resumoRankHtml(cfg, sellerId, m, parentInd = null) {
-  const { pos, total, note } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
-  if (!pos || total <= 1) return "";
-  const label = pos === 1 ? "1º na loja" : pos === 2 ? "2º na loja" : pos === 3 ? "3º na loja" : `${pos}º na loja`;
-  let html = `<div class="resumo-rank">${label} · ${total} vendedores</div>`;
-  if (note) html += `<div class="resumo-rank-note">${note}</div>`;
-  return html;
+function resumoPulseClass(st) {
+  const { proj, meta, perfRatio, lb } = st;
+  if (proj == null && perfRatio == null) return "";
+  if (lb && meta != null) {
+    const band = matrizLowerBetterBand(proj, meta, matrizLowerWarnMargin(meta, false), false);
+    if (band === "ok") return " pulse-ok";
+    if (band === "danger") return " pulse-bad";
+    return "";
+  }
+  if (perfRatio != null) {
+    if (perfRatio >= 1) return " pulse-ok";
+    if (perfRatio < 0.7) return " pulse-bad";
+  }
+  return "";
 }
 function resumoProjFmt(st) {
   const heatColor = resumoHeatColor(st.proj, st.meta, st.perfRatio, st.lb, false);
-  const motiv = resumoMotiv(st);
   return {
     pct: st.perfRatio != null ? pctTxt(st.perfRatio) : "—",
-    abs: fmtMatrizProj(st.proj, st.lb),
-    metaLbl: st.meta != null ? fmtMatrizProj(st.meta, st.lb) : null,
+    abs: st.proj != null ? (st.lb ? fmtPctFine(st.proj) : fmt(st.proj)) : "—",
+    metaLbl: st.meta != null ? (st.lb ? fmtPctFine(st.meta) : fmt(st.meta)) : null,
     heatColor,
-    pulse: motiv.pulse,
-    motiv,
+    pulse: resumoPulseClass(st),
     barW: resumoBarWidth(st.proj, st.meta, st.perfRatio, st.lb, false)
   };
 }
@@ -2419,8 +2377,6 @@ function resumoPrincipalCard(ind, sid, m) {
   rates.forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
   expandHtml += `</div>`;
   const metaHint = p.metaLbl ? `<div class="resumo-row-meta">Meta ${p.metaLbl}</div>` : "";
-  const rankHtml = resumoRankHtml(ind, sid, m);
-  const motivHtml = resumoMotivHtml(st);
   return `<div class="resumo-card" style="--rc:${color}">
     <div class="resumo-row resumo-ind-main toggle${isOpen ? " open" : ""}" data-ind-toggle="${ind.id}" style="--rc:${color};--bc:${p.heatColor}">
       <div class="resumo-row-top">
@@ -2431,8 +2387,6 @@ function resumoPrincipalCard(ind, sid, m) {
         </div>
       </div>
       ${metaHint}
-      ${rankHtml}
-      ${motivHtml}
       <div class="resumo-bar"><i style="width:${p.barW}%"></i></div>
     </div>${expandHtml}</div>`;
 }
@@ -2442,8 +2396,7 @@ function resumoVendaHeroHtml(venda, sid, m, monthLbl, discipline, metrics) {
   }
   const st = fieldProjStats(venda, sid, m);
   const p = resumoProjFmt(st);
-  const rankHtml = resumoRankHtml(venda, sid, m);
-  const motivHtml = resumoMotivHtml(st);
+  const callout = resumoCallout(venda, sid, m, false);
   const adhColor = heatMatrizText(discipline.pct);
   const accColor = heatMatrizText(metrics.acc);
   const den = discipline.scheduled || 0;
@@ -2458,8 +2411,7 @@ function resumoVendaHeroHtml(venda, sid, m, monthLbl, discipline, metrics) {
         <div class="resumo-hero-abs" style="color:${p.heatColor}">Proj. ${p.abs}${p.metaLbl ? ` · meta ${p.metaLbl}` : ""}</div>
       </div>
     </div>
-    ${rankHtml}
-    ${motivHtml}
+    ${callout.html}
     <div class="resumo-mini-chips">
       <span class="resumo-mini-chip" style="color:${adhColor}">Aderência ${discipline.pct != null ? pctTxt(discipline.pct) : "—"}${den ? ` · ${discipline.complete}/${den}` : ""}</span>
       <span class="resumo-mini-chip" style="color:${accColor}">Acuracidade ${metrics.acc != null ? pctTxt(metrics.acc) : "—"}</span>
