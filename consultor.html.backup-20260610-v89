@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v90";
+  var BUILD = "v89";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -242,9 +242,9 @@
   .resumo-hero-left { flex: 1; min-width: 0; }
   .resumo-hero .hero-label { margin: 0 0 4px; font-weight: 800; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-size: 10px; }
   .resumo-hero .big { font-size: 30px; font-weight: 800; line-height: 1; flex-shrink: 0; text-align: right; }
-  .resumo-hero-pct.pulse-bad, .resumo-pct-center .resumo-hero-pct.pulse-bad, .resumo-motiv.bad.pulse-bad { animation: resumo-pct-pulse-bad 1.35s ease-in-out infinite; }
-  .resumo-hero-pct.pulse-ok, .resumo-pct-center .resumo-hero-pct.pulse-ok, .resumo-motiv.ok.pulse-ok { animation: resumo-pct-pulse-ok 1.6s ease-in-out infinite; }
-  .resumo-motiv.warn.pulse-warn, .resumo-pct-center .resumo-hero-pct.pulse-warn { animation: resumo-pct-pulse-warn 1.45s ease-in-out infinite; }
+  .resumo-hero-pct.pulse-bad, .resumo-proj-pct.pulse-bad, .resumo-motiv.bad.pulse-bad { animation: resumo-pct-pulse-bad 1.35s ease-in-out infinite; }
+  .resumo-hero-pct.pulse-ok, .resumo-proj-pct.pulse-ok, .resumo-motiv.ok.pulse-ok { animation: resumo-pct-pulse-ok 1.6s ease-in-out infinite; }
+  .resumo-motiv.warn.pulse-warn { animation: resumo-pct-pulse-warn 1.45s ease-in-out infinite; }
   @keyframes resumo-pct-pulse-bad {
     0%, 100% { opacity: 1; text-shadow: 0 0 10px color-mix(in srgb, var(--danger) 35%, transparent); }
     50% { opacity: .72; text-shadow: 0 0 22px color-mix(in srgb, var(--danger) 65%, transparent); }
@@ -258,12 +258,9 @@
     50% { opacity: .8; text-shadow: 0 0 18px color-mix(in srgb, var(--warn) 58%, transparent); }
   }
   .resumo-motiv {
-    font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .35px;
-    margin-top: 2px; line-height: 1.4; text-align: center;
+    font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .35px;
+    margin-top: 8px; line-height: 1.4; text-align: center;
   }
-  .resumo-pct-center { text-align: center; margin: 6px 0 2px; }
-  .resumo-pct-center .resumo-hero-pct { font-size: 30px; font-weight: 800; line-height: 1; display: inline-block; }
-  .resumo-proj-corner { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; text-align: right; }
   .resumo-disc-block {
     margin-top: 10px; padding-top: 10px;
     border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
@@ -569,7 +566,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v90"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v89"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -2386,17 +2383,18 @@ function resumoRankNoteHtml(cfg, sellerId, m, parentInd = null) {
   const { note } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
   return note ? `<div class="resumo-rank-note">${note}</div>` : "";
 }
-function resumoProjCornerHtml(p, cfg, sellerId, m, parentInd) {
+function resumoProjStackHtml(p, cfg, sellerId, m, parentInd, opts) {
+  opts = opts || {};
   const { pos, total } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
-  let html = `<div class="resumo-proj-corner">`;
+  const pctCls = opts.hero ? "big resumo-hero-pct" : "pct resumo-proj-pct";
+  const stackCls = "resumo-proj-stack" + (opts.hero ? " resumo-proj-stack-hero" : "");
+  let html = `<div class="${stackCls}">`;
+  html += `<span class="${pctCls}${p.pulse}" style="color:${p.heatColor}">${p.pct}</span>`;
   if (p.metaLbl) html += `<span class="resumo-proj-meta" style="color:${p.heatColor}">Meta = ${p.metaLbl}</span>`;
   html += `<span class="resumo-proj-abs" style="color:${p.heatColor}">Proj. ${p.abs}</span>`;
   if (pos && total > 1) html += `<span class="resumo-proj-rank">${pos}º / ${total}</span>`;
   html += `</div>`;
   return html;
-}
-function resumoProjCenterPctHtml(p) {
-  return `<div class="resumo-pct-center"><span class="resumo-hero-pct${p.pulse}" style="color:${p.heatColor}">${p.pct}</span></div>`;
 }
 function resumoDisciplineGridHtml(discipline, metrics) {
   const den = discipline.scheduled || 0;
@@ -2478,9 +2476,8 @@ function resumoPrincipalCard(ind, sid, m) {
     <div class="resumo-row resumo-ind-main toggle${isOpen ? " open" : ""}" data-ind-toggle="${ind.id}" style="--rc:${color};--bc:${p.heatColor}">
       <div class="resumo-row-top">
         <b>${name}${chev}</b>
-        ${resumoProjCornerHtml(p, ind, sid, m, null)}
+        ${resumoProjStackHtml(p, ind, sid, m, null)}
       </div>
-      ${resumoProjCenterPctHtml(p)}
       ${motivHtml}
       <div class="resumo-bar"><i style="width:${p.barW}%"></i></div>
     </div>${expandHtml}</div>`;
@@ -2498,9 +2495,8 @@ function resumoVendaHeroHtml(venda, sid, m, monthLbl, discipline, metrics) {
         <div class="hero-label">Foco principal — ${escText(matrizDisplayName(venda.name))}</div>
         <div class="subline" style="margin-top:0;">${monthLbl} · espelho da matriz do gestor</div>
       </div>
-      ${resumoProjCornerHtml(p, venda, sid, m, null)}
+      ${resumoProjStackHtml(p, venda, sid, m, null, { hero: true })}
     </div>
-    ${resumoProjCenterPctHtml(p)}
     ${motivHtml}
     ${resumoDisciplineGridHtml(discipline, metrics)}
     <div class="resumo-escala-line">${escText(consultorEscalaSummary(sid, m))}</div>
