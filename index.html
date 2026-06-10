@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v92";
+  var BUILD = "v93";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -1427,10 +1427,58 @@ function afterKpiStructureChange() {
   if (canPushOperationalConfig()) pushConfigTemplate();
   else queueConfigPush();
 }
+const KPI_META_KEYS = ["metaDay", "metaSat", "metaSun", "metaMonth"];
 function pickKpiMetaField(local, tplField, key) {
   if (local != null && local[key] != null && local[key] !== "") return Number(local[key]) || 0;
   if (tplField != null && tplField[key] != null && tplField[key] !== "") return Number(tplField[key]) || 0;
   return 0;
+}
+function shouldPreferLocalKpiMeta(localVal, remoteVal) {
+  const lv = Number(localVal), rv = Number(remoteVal);
+  return localVal != null && localVal !== "" && !isNaN(lv) && lv > 0 && (remoteVal == null || remoteVal === "" || isNaN(rv) || rv <= 0);
+}
+function copyKpiMetaFields(tgt, src) {
+  if (!tgt || !src) return;
+  KPI_META_KEYS.forEach(k => { if (shouldPreferLocalKpiMeta(src[k], tgt[k])) tgt[k] = Number(src[k]) || 0; });
+}
+function buildKpiFieldMap(st) {
+  const map = Object.create(null);
+  const add = cfg => {
+    if (!cfg) return;
+    if (cfg.id) map[cfg.id] = cfg;
+    const nk = String(cfg.name || "").trim().toLowerCase();
+    if (nk) map["n:" + nk] = cfg;
+  };
+  (st?.indicators || []).forEach(ind => { add(ind); (ind.subs || []).forEach(add); });
+  return map;
+}
+function findKpiCfgInMap(map, cfg) {
+  if (!map || !cfg) return null;
+  return map[cfg.id] || map["n:" + String(cfg.name || "").trim().toLowerCase()] || null;
+}
+/** Preserva metas do navegador quando a nuvem/template ainda não recebeu o push. */
+function mergeKpiMetasFromLocalState(target, local) {
+  if (!target || !local) return target;
+  const lmap = buildKpiFieldMap(local);
+  (target.indicators || []).forEach(ind => {
+    copyKpiMetaFields(ind, findKpiCfgInMap(lmap, ind));
+    (ind.subs || []).forEach(sub => copyKpiMetaFields(sub, findKpiCfgInMap(lmap, sub)));
+  });
+  Object.keys(local.months || {}).forEach(m => {
+    const lMeta = local.months[m]?.metaLoja;
+    if (!lMeta) return;
+    if (!target.months) target.months = {};
+    if (!target.months[m]) target.months[m] = {};
+    const tMeta = target.months[m].metaLoja || (target.months[m].metaLoja = {});
+    Object.keys(lMeta).forEach(fid => {
+      if (shouldPreferLocalKpiMeta(lMeta[fid], tMeta[fid])) tMeta[fid] = Number(lMeta[fid]);
+    });
+  });
+  return target;
+}
+function loadLocalStateSnapshot() {
+  try { const raw = localStorage.getItem(LS_KEY); if (raw) return migrate(JSON.parse(raw)); } catch (e) { /* ignore */ }
+  return null;
 }
 /** Preserva cfg local quando o template ainda usa nome antigo (ex.: após renomear no KPI). */
 function resolveLocalCfgForTemplate(st, reg, tInd) {
@@ -1650,13 +1698,15 @@ function applyOperationalConfig(st, tpl, opts) {
       }
     });
   });
+  const nameToId = Object.fromEntries(newIndicators.map(i => [i.name, i.id]));
+  const newOrder = (tpl.orderNames || newIndicators.map(i => i.name)).map(n => nameToId[n]).filter(Boolean);
   const before = configHash(extractOperationalConfig(st));
+  const preview = { ...st, indicators: newIndicators, order: { ...(st.order || {}), indicators: newOrder } };
+  const after = configHash(extractOperationalConfig(preview));
+  if (before === after && !opts?.ignoreVersion) return false;
   st.indicators = newIndicators;
   st.order = st.order || {};
-  const nameToId = Object.fromEntries(newIndicators.map(i => [i.name, i.id]));
-  st.order.indicators = (tpl.orderNames || newIndicators.map(i => i.name)).map(n => nameToId[n]).filter(Boolean);
-  const after = configHash(extractOperationalConfig(st));
-  if (before === after && !opts?.ignoreVersion) return false;
+  st.order.indicators = newOrder;
   applyMatrizShowUi(st);
   autoRecoverOrphanKpiData(st);
   repairBlockMetasFromSubsInState(st);
@@ -1713,8 +1763,12 @@ function applyTemplateFromCloud() {
   return fbDb.ref(CONFIG_OP_PATH).once("value").then(snap => {
     const tpl = snap.val();
     if (!tpl) return false;
+    const localSnap = JSON.parse(JSON.stringify(state));
+    const diskSnap = loadLocalStateSnapshot();
     configApplying = true;
     const changed = applyOperationalConfig(state, tpl);
+    mergeKpiMetasFromLocalState(state, localSnap);
+    if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
     configApplying = false;
     if (changed) {
       lastPushedConfigHash = configHash(tpl);
@@ -1736,12 +1790,16 @@ function startConfigListener() {
     if (isConfigAdmin() && tpl.sourceLoja === lojaCode && lastPushedConfigHash === configHash(tpl)) return;
     clearTimeout(configApplyTimer);
     configApplyTimer = setTimeout(() => {
+      const localSnap = JSON.parse(JSON.stringify(state));
+      const diskSnap = loadLocalStateSnapshot();
       configApplying = true;
       const changed = applyOperationalConfig(state, tpl);
+      mergeKpiMetasFromLocalState(state, localSnap);
+      if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
       configApplying = false;
       if (!changed) return;
       lastPushedConfigHash = configHash(tpl);
-      save({ skipPush: divisionalMode(), skipConfigPush: true });
+      save({ skipPush: divisionalMode(), skipConfigPush: true, immediatePush: true });
       expandedBlocks = state.ui.expanded;
       if (["matriz", "rscen", "kpis", "config", "diario"].includes(activeView)) renderActive();
     }, 300);
@@ -1751,7 +1809,9 @@ function startConfigListener() {
 function save(opts) {
   persistMatrizShowUi(state);
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); }
-  if (!opts?.skipPush && typeof fbPush === "function") fbPush();
+  if (!opts?.skipPush && typeof fbPush === "function") {
+    fbPush(opts?.immediatePush ? { skipMerge: true, immediate: true } : undefined);
+  }
   if (!opts?.skipConfigPush) queueConfigPush();
 }
 
@@ -2546,7 +2606,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v92"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v93"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -2595,7 +2655,7 @@ function metaForDay(cfg, m, day) {
 }
 function weekMeta(cfg, days) { let s = 0; days.forEach(d => { s += metaForDay(cfg, currentMonth, d); }); return s; }
 function getMetaLoja(fieldId, m = currentMonth) { const md = monthData(m); return md.metaLoja[fieldId] != null ? Number(md.metaLoja[fieldId]) : null; }
-function setMetaLoja(fieldId, val, m = currentMonth) { const md = monthData(m); if (val === "" || val == null || isNaN(val)) delete md.metaLoja[fieldId]; else md.metaLoja[fieldId] = Number(val); save(); }
+function setMetaLoja(fieldId, val, m = currentMonth) { const md = monthData(m); if (val === "" || val == null || isNaN(val)) delete md.metaLoja[fieldId]; else md.metaLoja[fieldId] = Number(val); save({ immediatePush: true }); }
 const DIV_META_LS = "gc_divisional_metas";
 const DEFAULT_DIVISIONAL_CODE = "RSCEN";
 let divisionalMetasByMonth = {};
@@ -6999,7 +7059,7 @@ function bindKpiMetaField(inp, cfg, key, fieldId) {
   let timer = null;
   const persist = () => {
     cfg[key] = Number(inp.value) || 0;
-    save();
+    save({ immediatePush: true });
     if (fieldId) refreshMetaAdherence(fieldId);
   };
   inp.addEventListener("change", persist);
@@ -8332,14 +8392,20 @@ function pullLoja(){
     };
     if (v && v.data) {
       const localVis = state?.ui?.matrizShow ? { ...state.ui.matrizShow } : null;
+      const localSnap = JSON.parse(JSON.stringify(state));
+      const diskSnap = loadLocalStateSnapshot();
       state = migrate(v.data);
+      mergeKpiMetasFromLocalState(state, localSnap);
+      if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
       if (localVis) state.ui.matrizShow = { ...(state.ui.matrizShow || {}), ...localVis };
       applyMatrizShowUi(state);
       state.storeName = v.name || lojaCode;
       applyTemplateFromCloud().then(() => {
+        mergeKpiMetasFromLocalState(state, localSnap);
+        if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
         applyMatrizShowUi(state);
         autoRecoverOrphanKpiData(state);
-        save({ skipConfigPush: !isAdmin });
+        save({ skipConfigPush: !isAdmin, immediatePush: true });
         finish();
         toast("Loja "+lojaCode+" carregada da nuvem");
       });
