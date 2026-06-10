@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v71";
+  var BUILD = "v72";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -1814,6 +1814,24 @@ function markDailyTombstones(days, sellerIds, fieldIds, m = currentMonth) {
 function isDailyTombstoned(sid, fid, day, m = currentMonth) {
   return !!(state.ui?.dailyTombstones?.[dailyTombstoneKey(sid, fid, day, m)]);
 }
+function clearDailyTombstone(sid, fid, day, m = currentMonth) {
+  const key = dailyTombstoneKey(sid, fid, String(day), m);
+  if (state.ui?.dailyTombstones?.[key]) {
+    delete state.ui.dailyTombstones[key];
+    return true;
+  }
+  return false;
+}
+function tombstoneBlocksMerge(sid, fid, dayKey, m, lc) {
+  const ts = state.ui?.dailyTombstones?.[dailyTombstoneKey(sid, fid, dayKey, m)];
+  if (!ts) return false;
+  const localAt = Math.max(cellFieldAt(lc, "plan"), cellFieldAt(lc, "real"));
+  if (localAt > ts) {
+    clearDailyTombstone(sid, fid, dayKey, m);
+    return false;
+  }
+  return true;
+}
 async function pushDailyClearsToFirebase({ days, sellerIds, fieldIds, clearSystem = false, month = currentMonth }) {
   if (!fbReady || !fbDb || !lojaCode || divisionalMode()) return false;
   const updates = {};
@@ -2146,6 +2164,22 @@ function cfgById(id) { for (const ind of state.indicators) { if (ind.id === id) 
 let diarioEditDepth = 0;
 const diarioPendingOverlay = new Map();
 const diarioPendingPushes = new Map();
+const gestorMergeGuard = new Map();
+function gestorGuardKey(sellerId, fieldId, day, m = currentMonth) {
+  return `${m}|${sellerId}|${fieldId}|${String(day)}`;
+}
+function armGestorMergeGuard(sellerId, fieldId, day, m = currentMonth) {
+  gestorMergeGuard.set(gestorGuardKey(sellerId, fieldId, day, m), Date.now() + 15000);
+}
+function isGestorMergeGuarded(sellerId, fieldId, day, m = currentMonth) {
+  const exp = gestorMergeGuard.get(gestorGuardKey(sellerId, fieldId, day, m));
+  if (!exp) return false;
+  if (Date.now() > exp) { gestorMergeGuard.delete(gestorGuardKey(sellerId, fieldId, day, m)); return false; }
+  return true;
+}
+function releaseGestorMergeGuard(sellerId, fieldId, day, m = currentMonth) {
+  gestorMergeGuard.delete(gestorGuardKey(sellerId, fieldId, day, m));
+}
 function diarioPendingKey(sellerId, fieldId, day, m = currentMonth) {
   return `${m}|${sellerId}|${fieldId}|${day}`;
 }
@@ -2185,6 +2219,7 @@ async function pushGestorDailyCell(sellerId, fieldId, day, key, val, m = current
       await ref.update({ [key]: val, [key + "By"]: "gestor", [key + "At"]: Date.now() });
     }
     await fbDb.ref(`lojas/${lojaCode}`).update({ updatedAt: Date.now() });
+    releaseGestorMergeGuard(sellerId, fieldId, day, m);
     return true;
   } catch (e) {
     console.warn("pushGestorDailyCell", e);
@@ -2238,6 +2273,10 @@ function setCell(sellerId, fieldId, day, key, val, m = currentMonth) {
   }
   if (Object.keys(overlay).length) diarioPendingOverlay.set(pk, overlay);
   else diarioPendingOverlay.delete(pk);
+  if (val !== "" && val !== null && !isNaN(val)) {
+    clearDailyTombstone(sellerId, fieldId, dayKey, m);
+    armGestorMergeGuard(sellerId, fieldId, dayKey, m);
+  }
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
   scheduleGestorDailyCellPush(sellerId, fieldId, dayKey, key, val, m);
 }
@@ -2255,6 +2294,18 @@ function cellFieldAt(cell, key) {
   if (!cell) return 0;
   if (key === "plan" || key === "real") return Number(cell[key + "At"]) || 0;
   return 0;
+}
+function cellLatestAt(cell) {
+  return Math.max(cellFieldAt(cell, "plan"), cellFieldAt(cell, "real"));
+}
+function localCellWinsMerge(lc, rc) {
+  const localAt = cellLatestAt(lc);
+  if (!localAt) return false;
+  if (!rc || typeof rc !== "object") return true;
+  const remoteAt = cellLatestAt(rc);
+  if (localAt > remoteAt) return true;
+  if (localAt === remoteAt && (lc.planBy === "gestor" || lc.realBy === "gestor")) return true;
+  return false;
 }
 function mergeCellFromRemote(lc, rc) {
   if (!rc || typeof rc !== "object") return false;
@@ -2317,8 +2368,18 @@ function mergeDailyFromRemote(remoteMonths) {
         const allDays = new Set([...Object.keys(remoteDays), ...Object.keys(localDays)]);
         allDays.forEach(day => {
           const dayKey = String(day);
-          if (isDailyTombstoned(sid, fid, dayKey, m)) {
-            if (md.daily[sid]?.[fid]?.[dayKey]) {
+          md.daily[sid] = md.daily[sid] || {};
+          md.daily[sid][fid] = md.daily[sid][fid] || {};
+          const lc = md.daily[sid][fid][dayKey] || {};
+          md.daily[sid][fid][dayKey] = lc;
+          if (isGestorMergeGuarded(sid, fid, dayKey, m)) return;
+          if (isDiarioEditing()) {
+            const pk = diarioPendingKey(sid, fid, dayKey, m);
+            if (diarioPendingOverlay.has(pk)) return;
+          }
+          if ([...diarioPendingPushes.keys()].some(k => k.includes(`|${sid}|${fid}|${dayKey}|`))) return;
+          if (tombstoneBlocksMerge(sid, fid, dayKey, m, lc)) {
+            if (Object.keys(lc).length) {
               delete md.daily[sid][fid][dayKey];
               changed = true;
             }
@@ -2326,18 +2387,9 @@ function mergeDailyFromRemote(remoteMonths) {
             return;
           }
           const rc = remoteDays[day] ?? remoteDays[dayKey];
-          const hadLocal = localDays[dayKey] ?? localDays[day];
           if (rc == null) return;
           if (typeof rc !== "object") return;
-          if (isDiarioEditing()) {
-            const pk = diarioPendingKey(sid, fid, dayKey, m);
-            if (diarioPendingOverlay.has(pk)) return;
-          }
-          if ([...diarioPendingPushes.keys()].some(k => k.includes(`|${sid}|${fid}|${dayKey}|`))) return;
-          md.daily[sid] = md.daily[sid] || {};
-          md.daily[sid][fid] = md.daily[sid][fid] || {};
-          const lc = md.daily[sid][fid][dayKey] || {};
-          md.daily[sid][fid][dayKey] = lc;
+          if (localCellWinsMerge(lc, rc)) return;
           if (mergeCellFromRemote(lc, rc)) changed = true;
           if (!Object.keys(lc).length) {
             delete md.daily[sid][fid][dayKey];
@@ -2373,12 +2425,12 @@ function startLojaDataListener() {
       if (!changed) return;
       try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
       if (activeView === "diario" && isDiarioEditing()) return;
-      if (activeView === "diario") renderDiario();
+      if (activeView === "diario") patchDiarioCells();
       else renderActive();
     }, 450);
   });
 }
-const APP_BUILD = "v71"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v72"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4452,8 +4504,32 @@ function renderDiarioSellerBar(sellers) {
     };
   });
 }
+function patchDiarioCells() {
+  if (activeView !== "diario") return;
+  const table = document.getElementById("diarioTable");
+  if (!table) return;
+  table.querySelectorAll(".cellinput").forEach(inp => {
+    if (document.activeElement === inp) return;
+    const c = diarioCellForRender(diarioSeller, inp.dataset.field, +inp.dataset.day);
+    const key = inp.dataset.key;
+    const want = c[key] != null && c[key] !== "" ? String(c[key]) : "";
+    if (inp.value !== want) {
+      inp.value = want;
+      recolorDiarioCell(inp);
+    }
+  });
+  const seen = new Set();
+  table.querySelectorAll("[data-dio-field]").forEach(row => {
+    const fid = row.dataset.dioField;
+    if (!fid || seen.has(fid)) return;
+    seen.add(fid);
+    updateDiarioSummary(fid);
+    refreshProgramacaoDiarioRowHints(fid);
+  });
+  renderDiarioSellerBar(orderedSellers());
+}
 function renderDiario() {
-  if (!isDiarioEditing()) diarioPendingOverlay.clear();
+  /* overlay só é limpo no blur — não apagar aqui para não perder valor otimista */
   const sellers = orderedSellers();
   const bar = document.getElementById("diarioSellerBar");
   if (!sellers.length) {
@@ -4500,7 +4576,6 @@ function renderDiario() {
       const day = +inp.dataset.day;
       const pk = diarioPendingKey(diarioSeller, inp.dataset.field, day);
       flushGestorDailyCellPush(diarioSeller, inp.dataset.field, day, inp.dataset.key);
-      if (typeof fbPush === "function") fbPush();
       setTimeout(() => {
         if (!document.querySelector("#diarioTable .cellinput:focus")) {
           diarioPendingOverlay.delete(pk);
