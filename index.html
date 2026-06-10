@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v84";
+  var BUILD = "v85";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2179,6 +2179,38 @@ function orderedSellers() {
   const res = ord.map(id => byId[id]).filter(Boolean);
   state.sellers.forEach(s => { if (!ord.includes(s.id)) res.push(s); }); return res;
 }
+/** Vendedor com algum dado no mês: check-in/out (diário) ou lançamento do gestor ⚙. */
+function sellerHasDailyData(sellerId, m = currentMonth) {
+  const daily = monthData(m).daily?.[sellerId];
+  if (!daily) return false;
+  for (const fid of Object.keys(daily)) {
+    const days = daily[fid];
+    if (!days || typeof days !== "object") continue;
+    for (const dk of Object.keys(days)) {
+      const c = days[dk];
+      if (!c || typeof c !== "object") continue;
+      if (c.plan != null && c.plan !== "") return true;
+      if (c.real != null && c.real !== "") return true;
+      if (c.planYes === true || c.planYes === false) return true;
+      if (c.planJustif && String(c.planJustif).trim()) return true;
+    }
+  }
+  return false;
+}
+function sellerHasGestorData(sellerId, m = currentMonth) {
+  const md = monthData(m);
+  const sys = md.system?.[sellerId];
+  if (sys && Object.values(sys).some(v => v != null && v !== "")) return true;
+  const sr = md.systemRate?.[sellerId];
+  if (sr && Object.values(sr).some(v => v != null && v !== "")) return true;
+  return false;
+}
+function sellerHasMatrizData(sellerId, m = currentMonth) {
+  return sellerHasDailyData(sellerId, m) || sellerHasGestorData(sellerId, m);
+}
+function sellersWithMatrizData(sellers, m = currentMonth) {
+  return (sellers || orderedSellers()).filter(s => sellerHasMatrizData(s.id, m));
+}
 function orderedIndicators() {
   const ord = state.order.indicators; if (!ord) return state.indicators.slice();
   const byId = Object.fromEntries(state.indicators.map(s => [s.id, s]));
@@ -2480,7 +2512,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v84"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v85"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4113,11 +4145,12 @@ function renderMatriz() {
   if (!tbl) return;
   try {
   const inds = matrizIndicators(), allSellers = orderedSellers(), days = daysForPeriod();
-  const sellers = matrizApplySellerOrder(matrizFilteredSellers(allSellers), days);
+  const withData = sellersWithMatrizData(allSellers);
+  const sellers = matrizApplySellerOrder(matrizFilteredSellers(withData), days);
   const moveOn = document.body.classList.contains("moveon");
   const reorderBtn = document.getElementById("matrizReorder");
   if (reorderBtn) reorderBtn.classList.toggle("active", moveOn);
-  renderMatrizToolbar(allSellers);
+  renderMatrizToolbar(withData);
 
   const wpick = document.getElementById("matrizSemanaPick");
   if (wpick && matrizPeriodo === "semana") {
@@ -4127,6 +4160,7 @@ function renderMatriz() {
   } else if (wpick) wpick.style.display = "none";
 
   if (!allSellers.length) { tbl.innerHTML = '<tbody><tr><td class="empty">Nenhum vendedor cadastrado.<br><button class="btn" onclick="document.querySelector(\'nav.tabs [data-view=config]\').click()">Ir para Regras de Negócio</button></td></tr></tbody>'; document.getElementById("acuracidadeTable").innerHTML = ""; return; }
+  if (!withData.length) { tbl.innerHTML = '<tbody><tr><td class="empty">Nenhum vendedor com dados neste mês.<br>Quando o CV lançar check-in/out ou o gestor usar <b>⚙ Lançamento do Sistema</b>, o vendedor aparece aqui.</td></tr></tbody>'; renderAcuracidade(); return; }
   if (!sellers.length) { tbl.innerHTML = '<tbody><tr><td class="empty">Nenhum vendedor no filtro.<br>Clique em <b>Todos</b> ou selecione colaboradores na barra acima.</td></tr></tbody>'; renderAcuracidade(); return; }
   if (!inds.length) {
     tbl.innerHTML = '<tbody><tr><td class="empty">Nenhum indicador neste modo.<br>Em <b>Semana</b>, só entram KPIs com check-in/out. Use <b>Acumulado Mês</b> ou cadastre indicadores em KPIs.</td></tr></tbody>';
@@ -4307,7 +4341,8 @@ function acurEquipeRowHtml(sellerIds, fields, days) {
 function renderAcuracidade() {
   const allSellers = orderedSellers();
   const days = monthDays();
-  const sellers = matrizApplySellerOrder(matrizFilteredSellers(allSellers), days);
+  const withData = sellersWithMatrizData(allSellers);
+  const sellers = matrizApplySellerOrder(matrizFilteredSellers(withData), days);
   const allFields = acuracidadeFieldList().filter(f => !f.rate);
   const fields = acuracidadeVisibleFields(sellers, allFields);
   const hasFilter = (state.ui.matrizFilter || []).length > 0;
@@ -4323,7 +4358,9 @@ function renderAcuracidade() {
   }
   head += '<th>Acurac.</th><th>Aderência<br><span class="muted" style="font-weight:600">completo · check-in · check-out</span></th></tr></thead>';
   let body = "<tbody>";
-  if (!sellers.length) {
+  if (!withData.length) {
+    body += `<tr><td class="empty" colspan="${Math.max(fields.length, 1) + 3}">Nenhum vendedor com dados neste mês.</td></tr>`;
+  } else if (!sellers.length) {
     body += `<tr><td class="empty" colspan="${Math.max(fields.length, 1) + 3}">Nenhum vendedor no filtro.</td></tr>`;
   } else if (!fields.length) {
     body += `<tr><td class="empty" colspan="4">Nenhum indicador com lançamento do gestor (sistema ⚙) neste mês.<br>Use <b>⚙ Lançamento do Sistema</b> na matriz — a coluna aparece aqui automaticamente.</td></tr>`;

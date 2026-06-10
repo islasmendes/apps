@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v84";
+  var BUILD = "v85";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -248,6 +248,14 @@
   }
   .resumo-hero .subline { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
   .resumo-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 10px; margin-top: 10px; }
+  .resumo-chips.resumo-chips-duo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 400px) { .resumo-chips.resumo-chips-duo { grid-template-columns: 1fr; } }
+  .resumo-adh-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; text-align: center; font-size: 10px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .resumo-adh-grid .k { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: .3px; color: var(--text-faint); font-weight: 700; margin-bottom: 3px; }
+  .resumo-adh-grid .v { font-size: 13px; color: var(--text); }
+  .resumo-principal-kpi { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 11px; font-weight: 700; color: var(--text-dim); margin-top: 4px; line-height: 1.45; }
+  .resumo-principal-kpi b { color: var(--text); font-weight: 800; }
+  .resumo-principal-kpi .sep { color: var(--text-faint); font-weight: 500; }
   .resumo-chip-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; align-items: stretch; }
   .resumo-chip {
     font-size: 9px; font-weight: 800; padding: 5px 6px; border-radius: 99px; width: 100%; text-align: center;
@@ -509,7 +517,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v84"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v85"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -937,10 +945,18 @@ function mergeConsultorLojaFromRemote(remote) {
     if (remote[k] !== undefined) lojaData[k] = remote[k];
   });
   const month = todayISO();
-  if (remote.months?.[month]?.daily?.[seller?.id]) {
-    mergeSellerDailyFromRemote(remote.months[month].daily[seller.id], seller.id, month);
+  const rm = remote.months?.[month];
+  if (rm) {
+    if (!lojaData.months) lojaData.months = {};
+    if (!lojaData.months[month]) lojaData.months[month] = { daily: {} };
+    const lm = lojaData.months[month];
+    ["system", "systemRate", "systemAt", "systemCoSnap", "meta", "sched"].forEach(k => {
+      if (rm[k] !== undefined) lm[k] = rm[k];
+    });
+    if (rm.daily?.[seller?.id]) mergeSellerDailyFromRemote(rm.daily[seller.id], seller.id, month);
   }
   normalizeLojaIndicators();
+  if (document.getElementById("resumoOverlay")?.classList.contains("show")) renderResumo();
 }
 function patchConsultorFieldInputs() {
   if (!seller) return;
@@ -1859,6 +1875,38 @@ function orderedSellers() {
   sellers.forEach(s => { if (!ord.includes(s.id)) res.push(s); });
   return res;
 }
+function matrizDisplayName(name) {
+  const s = String(name || "").trim();
+  const i = s.search(/\s+-\s+/);
+  return i >= 0 ? s.slice(0, i).trim() : s;
+}
+function fieldHasMonthData(sellerId, fieldId, m = todayISO()) {
+  const cfg = cfgById(fieldId);
+  const days = monthDays(m);
+  if (getSystem(sellerId, fieldId, m) != null) return true;
+  for (const d of days) {
+    const c = getCell(sellerId, fieldId, d, m);
+    if (hasCellValue(c, "real")) return true;
+    if (cfg && hasPlanValue(c, cfg)) return true;
+  }
+  return false;
+}
+function principalHasResumoData(ind, sellerId, m = todayISO()) {
+  if (!ind || ind.pctOnly) return false;
+  if (fieldHasMonthData(sellerId, ind.id, m)) return true;
+  return (ind.subs || []).some(s => fieldHasMonthData(sellerId, s.id, m));
+}
+function resumoPrincipalIndicators() {
+  const inds = orderedIndicators().filter(i => !i.pctOnly);
+  const patterns = [/lead/i, /agend/i, /compar/i, /fich|financ/i, /troca/i, /vend/i];
+  const picked = [];
+  patterns.forEach(re => {
+    const hit = inds.find(i => !picked.includes(i) && (re.test(i.name || "") || re.test(i.abbr || "")));
+    if (hit) picked.push(hit);
+  });
+  inds.forEach(i => { if (!picked.includes(i)) picked.push(i); });
+  return picked;
+}
 function findVendaIndicator() {
   const inds = lojaData?.indicators || [];
   return inds.find(i => i.role === "venda") || inds.find(i => /venda/i.test(i.name || ""));
@@ -1937,30 +1985,40 @@ function sellerScaleClosedDays(sellerId, m = todayISO()) {
   }
   return closed;
 }
-/** Aderência consultor: % de dias encerrados na escala com check-in e check-out completos. */
+/** Aderência consultor: dias ok na escala do mês (completo · check-in · check-out). */
 function consultantDisciplineStats(sellerId, m = todayISO()) {
   const n = daysInMonth(m);
   const isCurrent = todayISO() === m;
   const today = isCurrent ? todayDay() : n + 1;
   const fields = fieldList();
-  let scheduled = 0, closed = 0, complete = 0;
-  if (!fields.length) return { pct: null, complete: 0, closed: sellerScaleClosedDays(sellerId, m), scheduled: 0 };
+  let scheduled = 0, closed = 0, complete = 0, checkinDays = 0, checkoutDays = 0;
+  if (!fields.length) return { pct: null, complete: 0, closed: sellerScaleClosedDays(sellerId, m), scheduled: 0, checkinDays: 0, checkoutDays: 0 };
   for (let d = 1; d <= n; d++) {
     if (!sellerWorks(sellerId, d, m)) continue;
     scheduled++;
-    if (isCurrent && d >= today) continue;
-    closed++;
+    let needsIn = false, needsOut = false, inOk = true, outOk = true;
     const gaps = [];
     fields.forEach(({ cfg }) => {
       const needs = consultorFieldNeeds(sellerId, cfg, d, m);
       if (!needs.checkin && !needs.checkout) return;
       const c = getCell(sellerId, cfg.id, d, m);
-      if (needs.checkin && !hasPlanValue(c, cfg)) gaps.push(1);
-      if (needs.checkout && !hasCellValue(c, "real")) gaps.push(1);
+      if (needs.checkin) {
+        needsIn = true;
+        if (!hasPlanValue(c, cfg)) { gaps.push(1); inOk = false; }
+      }
+      if (needs.checkout) {
+        needsOut = true;
+        if (!hasCellValue(c, "real")) { gaps.push(1); outOk = false; }
+      }
     });
-    if (!gaps.length) complete++;
+    const dayComplete = !gaps.length;
+    if (isCurrent && d >= today) continue;
+    closed++;
+    if (dayComplete) complete++;
+    if (needsIn && inOk) checkinDays++;
+    if (needsOut && outOk) checkoutDays++;
   }
-  return { pct: closed ? complete / closed : null, complete, closed, scheduled };
+  return { pct: scheduled ? complete / scheduled : null, complete, closed, scheduled, checkinDays, checkoutDays };
 }
 function formatDayListPt(days) {
   if (!days.length) return "";
@@ -1995,23 +2053,19 @@ function consultorEscalaSummary(sellerId, m = todayISO()) {
 function sellerMetrics(sellerId, m = todayISO()) {
   const days = monthDays(m);
   let projSum = 0, projN = 0, accSum = 0, accN = 0;
-  orderedIndicators().forEach(ind => {
-    if (ind.pctOnly) return;
+  resumoPrincipalIndicators().forEach(ind => {
+    const hasCo = ind.checkout || (ind.subs || []).some(s => s.checkout);
+    if (!hasCo) return;
     const meta = sellerMetaFor(ind, sellerId, m);
-    const real = matrizFieldValue(sellerId, ind.id, days, "mes", m);
+    const real = checkoutSum(sellerId, ind.id, days, m);
     if (meta && real != null) {
       const proj = sellerProjFromReal(sellerId, ind.id, real, m);
       if (proj != null) { projSum += proj / meta; projN++; }
     }
-    if (ind.checkout) {
+    if (getSystem(sellerId, ind.id, m) != null) {
       const acc = fieldAccuracy(sellerId, ind.id, days, m);
       if (acc != null) { accSum += acc; accN++; }
     }
-    (ind.subs || []).forEach(sub => {
-      if (!sub.checkout) return;
-      const acc = fieldAccuracy(sellerId, sub.id, days, m);
-      if (acc != null) { accSum += acc; accN++; }
-    });
   });
   return {
     ritmo: projN ? projSum / projN : null,
@@ -2188,87 +2242,104 @@ function bindResumoToggles() {
     };
   });
 }
+function resumoPrincipalKpiLine(ind, sid, m) {
+  const days = monthDays(m);
+  const rel = checkoutSum(sid, ind.id, days, m);
+  const sys = getSystem(sid, ind.id, m);
+  const acc = sys != null ? fieldAccuracy(sid, ind.id, days, m) : null;
+  const meta = sellerMetaFor(ind, sid, m);
+  const proj = rel != null ? sellerProjFromReal(sid, ind.id, rel, m) : null;
+  const lb = cfgLowerBetter(ind);
+  const perf = meta && proj != null ? matrizProjPerfRatio(proj, meta, lb) : null;
+  const accColor = acc != null ? heatMatrizText(acc) : heatMatrizText(perf);
+  if (sys != null) {
+    return `<div class="resumo-principal-kpi">` +
+      `<span>CV <b>${rel != null ? fmt(rel) : "—"}</b></span><span class="sep">·</span>` +
+      `<span>Gestor <b>${fmt(sys)}</b></span><span class="sep">·</span>` +
+      `<span style="color:${accColor}">Acur. ${acc != null ? pctTxt(acc) : "—"}</span></div>`;
+  }
+  if (rel != null) {
+    let html = `<div class="resumo-principal-kpi"><span>Check-out <b>${fmt(rel)}</b></span>`;
+    if (meta) html += `<span class="sep">·</span><span>Meta <b>${lb ? fmtPctFine(meta) : fmt(meta)}</b></span>`;
+    if (perf != null) html += `<span class="sep">·</span><span style="color:${heatMatrizText(perf)}">${pctTxt(perf)}</span>`;
+    return html + `</div>`;
+  }
+  return `<div class="resumo-principal-kpi muted">Sem lançamento neste indicador.</div>`;
+}
+function resumoPrincipalCard(ind, sid, m) {
+  const color = ind.color || "var(--accent)";
+  const subs = (ind.subs || []).filter(s => s.checkin || s.checkout);
+  const rates = ind.rates || [];
+  const hasExpandable = subs.length > 0 || rates.length > 0;
+  const isOpen = !!resumoExpanded[ind.id];
+  const name = matrizDisplayName(ind.name);
+  const chev = hasExpandable ? `<span class="resumo-chev">${isOpen ? "▾" : "▸"}</span>` : "";
+  const st = fieldProjStats(ind, sid, m);
+  const heatColor = resumoHeatColor(st.proj, st.meta, st.perfRatio, st.lb, false);
+  const pctDisp = st.perfRatio != null ? pctTxt(st.perfRatio) : (st.real != null ? fmt(st.real) : "—");
+  let expandHtml = "";
+  if (hasExpandable) {
+    expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
+    subs.forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false, parentInd: ind }, m); });
+    rates.forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
+    expandHtml += `</div>`;
+  }
+  return `<div class="resumo-card" style="--rc:${color}">
+    <div class="resumo-row resumo-ind-main${hasExpandable ? " toggle" : ""}${isOpen ? " open" : ""}" data-ind-toggle="${ind.id}" style="--rc:${color};--bc:${heatColor}">
+      <div class="resumo-row-top"><b>${name}${chev}</b><span class="pct" style="color:${heatColor}">${pctDisp}</span></div>
+      ${resumoPrincipalKpiLine(ind, sid, m)}
+      <div class="resumo-bar"><i style="width:${resumoBarWidth(st.proj, st.meta, st.perfRatio, st.lb, false)}%"></i></div>
+    </div>${expandHtml}</div>`;
+}
 function renderResumo() {
   if (!seller || !lojaData) return;
   const m = todayISO(), sid = seller.id;
   const metrics = sellerMetrics(sid, m);
   const discipline = consultantDisciplineStats(sid, m);
-  const venda = findVendaIndicator();
-  const vendaSt = venda ? fieldProjStats(venda, sid, m) : null;
-  const vendaCallout = venda ? resumoCallout(venda, sid, m, false) : { html: '<div class="resumo-callout muted">Indicador Vendas não configurado.</div>', tone: "muted" };
-  const vendaRank = venda ? teamRankByProjPct(venda.id, venda, sid, m) : { pos: 0, total: teamSellerTotal(), note: null };
+  const monthLbl = new Date(m + "-02").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const den = discipline.scheduled || 0;
+  const adhColor = heatMatrizText(discipline.pct);
+  const accColor = heatMatrizText(metrics.acc);
   const cards = [];
-  orderedIndicators().forEach(ind => {
+  resumoPrincipalIndicators().forEach(ind => {
+    if (!principalHasResumoData(ind, sid, m)) return;
+    cards.push(resumoPrincipalCard(ind, sid, m));
+  });
+  orderedIndicators().filter(i => i.pctOnly).forEach(ind => {
+    if (!(ind.rates || []).some(r => rateValueForSeller(r, sid, m) != null || getSystemRate(sid, r.id, m) != null)) return;
     const color = ind.color || "var(--accent)";
     const rates = ind.rates || [];
-    const subs = (ind.subs || []).filter(s => s.checkout || s.checkin);
-    const hasExpandable = subs.length > 0 || rates.length > 0;
     const isOpen = !!resumoExpanded[ind.id];
-    if (ind.pctOnly) {
-      let expandHtml = "";
-      if (rates.length) {
-        expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
-        rates.forEach(rate => {
-          const target = matrizRateTarget(rate, m);
-          const val = rateValueForSeller(rate, sid, m);
-          const lb = rateLowerBetter(rate, ind);
-          expandHtml += resumoRateRow(rate, ind, color, sid, m, true);
-        });
-        expandHtml += "</div>";
-      }
-      const body = resumoPctOnlyHead(ind, color, isOpen) + expandHtml;
-      if (body) cards.push(`<div class="resumo-card" style="--rc:${color}">${body}</div>`);
-      return;
-    }
-    let mainHtml = "";
     let expandHtml = "";
-    if (ind.checkout || ind.checkin) {
-      mainHtml = resumoFieldRow(ind, color, sid, {
-        sub: false, showRank: true, main: true, toggle: hasExpandable, open: isOpen, indId: ind.id
-      }, m);
-    }
-    if (hasExpandable) {
+    if (rates.length) {
       expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
-      subs.forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false, parentInd: ind }, m); });
       rates.forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
-      expandHtml += "</div>";
+      expandHtml += `</div>`;
     }
-    const body = mainHtml + expandHtml;
-    if (body) cards.push(`<div class="resumo-card" style="--rc:${color}">${body}</div>`);
+    cards.push(`<div class="resumo-card" style="--rc:${color}">${resumoPctOnlyHead(ind, color, isOpen)}${expandHtml}</div>`);
   });
-  const monthLbl = new Date(m + "-02").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  const vendaPct = vendaSt?.perfRatio;
-  const vendaHeat = vendaSt ? resumoHeatColor(vendaSt.proj, vendaSt.meta, vendaSt.perfRatio, vendaSt.lb, false) : "var(--text-faint)";
-  const vendaPulse = vendaCallout.tone === "bad" ? " pulse-bad" : "";
-  const vendaRankTxt = vendaRank.pos > 0 && vendaRank.total > 1 ? `${vendaRank.pos}º de ${vendaRank.total} em vendas` : "—";
   document.getElementById("resumoRoot").innerHTML = `
     <div class="resumo-hero">
-      <div class="resumo-hero-head">
-        <div class="resumo-hero-left">
-          <div class="hero-label">Foco Principal - VENDAS!</div>
-          <div class="subline" style="margin-top:0;">Projeção · ${monthLbl} · dados da matriz</div>
-        </div>
-        <div class="big resumo-hero-pct${vendaPulse}" style="color:${vendaHeat}">${pctTxt(vendaPct)}</div>
-      </div>
-      ${vendaCallout.html}
-      <div class="resumo-chips">
+      <div class="subline" style="margin:0 0 10px;">${monthLbl} · seu desempenho no mês</div>
+      <div class="resumo-chips resumo-chips-duo">
         <div class="resumo-chip-item">
-          <span class="resumo-chip" style="color:${heatMatrizText(discipline.pct)}">Aderência ${pctTxt(discipline.pct)}${discipline.closed ? " · " + discipline.complete + "/" + discipline.closed + " dias" : ""}</span>
-          <span class="resumo-chip-leg">Dias da escala com check-in e check-out completos.</span>
+          <span class="resumo-chip" style="color:${adhColor}">Aderência ${discipline.pct != null ? pctTxt(discipline.pct) : "—"}</span>
+          <span class="resumo-chip-leg">Dias ok na sua escala (completo · check-in · check-out).</span>
+          <div class="resumo-adh-grid">
+            <div><span class="k">Completo</span><span class="v">${den ? discipline.complete + "/" + den : "—"}</span></div>
+            <div><span class="k">Check-in</span><span class="v">${den ? discipline.checkinDays + "/" + den : "—"}</span></div>
+            <div><span class="k">Check-out</span><span class="v">${den ? discipline.checkoutDays + "/" + den : "—"}</span></div>
+          </div>
         </div>
         <div class="resumo-chip-item">
-          <span class="resumo-chip" style="color:${heatMatrizText(metrics.acc)}">Acurácia ${pctTxt(metrics.acc)}</span>
-          <span class="resumo-chip-leg">Seu check-out batendo com o que o gestor lançou.</span>
-        </div>
-        <div class="resumo-chip-item">
-          <span class="resumo-chip" style="color:var(--accent-2)">${vendaRankTxt}</span>
-          <span class="resumo-chip-leg">Score % (↓ no valor, maior % melhor) · empate: score, aderência, acurácia, projeção.</span>
+          <span class="resumo-chip" style="color:${accColor}">Acuracidade ${metrics.acc != null ? pctTxt(metrics.acc) : "—"}</span>
+          <span class="resumo-chip-leg">Seu check-out acumulado batendo com o que o gestor lançou (indicadores principais).</span>
         </div>
       </div>
       <div class="resumo-escala-line">${escText(consultorEscalaSummary(sid, m))}</div>
     </div>
-    <div class="resumo-sec">Indicadores · toque para ver subs e taxas</div>
-    ${cards.length ? cards.join("") : '<div class="empty">Sem indicadores configurados.</div>'}`;
+    <div class="resumo-sec">Indicadores principais · toque para subs e taxas</div>
+    ${cards.length ? cards.join("") : '<div class="empty">Nenhum indicador com dados ainda.<br>Lance check-in/out ou aguarde o gestor lançar o sistema.</div>'}`;
   bindResumoToggles();
 }
 function openResumo() {
@@ -2779,6 +2850,7 @@ async function saveField(inp, opts) {
       armConsultorMergeGuard(seller.id, fieldId, day, month);
       if (opts.confirm) toast("Campo limpo");
       scheduleRenderFields();
+      if (document.getElementById("resumoOverlay")?.classList.contains("show")) renderResumo();
       return;
     }
     const num = Number(val);
@@ -2823,6 +2895,7 @@ async function saveField(inp, opts) {
       refreshDioSaveBtn(inp.closest(".dio-box"));
       updateProgress();
     }
+    if (document.getElementById("resumoOverlay")?.classList.contains("show")) renderResumo();
   } catch (e) {
     console.warn("saveField", e);
     enqueueOfflinePush({ sellerId: seller.id, fieldId, day: String(day), key, val: val === "" ? "" : Number(val), month, confirm: !!opts.confirm });
