@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v72";
+  var BUILD = "v73";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -509,7 +509,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v72"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v73"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -1381,19 +1381,68 @@ function nameHasHoje(name) {
 function cfgHasDiarioLoqa(cfg) {
   return !!(cfg && (cfg.checkin || cfg.checkout));
 }
-/** Sub “de hoje” que alimenta o indicador principal (ex.: Agendamentos ← Agendamentos p/ HOJE). */
+const KPI_STOP_WORDS = new Set(["de", "do", "da", "dos", "das", "p", "para", "o", "a", "os", "as", "e", "em", "no", "na", "nos", "nas", "hoje"]);
+function kpiNameTokens(name) {
+  return normName(name).replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter(t => t.length > 1 && !KPI_STOP_WORDS.has(t));
+}
+function kpiStem(tok) {
+  if (/^agend/.test(tok)) return "agend";
+  if (/^compar/.test(tok)) return "compar";
+  if (/^vend/.test(tok)) return "vend";
+  if (/^fich/.test(tok) || /^fi$/.test(tok)) return "fich";
+  if (/^financ/.test(tok)) return "fich";
+  if (/^troca/.test(tok)) return "troca";
+  if (/^efetiv/.test(tok)) return "efetiv";
+  if (/^carro/.test(tok)) return "carro";
+  return tok;
+}
+function parentCorrelStems(parentInd) {
+  const stems = new Set();
+  kpiNameTokens(parentInd.name).forEach(t => stems.add(kpiStem(t)));
+  const pn = normName(parentInd.name);
+  if (/agendament/.test(pn)) stems.add("agend");
+  if (/compareciment/.test(pn)) stems.add("compar");
+  if (/ficha|f&i|financ|\bfi\b/.test(pn)) stems.add("fich");
+  if (/troca/.test(pn)) { stems.add("troca"); stems.add("efetiv"); }
+  if (/venda/.test(pn)) stems.add("vend");
+  if (parentInd.role === "fichas") stems.add("fich");
+  if (parentInd.role === "venda") stems.add("vend");
+  return stems;
+}
+function subCorrelacaoScore(parentInd, sub) {
+  const pStems = parentCorrelStems(parentInd);
+  const sStems = new Set(kpiNameTokens(sub.name).map(kpiStem));
+  let score = 0;
+  pStems.forEach(ps => {
+    if (sStems.has(ps)) score += 18;
+    sStems.forEach(ss => {
+      if (ss !== ps && (ss.includes(ps) || ps.includes(ss))) score += 10;
+    });
+  });
+  const pn = normName(parentInd.name);
+  const sn = normName(sub.name);
+  if (pn && sn && (sn.includes(pn) || pn.includes(sn))) score += 12;
+  return score;
+}
+/** Sub “de hoje” correlato ao principal (ex.: Fichas F&I ← Fichas F&I de HOJE). */
 function parentRollupHojeSub(parentInd) {
   if (!parentInd || parentInd.pctOnly) return null;
-  const subs = (parentInd.subs || []).filter(cfgHasDiarioLoqa);
-  if (!subs.length) return null;
-  const pn = normName(parentInd.name);
-  const pick = pred => subs.find(s => pred(normName(s.name)));
-  if (/agendament/.test(pn)) return pick(n => /agendament/.test(n) && nameHasHoje(n));
-  if (/compareciment/.test(pn)) return pick(n => /compareciment/.test(n) && nameHasHoje(n));
-  if (/ficha/.test(pn) || /f&i/.test(pn) || /\bfi\b/.test(pn)) return pick(n => /ficha/.test(n) && /financ/.test(n) && nameHasHoje(n));
-  if (/troca/.test(pn)) return pick(n => /troca/.test(n) && nameHasHoje(n));
-  if (/venda/.test(pn)) return pick(n => /venda/.test(n) && nameHasHoje(n));
-  return pick(n => nameHasHoje(n));
+  const hojeSubs = (parentInd.subs || []).filter(cfgHasDiarioLoqa).filter(s => nameHasHoje(s.name));
+  if (!hojeSubs.length) return null;
+  if (hojeSubs.length === 1) return hojeSubs[0];
+  let best = null, bestScore = 0;
+  hojeSubs.forEach(s => {
+    const sc = subCorrelacaoScore(parentInd, s);
+    if (sc > bestScore) { bestScore = sc; best = s; }
+  });
+  if (best && bestScore >= 10) return best;
+  const pStems = parentCorrelStems(parentInd);
+  const stemHit = hojeSubs.find(s => {
+    const sStems = new Set(kpiNameTokens(s.name).map(kpiStem));
+    for (const p of pStems) if (sStems.has(p)) return true;
+    return false;
+  });
+  return stemHit || hojeSubs[0];
 }
 function mainIndicatorById(fieldId) {
   return orderedIndicators().find(i => i.id === fieldId) || null;
