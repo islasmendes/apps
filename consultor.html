@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v91";
+  var BUILD = "v92";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -569,7 +569,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v91"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v92"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -1005,7 +1005,7 @@ function mergeConsultorLojaFromRemote(remote) {
     if (!lojaData.months) lojaData.months = {};
     if (!lojaData.months[month]) lojaData.months[month] = { daily: {} };
     const lm = lojaData.months[month];
-    ["system", "systemRate", "systemAt", "systemCoSnap", "meta", "sched"].forEach(k => {
+    ["system", "systemRate", "systemAt", "systemCoSnap", "meta", "metaLoja", "sched"].forEach(k => {
       if (rm[k] !== undefined) lm[k] = rm[k];
     });
     if (rm.daily?.[seller?.id]) mergeSellerDailyFromRemote(rm.daily[seller.id], seller.id, month);
@@ -1834,7 +1834,13 @@ function sellerMetaFor(cfg, sellerId, m = todayISO()) {
   const mm = metaMonthFor(cfg);
   if (mm > 0) return mm;
   const cap = sellerMetaCapacity(cfg, sellerId, m);
-  return cap > 0 ? cap : null;
+  if (cap > 0) return cap;
+  const ml = getMetaLoja(cfg.id, m);
+  if (ml != null && ml > 0) {
+    const n = Math.max(1, (lojaData?.sellers || []).length);
+    return ml / n;
+  }
+  return null;
 }
 function rateIsFunnelConversion(rate) {
   return !!(rate && !rate.manual && !rate.absolute && /\s+p\/\s+/i.test(String(rate.name || "")));
