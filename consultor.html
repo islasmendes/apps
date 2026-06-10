@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v66";
+  var BUILD = "v67";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -319,6 +319,7 @@
   }
   .ind-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 12px; padding-left: 6px; }
   .ind-head b { font-size: 15px; color: var(--ic); }
+  .ind-cv-hint { font-size: 11px; color: var(--text-dim); font-weight: 500; line-height: 1.4; margin-top: 3px; opacity: .9; }
   .ind-meta { font-size: 9px; color: var(--text-faint); font-weight: 600; line-height: 1.45; opacity: .55; }
   .ind-meta .meta-sep { opacity: .45; font-weight: 800; }
   .dio-grid { display: grid; gap: 10px; }
@@ -508,7 +509,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v66"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v67"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -1276,6 +1277,11 @@ function consultorSundaySubActive(sellerId, day, m = todayISO()) {
   if (!sunDay || day >= sunDay) return false;
   return true;
 }
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function consultorCvHint(cfg) {
+  const t = String(cfg?.cvHint || "").trim();
+  return t ? `<div class="ind-cv-hint">${escapeHtml(t)}</div>` : "";
+}
 function consultorMetaSummary(cfg, sellerId, m = todayISO()) {
   const parts = [];
   const metaDay = Number(cfg.metaDay) || 0;
@@ -1447,7 +1453,7 @@ function rateValueForSeller(rate, sellerId, m = todayISO()) {
 function fieldAccuracy(sellerId, fieldId, days, m = todayISO()) {
   const sys = getSystem(sellerId, fieldId, m);
   if (sys == null) return null;
-  const r = accum(sellerId, fieldId, "real", days, m) ?? 0;
+  const r = consultorTrackingReal(sellerId, fieldId, days, m) ?? 0;
   if (sys > 0) return Math.max(0, 1 - Math.abs(r - sys) / sys);
   return r === 0 ? 1 : 0;
 }
@@ -2297,6 +2303,7 @@ function renderFieldsNow() {
   root.innerHTML = fields.map(({ cfg, color, sub }) => {
     const c = getCell(seller.id, cfg.id, day, month);
     const needs = consultorFieldNeeds(seller.id, cfg, day, month);
+    const hintHtml = consultorCvHint(cfg);
     const metaHtml = consultorMetaSummary(cfg, seller.id, month);
     const planLocked = cellLockedForConsultor(c, "plan", day, month, cfg);
     const realLocked = cellLockedForConsultor(c, "real", day, month, cfg);
@@ -2305,7 +2312,7 @@ function renderFieldsNow() {
     const showCheckin = needs.checkin;
     const showCheckout = needs.checkout && consultorCheckoutVisible();
     if (!showCheckin && !showCheckout) return "";
-    let html = `<div class="ind-card" style="--ic:${color}"><div class="ind-head"><div><b>${sub ? "↳ " : ""}${cfg.name}</b>${metaHtml ? `<div class="ind-meta">${metaHtml}</div>` : ""}</div></div><div class="dio-grid">`;
+    let html = `<div class="ind-card" style="--ic:${color}"><div class="ind-head"><div><b>${sub ? "↳ " : ""}${cfg.name}</b>${hintHtml}${metaHtml ? `<div class="ind-meta">${metaHtml}</div>` : ""}</div></div><div class="dio-grid">`;
     if (showCheckin) {
       if (openQuestionCheckin(cfg, needs)) {
         html += buildOpenQuestionBox(cfg, c, "in", day, month);

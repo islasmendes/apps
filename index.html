@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v66";
+  var BUILD = "v67";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -640,6 +640,15 @@
   .meta-loja-row.sub { padding-left: 18px; }
   .meta-goals-block { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
   .meta-goals-block .field input { min-width: 56px; }
+  .cv-hint-row, .sub-cv-hint-row, .rate-cv-hint-row { width: 100%; margin: 4px 0 2px 32px; padding-bottom: 4px; border-bottom: 1px solid var(--border-soft); }
+  .sub-cv-hint-row { margin-left: 28px; margin-top: -2px; margin-bottom: 6px; }
+  .rate-cv-hint-row { margin-left: 28px; margin-top: -2px; margin-bottom: 6px; }
+  .cv-hint-row input, .sub-cv-hint-row input, .rate-cv-hint-row input {
+    width: 100%; border: none; background: transparent; font-size: 11px; color: var(--text-dim);
+    padding: 3px 0; outline: none;
+  }
+  .cv-hint-row input::placeholder, .sub-cv-hint-row input::placeholder, .rate-cv-hint-row input::placeholder { color: var(--text-faint); opacity: .75; }
+  .cv-hint-row input:focus, .sub-cv-hint-row input:focus, .rate-cv-hint-row input:focus { color: var(--text); }
   .meta-adherence { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-soft); font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
   .meta-adh-line.meta-adh-bad { color: var(--danger); }
   @media (max-width: 640px) { main { padding: 12px; } .titles .t1 { font-size: 13px; } }
@@ -1491,6 +1500,7 @@ function applyOperationalConfig(st, tpl, opts) {
       metaSat: local?.metaSat ?? 0,
       metaSun: local?.metaSun ?? 0,
       metaMonth: local?.metaMonth ?? 0,
+      cvHint: local?.cvHint || "",
       subs: [],
       rates: []
     };
@@ -1511,7 +1521,8 @@ function applyOperationalConfig(st, tpl, opts) {
         metaDay: ls?.metaDay ?? 0,
         metaSat: ls?.metaSat ?? 0,
         metaSun: ls?.metaSun ?? 0,
-        metaMonth: ls?.metaMonth ?? 0
+        metaMonth: ls?.metaMonth ?? 0,
+        cvHint: ls?.cvHint || ""
       };
     });
     const localBlock = localBlockForFieldName(st, tInd.name);
@@ -1531,7 +1542,8 @@ function applyOperationalConfig(st, tpl, opts) {
         metaDay: ls.metaDay ?? 0,
         metaSat: ls.metaSat ?? 0,
         metaSun: ls.metaSun ?? 0,
-        metaMonth: ls.metaMonth ?? 0
+        metaMonth: ls.metaMonth ?? 0,
+        cvHint: ls.cvHint || ""
       });
     });
     const localRateByName = Object.fromEntries((local?.rates || []).map(r => [r.name, r]));
@@ -1547,7 +1559,8 @@ function applyOperationalConfig(st, tpl, opts) {
         lowerBetter: tr.lowerBetter,
         absolute: lr?.absolute ?? !!tr.absolute,
         showInMatriz: showInMatrizFromLocal(lr),
-        target: lr?.target ?? 0
+        target: lr?.target ?? 0,
+        cvHint: lr?.cvHint || ""
       };
     });
     return ind;
@@ -2242,7 +2255,7 @@ function startLojaDataListener() {
     }, 450);
   });
 }
-const APP_BUILD = "v66"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v67"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -2272,7 +2285,14 @@ function saveEscalaMatricula() {
   if (!matriculaUnique(m, s.id)) { toast("Matrícula já usada", true); inp.value = s.matricula || ""; return; }
   s.matricula = m; save();
 }
-function accum(sellerId, fieldId, key, days, m = currentMonth) { let sum = 0, has = false; days.forEach(d => { const c = getCell(sellerId, fieldId, d, m); if (c[key] != null) { sum += Number(c[key]); has = true; } }); return has ? sum : null; }
+function accum(sellerId, fieldId, key, days, m = currentMonth) {
+  let sum = 0, has = false;
+  days.forEach(d => {
+    const c = getCell(sellerId, fieldId, d, m);
+    if (c[key] != null && c[key] !== "") { sum += Number(c[key]); has = true; }
+  });
+  return has ? sum : null;
+}
 function monthDays(m = currentMonth) { return Array.from({ length: daysInMonth(m) }, (_, i) => i + 1); }
 
 /* Metas */
@@ -2399,6 +2419,37 @@ function arvMetaForTotal(localInd, lojas, days, periodo, subTpl) {
 
 /* Sistema */
 function getSystem(sellerId, fieldId, m = currentMonth) { const md = monthData(m); return (md.system[sellerId] && md.system[sellerId][fieldId] != null) ? Number(md.system[sellerId][fieldId]) : null; }
+function getSystemAt(sellerId, fieldId, m = currentMonth) {
+  const v = monthData(m).systemAt?.[sellerId]?.[fieldId];
+  return v != null ? Number(v) : null;
+}
+function systemInputDay(sellerId, fieldId, m = currentMonth) {
+  const at = getSystemAt(sellerId, fieldId, m);
+  if (at == null) return null;
+  const d = new Date(at);
+  const { y, mo } = parseMonth(m);
+  if (d.getFullYear() !== y || d.getMonth() + 1 !== mo) return 1;
+  return d.getDate();
+}
+function accumSinceDay(sellerId, fieldId, key, fromDay, m = currentMonth) {
+  if (fromDay == null || fromDay < 1) return null;
+  const end = todayISO() === m ? new Date().getDate() : daysInMonth(m);
+  let sum = 0, has = false;
+  for (let d = fromDay; d <= end; d++) {
+    const c = getCell(sellerId, fieldId, d, m);
+    if (c[key] != null && c[key] !== "") { sum += Number(c[key]); has = true; }
+  }
+  return has ? sum : 0;
+}
+/** Real de acompanhamento: relato até gestor lançar; depois sistema + check-outs do dia do lançamento em diante. */
+function trackingReal(sellerId, fieldId, days, m = currentMonth) {
+  const relato = accum(sellerId, fieldId, "real", days, m);
+  const sistema = getSystem(sellerId, fieldId, m);
+  if (sistema == null) return relato;
+  const fromDay = systemInputDay(sellerId, fieldId, m);
+  if (fromDay == null) return sistema;
+  return sistema + (accumSinceDay(sellerId, fieldId, "real", fromDay, m) ?? 0);
+}
 function setSystem(sellerId, fieldId, val, m = currentMonth) {
   const md = monthData(m);
   md.system[sellerId] = md.system[sellerId] || {};
@@ -3074,9 +3125,9 @@ function visibleRates(ind) {
   if (!indShowInSemana(ind)) return [];
   return rates.filter(r => !r.manual);
 }
-/** Real na matriz (mês): gestor (sistema) prevalece; senão soma check-out. Usado em Real, % e Proj. */
+/** Real na matriz (mês): sistema + check-outs desde o lançamento; sem sistema, soma check-out. Usado em Real, % e Proj. */
 function matrizFieldValue(sellerId, fieldId, days, periodo, m = currentMonth) {
-  if (periodo === "mes") { const sys = getSystem(sellerId, fieldId, m); if (sys != null) return sys; }
+  if (periodo === "mes") return trackingReal(sellerId, fieldId, days, m);
   return accum(sellerId, fieldId, "real", days, m);
 }
 function matrizRealForSellers(ids, fieldId, days, periodo) {
@@ -3770,7 +3821,7 @@ function acurFieldActive(sellerId, f, days, m = currentMonth) {
   const sys = getSystem(sellerId, f.id, m);
   if (sys == null) return false;
   if (Number(sys) !== 0) return true;
-  const rel = accum(sellerId, f.id, "real", days, m);
+  const rel = trackingReal(sellerId, f.id, days, m);
   return rel != null && rel !== 0;
 }
 function acuracidadeVisibleFields(sellers, allFields, days) {
@@ -3802,7 +3853,7 @@ function acurRelatoCellHtml(sellerId, f, days) {
       (rel != null ? "\nRelato na matriz (" + fmt(rel) + ") vem só do check-out — clique no nome na matriz para lançar o sistema." : "\nClique no nome na matriz para lançar o sistema.");
     return `<td class="relato muted"${matrizTipData(tip, f.color)}>—</td>`;
   }
-  const rel = accum(sellerId, f.id, "real", days);
+  const rel = trackingReal(sellerId, f.id, days);
   const acc = fieldAccuracy(sellerId, f.id, days);
   const accColor = acc != null ? heatText(acc) : "var(--text-faint)";
   const relDisp = rel != null ? fmt(rel) : "—";
@@ -3827,7 +3878,7 @@ function renderAcurLegend(targetId) {
 function fieldAccuracy(sellerId, fieldId, days) {
   const sys = getSystem(sellerId, fieldId);
   if (sys == null) return null;
-  const r = accum(sellerId, fieldId, "real", days) ?? 0;
+  const r = trackingReal(sellerId, fieldId, days) ?? 0;
   if (sys > 0) return Math.max(0, 1 - Math.abs(r - sys) / sys);
   return r === 0 ? 1 : 0;
 }
@@ -3950,7 +4001,7 @@ function arvAcurTotalsForSellers(sellerIds, f, days) {
     if (!acurFieldActive(sid, f, days)) return;
     const sys = getSystem(sid, fieldId);
     sysSum += sys;
-    relSum += accum(sid, fieldId, "real", days) ?? 0;
+    relSum += trackingReal(sid, fieldId, days) ?? 0;
     n++;
   });
   if (!n) return { sys: null, rel: null, acc: null };
@@ -3975,7 +4026,7 @@ function arvTotalAcurCellHtml(lojas, fTpl, days) {
       arvTeamSellerIds(L).forEach(sid => {
         if (!acurFieldActive(sid, f, days)) return;
         sysSum += getSystem(sid, f.id);
-        relSum += accum(sid, f.id, "real", days) ?? 0;
+        relSum += trackingReal(sid, f.id, days) ?? 0;
         n++;
       });
     });
@@ -4534,7 +4585,7 @@ function renderAuditoriaModal(sellerId) {
   fields.forEach(f => {
     const sys = getSystem(sellerId, f.id);
     if (sys == null) return;
-    const rel = accum(sellerId, f.id, "real", days);
+    const rel = trackingReal(sellerId, f.id, days);
     const acc = fieldAccuracy(sellerId, f.id, days);
     const accColor = acc != null ? heatText(acc) : "var(--text-dim)";
     const tip = acurTipRelato(f, rel, sys, acc);
@@ -5653,13 +5704,13 @@ function renderIndicatorConfig() {
       <label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="ind-field" data-k="openQuestion" ${ind.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label>`}
       <span class="spacer" style="flex:1"></span>
       ${ind.pctOnly ? "" : `<button class="iconbtn" data-demote-ind="${ind.id}" title="Descer para subindicador (pode trocar lugar com um sub)">↳</button>`}
-      <button class="iconbtn" data-del-ind="${ind.id}" title="Excluir">✕</button></div>${ind.openQuestion && !ind.pctOnly ? openCrossPickerHtml(ind) : ""}${lowerBetterPanelHtml(ind)}`;
+      <button class="iconbtn" data-del-ind="${ind.id}" title="Excluir">✕</button></div>${cvHintRowHtml(ind, "ind-field", "data-k")}${ind.openQuestion && !ind.pctOnly ? openCrossPickerHtml(ind) : ""}${lowerBetterPanelHtml(ind)}`;
     if (!ind.pctOnly) html += metaGoalsQtyHtml(ind, ind.id);
     if (!ind.pctOnly) {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
       (ind.subs||[]).forEach(s => {
         const subLb = cfgLowerBetter(s) || cfgLowerBetter(ind);
-        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><label class="switch" title="Exibir na Matriz"><input type="checkbox" class="sub-field" data-sk="showInMatriz" ${s.showInMatriz!==false?'checked':''}><span class="track"></span>Matriz</label><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-promote-sub="${s.id}" title="Subir para principal (pode trocar lugar com um principal)">↑</button><button class="iconbtn" data-del-sub="${s.id}">✕</button>${s.openQuestion ? openCrossPickerHtml(s) : ""}</div>`;
+        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><label class="switch" title="Exibir na Matriz"><input type="checkbox" class="sub-field" data-sk="showInMatriz" ${s.showInMatriz!==false?'checked':''}><span class="track"></span>Matriz</label><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-promote-sub="${s.id}" title="Subir para principal (pode trocar lugar com um principal)">↑</button><button class="iconbtn" data-del-sub="${s.id}">✕</button>${s.openQuestion ? openCrossPickerHtml(s) : ""}</div><div class="sub-cv-hint-row"><input type="text" class="sub-field" data-sk="cvHint" value="${escapeHtml(s.cvHint || "")}" placeholder="Descrição para o consultor (só no app CV)"></div>`;
       });
       html += `</div>`;
     }
@@ -6234,6 +6285,9 @@ function onMetaLojaInput(fieldId, val) {
   setMetaLoja(fieldId, val);
   refreshMetaAdherence(fieldId);
 }
+function cvHintRowHtml(cfg, fieldClass, dataAttr) {
+  return `<div class="cv-hint-row"><input type="text" class="${fieldClass}" ${dataAttr}="cvHint" value="${escapeHtml(cfg.cvHint || "")}" placeholder="Descrição para o consultor (só no app CV)" title="Texto exibido abaixo do nome no app do consultor"></div>`;
+}
 function metaGoalsQtyHtml(cfg, fieldId) {
   const du = diasUteisOf(), sb = sabadosOf(), dom = countSundays(currentMonth);
   return `<div class="meta-goals-block" data-goals-field="${fieldId}"><div class="row" style="align-items:flex-end;">
@@ -6250,7 +6304,7 @@ function rateConfigRowHtml(r, ind, optsHtml) {
   const tgtLbl = rateIsAbsolute(r) ? "alvo" : "alvo %";
   const lojaLbl = rateIsAbsolute(r) ? "loja" : "loja %";
   const formula = r.manual ? "" : `<select data-rk="numId" class="rate-field">${optsHtml}</select><b>÷</b><select data-rk="denId" class="rate-field">${optsHtml}</select><label class="switch"><input type="checkbox" class="rate-field" data-rk="invert" ${r.invert ? "checked" : ""}><span class="track"></span>Inverter</label>`;
-  return `<div class="rate-row${rLb ? " lower-better-row" : ""}" data-rate="${r.id}"><span class="kpi-draghandle" draggable="true" data-drag-kpi-rate="${r.id}" title="Arrastar taxa">⋮⋮</span><label class="switch" title="Exibir na Matriz"><input type="checkbox" class="rate-field" data-rk="showInMatriz" ${r.showInMatriz!==false?'checked':''}><span class="track"></span>Matriz</label><span class="tag">${unitTag}</span><input type="text" value="${escapeHtml(r.name)}" data-rk="name" class="rate-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="rate-field" data-rk="lowerBetter" ${r.lowerBetter ? "checked" : ""}><span class="track"></span>↓ menor</label><label class="switch" title="Valor em quantidade (ex.: oportunidades NPS), não em %"><input type="checkbox" class="rate-field" data-rk="absolute" ${r.absolute ? "checked" : ""}><span class="track"></span>Nº absoluto</label><label class="switch"><input type="checkbox" class="rate-field" data-rk="manual" ${r.manual ? "checked" : ""}><span class="track"></span>Manual</label>${formula}<span class="hint">${tgtLbl}</span><input type="number" value="${r.target}" data-rk="target" class="rate-field" style="width:56px;" title="Meta do consultor"><span class="hint">${lojaLbl}</span><input type="number" class="rate-field metaloja-inp" data-field="${r.id}" value="${getMetaLoja(r.id) ?? ""}" placeholder="—" style="width:56px;" title="Meta da loja"><button class="iconbtn" data-del-rate="${r.id}">✕</button></div>`;
+  return `<div class="rate-row${rLb ? " lower-better-row" : ""}" data-rate="${r.id}"><span class="kpi-draghandle" draggable="true" data-drag-kpi-rate="${r.id}" title="Arrastar taxa">⋮⋮</span><label class="switch" title="Exibir na Matriz"><input type="checkbox" class="rate-field" data-rk="showInMatriz" ${r.showInMatriz!==false?'checked':''}><span class="track"></span>Matriz</label><span class="tag">${unitTag}</span><input type="text" value="${escapeHtml(r.name)}" data-rk="name" class="rate-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="rate-field" data-rk="lowerBetter" ${r.lowerBetter ? "checked" : ""}><span class="track"></span>↓ menor</label><label class="switch" title="Valor em quantidade (ex.: oportunidades NPS), não em %"><input type="checkbox" class="rate-field" data-rk="absolute" ${r.absolute ? "checked" : ""}><span class="track"></span>Nº absoluto</label><label class="switch"><input type="checkbox" class="rate-field" data-rk="manual" ${r.manual ? "checked" : ""}><span class="track"></span>Manual</label>${formula}<span class="hint">${tgtLbl}</span><input type="number" value="${r.target}" data-rk="target" class="rate-field" style="width:56px;" title="Meta do consultor"><span class="hint">${lojaLbl}</span><input type="number" class="rate-field metaloja-inp" data-field="${r.id}" value="${getMetaLoja(r.id) ?? ""}" placeholder="—" style="width:56px;" title="Meta da loja"><button class="iconbtn" data-del-rate="${r.id}">✕</button></div><div class="rate-cv-hint-row"><input type="text" class="rate-field" data-rk="cvHint" value="${escapeHtml(r.cvHint || "")}" placeholder="Descrição para o consultor (só no app CV)"></div>`;
 }
 function findIndByRate(rid){ return state.indicators.find(i => (i.rates||[]).some(r=>r.id===rid)); }
 function findIndBySub(sid){ return state.indicators.find(i => (i.subs||[]).some(s=>s.id===sid)); }
@@ -6260,6 +6314,7 @@ function bindIndicatorEvents() {
     card.querySelectorAll(".ind-field").forEach(f => f.addEventListener("change", () => {
       const k = f.dataset.k;
       ind[k] = f.type === "checkbox" ? f.checked : f.value;
+      if (k === "cvHint") { save(); return; }
       if (k === "lowerBetter") {
         if (ind[k]) syncLowerBetterChildren(ind, true);
         renderMatrizLegend();
@@ -6280,6 +6335,7 @@ function bindIndicatorEvents() {
     row.querySelectorAll(".sub-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => {
       const k = f.dataset.sk;
       s[k] = f.type === "checkbox" ? f.checked : (["metaDay", "metaSat", "metaSun", "metaMonth"].includes(k) ? Number(f.value) || 0 : f.value);
+      if (k === "cvHint") { save(); return; }
       if (k === "lowerBetter") { renderMatrizLegend(); renderMatrizLegend("arvoreLegend", "arvoreLegendHint"); matrizUiRerender(); }
       if (k === "showInMatriz") { saveMatrizVisibility(); return; }
       save(); renderIndicatorConfig();
@@ -6291,6 +6347,7 @@ function bindIndicatorEvents() {
     row.querySelectorAll(".rate-field:not(.metaloja-inp)").forEach(f => f.addEventListener("change", () => {
       const k = f.dataset.rk;
       r[k] = f.type === "checkbox" ? f.checked : (k === "target" ? Number(f.value) || 0 : f.value);
+      if (k === "cvHint") { save(); return; }
       if (k === "absolute" && r.absolute) r.manual = true;
       if (k === "lowerBetter" || k === "absolute") { renderMatrizLegend(); renderMatrizLegend("arvoreLegend", "arvoreLegendHint"); matrizUiRerender(); }
       if (k === "showInMatriz") { saveMatrizVisibility(); return; }
