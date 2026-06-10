@@ -5049,7 +5049,7 @@ function sellerMetrics(sellerId) {
   let projSum = 0, projN = 0, accSum = 0, accN = 0;
   state.indicators.forEach(ind => {
     if (ind.pctOnly) return;
-    const real = accum(sellerId, ind.id, "real", days), meta = metaMonthFor(ind);
+    const real = matrizFieldValue(sellerId, ind.id, days, "mes"), meta = metaMonthFor(ind);
     if (meta && real != null) { projSum += (sellerProjVal(sellerId, ind.id) / meta); projN++; }
   });
   acuracidadeFieldList().filter(f => !f.rate && acurFieldActive(sellerId, f, days)).forEach(f => {
