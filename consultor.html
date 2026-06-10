@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v67";
+  var BUILD = "v68";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -509,7 +509,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v67"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v68"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -1368,44 +1368,16 @@ function getSystem(sellerId, fieldId, m = todayISO()) {
   const v = monthData(m).system?.[sellerId]?.[fieldId];
   return v != null ? Number(v) : null;
 }
-function getSystemAt(sellerId, fieldId, m = todayISO()) {
-  const v = monthData(m).systemAt?.[sellerId]?.[fieldId];
-  return v != null ? Number(v) : null;
-}
 function getSystemRate(sellerId, rateId, m = todayISO()) {
   const v = monthData(m).systemRate?.[sellerId]?.[rateId];
   return v != null ? Number(v) : null;
 }
-function systemInputDay(sellerId, fieldId, m = todayISO()) {
-  const at = getSystemAt(sellerId, fieldId, m);
-  if (at == null) return null;
-  const d = new Date(at);
-  const { y, mo } = parseMonth(m);
-  if (d.getFullYear() !== y || d.getMonth() + 1 !== mo) return 1;
-  return d.getDate();
-}
-function accumSinceDay(sellerId, fieldId, key, fromDay, m = todayISO()) {
-  if (fromDay == null || fromDay < 1) return null;
-  const end = todayISO() === m ? todayDay() : daysInMonth(m);
-  let sum = 0, has = false;
-  for (let d = fromDay; d <= end; d++) {
-    const c = getCell(sellerId, fieldId, d, m);
-    if (c[key] != null && c[key] !== "") { sum += Number(c[key]); has = true; }
-  }
-  return has ? sum : 0;
-}
-/** Real de acompanhamento do CV: relato até gestor lançar; depois sistema + check-outs do dia do lançamento em diante. */
-function consultorTrackingReal(sellerId, fieldId, days, m = todayISO()) {
-  const relato = accum(sellerId, fieldId, "real", days, m);
-  const sistema = getSystem(sellerId, fieldId, m);
-  if (sistema == null) return relato;
-  const fromDay = systemInputDay(sellerId, fieldId, m);
-  if (fromDay == null) return sistema;
-  return sistema + (accumSinceDay(sellerId, fieldId, "real", fromDay, m) ?? 0);
+/** Soma dos check-outs do indicador no período (cada fieldId soma só os seus valores no diário). */
+function checkoutSum(sellerId, fieldId, days, m = todayISO()) {
+  return accum(sellerId, fieldId, "real", days, m);
 }
 function matrizFieldValue(sellerId, fieldId, days, periodo, m = todayISO()) {
-  if (periodo === "mes") return consultorTrackingReal(sellerId, fieldId, days, m);
-  return accum(sellerId, fieldId, "real", days, m);
+  return checkoutSum(sellerId, fieldId, days, m);
 }
 function sellerProjFromReal(sellerId, fieldId, realVal, m = todayISO()) {
   if (realVal == null || isNaN(realVal)) return null;
@@ -1453,7 +1425,7 @@ function rateValueForSeller(rate, sellerId, m = todayISO()) {
 function fieldAccuracy(sellerId, fieldId, days, m = todayISO()) {
   const sys = getSystem(sellerId, fieldId, m);
   if (sys == null) return null;
-  const r = consultorTrackingReal(sellerId, fieldId, days, m) ?? 0;
+  const r = checkoutSum(sellerId, fieldId, days, m) ?? 0;
   if (sys > 0) return Math.max(0, 1 - Math.abs(r - sys) / sys);
   return r === 0 ? 1 : 0;
 }
@@ -1593,7 +1565,7 @@ function fieldProjStats(cfg, sellerId, m = todayISO(), parentInd = null) {
   const { done } = sellerWorkedSplit(sellerId, m);
   const relato = accum(sellerId, cfg.id, "real", days, m);
   const sistema = getSystem(sellerId, cfg.id, m);
-  const real = consultorTrackingReal(sellerId, cfg.id, days, m);
+  const real = checkoutSum(sellerId, cfg.id, days, m);
   const proj = real != null ? sellerProjFromReal(sellerId, cfg.id, real, m) : null;
   const relatoProj = relato != null ? sellerProjFromReal(sellerId, cfg.id, relato, m) : null;
   const perfRatio = meta && proj != null ? matrizProjPerfRatio(proj, meta, lb) : null;
