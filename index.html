@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v80";
+  var BUILD = "v81";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -579,27 +579,41 @@
     max-height: calc(100vh - 24px);
     margin: 0;
   }
-  #lancamentoCards.syscards {
+  #lancamentoSellers .syscards {
     display: flex;
     flex-direction: row;
     flex-wrap: wrap;
     gap: 12px;
     align-items: flex-start;
-    margin-top: 10px;
     width: 100%;
   }
-  #lancamentoCards .sysgroup {
+  #lancamentoSellers .sysgroup {
     flex: 1 1 140px;
     min-width: min(140px, 100%);
     max-width: none;
     margin: 0;
   }
+  .lancamento-seller-block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-soft); }
+  .lancamento-seller-block:first-of-type { margin-top: 12px; padding-top: 0; border-top: none; }
+  .lancamento-seller-name { font-size: 13px; font-weight: 800; color: var(--accent-2); margin-bottom: 10px; letter-spacing: .2px; }
+  .sysgroup-principal { margin-bottom: 0; }
+  .sysgroup:not(.collapsed) .sysgroup-principal { margin-bottom: 10px; }
+  .sysgroup.collapsed .sysgroup-subs { display: none; }
+  .sysfield.principal input { font-size: 18px; }
+  .sysfield.locked .syscell-locked,
+  .sysfield.locked input[readonly] {
+    opacity: 0.92; cursor: default;
+    background: color-mix(in srgb, var(--dio-out-bg) 55%, var(--cell));
+    border-color: color-mix(in srgb, var(--accent-2) 35%, var(--border));
+  }
+  .sysfield.locked label .tag-co { font-size: 9px; color: var(--accent-2); font-weight: 700; margin-left: 4px; text-transform: none; letter-spacing: 0; }
   td.name.seller-link { cursor: pointer; color: var(--accent-2); }
   td.name.seller-link:hover { text-decoration: underline; text-underline-offset: 2px; }
   body.moveon td.name.seller-link { cursor: default; color: inherit; text-decoration: none; }
   .sysgroup-head.sys-toggle { cursor: pointer; user-select: none; margin-bottom: 0; }
   .sysgroup:not(.collapsed) .sysgroup-head.sys-toggle { margin-bottom: 12px; }
-  .sysgroup.collapsed .sysgroup-fields { display: none; }
+  .sysgroup.collapsed .sysgroup-fields,
+  .sysgroup.collapsed .sysgroup-subs { display: none; }
   .audit-summary { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
   .audit-summary .pill { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 99px; font-weight: 700; }
   .audit-discipline { margin-top: 14px; padding: 14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; }
@@ -735,9 +749,10 @@
   <section class="view active" id="view-matriz">
     <div class="panel">
       <div class="flex-between">
-        <div><h2>Matriz de Oportunidades</h2><div class="sub">Indicador principal, sub-indicadores e taxas · clique no bloco para expandir/recolher · filtre vendedores · clique em <b>Vendedor</b> ou <b>Real/%/Proj.</b> para ordenar.</div></div>
+        <div><h2>Matriz de Oportunidades</h2><div class="sub">Indicador principal, sub-indicadores e taxas · clique no bloco para expandir/recolher · filtre vendedores · <b>⚙ Lançamento do Sistema</b> ou clique no <b>nome</b> do vendedor · ordene por <b>Vendedor</b> ou <b>Real/%/Proj.</b></div></div>
         <div class="row" style="align-items:center;">
           <div class="seg" id="matrizPeriodo"><button data-p="mes" class="active">Acumulado Mês</button><button data-p="semana">Semana</button></div>
+          <button class="btn sec sm" type="button" id="btnLancamentoSistema" title="Número real do sistema (acumulado do mês)">⚙ Lançamento do Sistema</button>
           <button class="ghost-btn" id="matrizReorder" title="Arrastar vendedores (linhas) e blocos (colunas)">✥ Reordenar</button>
           <button class="ghost-btn" id="matrizCsv">⬇ CSV</button>
         </div>
@@ -750,7 +765,7 @@
     </div>
     <div class="panel">
       <div class="flex-between">
-        <div><h2>Acuracidade do Relato</h2><div class="sub">Auditoria do mês: check-in (plano) · check-out (relato) × sistema. Clique no <b>nome</b> aqui para ver a auditoria; na matriz acima, clique no nome para <b>lançar o sistema</b>.</div></div>
+        <div><h2>Acuracidade do Relato</h2><div class="sub">Auditoria do mês: check-in (plano) · check-out (relato) × sistema. Clique no <b>nome</b> aqui para ver a auditoria; use <b>⚙ Lançamento do Sistema</b> (ou o nome na matriz) para lançar o número real do gestor.</div></div>
       </div>
       <div class="table-wrap" style="margin-top:6px;"><table id="acuracidadeTable"></table></div>
       <div class="acur-legend" id="acurLegend"></div>
@@ -965,9 +980,10 @@
 </div></div>
 
 <div class="modal-bg" id="lancamentoModal"><div class="modal modal-wide">
-  <div class="flex-between"><h3>Lançamento do Sistema — <span id="lancamentoName"></span> · <span id="lancamentoMonth"></span></h3><button class="iconbtn" id="closeLancamento">✕</button></div>
+  <div class="flex-between"><h3>Lançamento do Sistema — <span id="lancamentoStore"></span> · <span id="lancamentoMonth"></span></h3><button class="iconbtn" id="closeLancamento">✕</button></div>
   <div class="sub">Número real do sistema (acumulado do mês). Clique no indicador para expandir ou recolher.</div>
-  <div class="syscards" id="lancamentoCards"></div>
+  <div id="lancamentoToolbar" class="matriz-toolbar" style="margin-top:10px;"></div>
+  <div id="lancamentoSellers"></div>
 </div></div>
 
 <div class="modal-bg" id="auditoriaModal"><div class="modal modal-wide">
@@ -1100,12 +1116,13 @@ function migrate(s) {
   if (!s.order) s.order = { sellers: null, indicators: null };
   if (!s.months) s.months = {};
   if (!s.theme) s.theme = "dark";
-  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, matrizFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" }, kpiReorgAt: 0, dailyTombstones: {} }, s.ui || {});
+  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, lancamentoFilter: [], matrizFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" }, kpiReorgAt: 0, dailyTombstones: {} }, s.ui || {});
   if (s.ui.kpiReorgAt == null) s.ui.kpiReorgAt = 0;
   if (!s.ui.dailyTombstones) s.ui.dailyTombstones = {};
   if (!Array.isArray(s.ui.dioClearFields)) s.ui.dioClearFields = null;
   if (!s.ui.expanded) s.ui.expanded = {};
   if (!s.ui.lancamentoExpanded) s.ui.lancamentoExpanded = {};
+  if (!s.ui.lancamentoFilter) s.ui.lancamentoFilter = [];
   if (!Array.isArray(s.ui.matrizFilter)) s.ui.matrizFilter = [];
   if (!Array.isArray(s.ui.arvLojaFilter)) s.ui.arvLojaFilter = [];
   if (!Array.isArray(s.ui.arvSellerFilter)) s.ui.arvSellerFilter = [];
@@ -2455,7 +2472,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v80"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v81"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4079,7 +4096,6 @@ function acuracidadeFieldList() {
   state.indicators.forEach(ind => {
     if (ind.pctOnly) { (ind.rates||[]).forEach(r => { if (r.manual) fields.push({ id: "rate:"+r.id, rateId: r.id, name: r.name, color: ind.color, sub: false, rate: true }); }); return; }
     if (ind.checkout) fields.push({ id: ind.id, name: ind.name, color: ind.color, sub: false, rate: false });
-    (ind.subs||[]).forEach(s => { if (s.checkout) fields.push({ id: s.id, name: s.name, color: ind.color, sub: true, rate: false }); });
   });
   return fields;
 }
@@ -4123,7 +4139,7 @@ function acurRelatoCellHtml(sellerId, f, days) {
   if (sys == null) {
     const rel = accum(sellerId, f.id, "real", days);
     const tip = (f.sub ? "↳ " : "") + f.name + "\nSem lançamento sistema ⚙ deste vendedor." +
-      (rel != null ? "\nRelato na matriz (" + fmt(rel) + ") vem só do check-out — clique no nome na matriz para lançar o sistema." : "\nClique no nome na matriz para lançar o sistema.");
+      (rel != null ? "\nRelato na matriz (" + fmt(rel) + ") vem só do check-out — use ⚙ Lançamento do Sistema." : "\nUse ⚙ Lançamento do Sistema na matriz.");
     return `<td class="relato muted"${matrizTipData(tip, f.color)}>—</td>`;
   }
   const rel = checkoutSum(sellerId, f.id, days);
@@ -4207,7 +4223,7 @@ function renderAcuracidade() {
   if (!sellers.length) {
     body += `<tr><td class="empty" colspan="${Math.max(fields.length, 1) + 3}">Nenhum vendedor no filtro.</td></tr>`;
   } else if (!fields.length) {
-    body += `<tr><td class="empty" colspan="4">Nenhum indicador com lançamento do gestor (sistema ⚙) neste mês.<br>Clique no <b>nome</b> na matriz acima para lançar o sistema — a coluna aparece aqui automaticamente.</td></tr>`;
+    body += `<tr><td class="empty" colspan="4">Nenhum indicador com lançamento do gestor (sistema ⚙) neste mês.<br>Use <b>⚙ Lançamento do Sistema</b> na matriz — a coluna aparece aqui automaticamente.</td></tr>`;
   } else {
     sellers.forEach(s => {
       const m = sellerMetrics(s.id);
@@ -4834,44 +4850,146 @@ function updateDiarioSummary(fieldId) {
 /* ============================================================ LANÇAMENTO / AUDITORIA (modais) */
 let modalSellerId = null;
 let lancamentoExpanded = state.ui.lancamentoExpanded || {};
-function renderLancamentoCards(sellerId) {
-  const box = document.getElementById("lancamentoCards");
-  if (!box) return;
-  const sysQty = (id, name, sub) => `<div class="sysfield ${sub?'sub':''}"><label>${sub?'↳ ':''}${name}</label><input type="number" class="syscell" data-field="${id}" value="${getSystem(sellerId, id) ?? ''}" placeholder="0"></div>`;
-  box.innerHTML = orderedIndicators().map(ind => {
-    let fields = "";
-    if (!ind.pctOnly) {
-      fields += sysQty(ind.id, ind.name, false);
-      (ind.subs||[]).forEach(s => { fields += sysQty(s.id, s.name, true); });
+function lancamentoFilteredSellers(allSellers) {
+  const filter = state.ui.lancamentoFilter || [];
+  if (!filter.length) return allSellers;
+  const set = new Set(filter);
+  return allSellers.filter(s => set.has(s.id));
+}
+function lancamentoSubVisible(sub) {
+  return !(sub.checkin && !sub.checkout);
+}
+function renderLancamentoToolbar(allSellers) {
+  const bar = document.getElementById("lancamentoToolbar");
+  if (!bar) return;
+  const filter = state.ui.lancamentoFilter || [];
+  const hasFilter = filter.length > 0;
+  const filterSet = new Set(filter);
+  bar.innerHTML = `<span class="hint">Vendedor</span>
+    <button type="button" class="ghost-btn sm matriz-filter-all lancamento-filter-all${!hasFilter ? " active" : ""}">Todos</button>
+    <div class="matriz-filter-chips">${allSellers.map(s =>
+      `<button type="button" class="matriz-filter-chip lancamento-filter-chip${hasFilter && filterSet.has(s.id) ? " active" : ""}" data-sid="${s.id}">${escapeHtml(s.name)}</button>`
+    ).join("")}</div>`;
+  bar.querySelector(".lancamento-filter-all").onclick = () => {
+    state.ui.lancamentoFilter = [];
+    save();
+    renderLancamentoModal();
+  };
+  bar.querySelectorAll(".lancamento-filter-chip").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.sid;
+      const f = new Set(state.ui.lancamentoFilter || []);
+      if (f.has(id)) f.delete(id);
+      else f.add(id);
+      state.ui.lancamentoFilter = [...f];
+      save();
+      renderLancamentoModal();
+    };
+  });
+}
+function renderLancamentoRatesHtml(sellerId, ind) {
+  let html = "";
+  (ind.rates || []).forEach(r => {
+    const rLb = rateLowerBetter(r, ind);
+    const unit = rateIsAbsolute(r) ? "nº" : "%";
+    if (r.manual) {
+      const step = rateIsAbsolute(r) ? "1" : (rLb ? "0.01" : "1");
+      html += `<div class="sysfield rate"><label>${unit} ${escapeHtml(r.name)}</label><input type="number" class="sysratecell" data-seller="${sellerId}" data-rate="${r.id}" step="${step}" inputmode="${rateIsAbsolute(r) ? "numeric" : "decimal"}" value="${getSystemRate(sellerId, r.id) ?? ""}" placeholder="${rateIsAbsolute(r) ? "0" : (rLb ? "0,00" : "0")}"></div>`;
+    } else {
+      const rv = rateValue(r, [sellerId]);
+      const tgt = matrizRateTarget(r);
+      const rvDisp = rateFmtValue(r, rv, ind);
+      const tgtDisp = tgt ? rateFmtTarget(r, tgt, ind) : "";
+      html += `<div class="sysfield rate calc"><label>${unit} ${escapeHtml(r.name)} <span class="hint">auto</span></label><div class="syscalc">${rvDisp}${tgtDisp ? ` <span class="muted">/ alvo ${tgtDisp}</span>` : ""}</div></div>`;
     }
-    (ind.rates||[]).forEach(r => {
-      const rLb = rateLowerBetter(r, ind);
-      const unit = rateIsAbsolute(r) ? "nº" : "%";
-      if (r.manual) {
-        const step = rateIsAbsolute(r) ? "1" : (rLb ? "0.01" : "1");
-        fields += `<div class="sysfield rate"><label>${unit} ${r.name}</label><input type="number" class="sysratecell" data-rate="${r.id}" step="${step}" inputmode="${rateIsAbsolute(r) ? 'numeric' : 'decimal'}" value="${getSystemRate(sellerId, r.id) ?? ''}" placeholder="${rateIsAbsolute(r) ? '0' : (rLb ? '0,00' : '0')}"></div>`;
-      } else {
-        const rv = rateValue(r, [sellerId]); const tgt = matrizRateTarget(r);
-        const rvDisp = rateFmtValue(r, rv, ind);
-        const tgtDisp = tgt ? rateFmtTarget(r, tgt, ind) : "";
-        fields += `<div class="sysfield rate calc"><label>${unit} ${r.name} <span class="hint">auto</span></label><div class="syscalc">${rvDisp}${tgtDisp ? ` <span class="muted">/ alvo ${tgtDisp}</span>` : ""}</div></div>`;
-      }
-    });
-    if (!fields) return "";
-    const exp = lancamentoExpanded[ind.id] !== false;
+  });
+  return html;
+}
+function renderLancamentoCardsForSeller(sellerId, days) {
+  return orderedIndicators().map(ind => {
+    let subsRates = "";
+    if (!ind.pctOnly) {
+      (ind.subs || []).forEach(sub => {
+        if (!lancamentoSubVisible(sub)) return;
+        const name = escapeHtml(matrizDisplayName(sub.name));
+        if (sub.checkout) {
+          const coVal = checkoutSum(sellerId, sub.id, days);
+          subsRates += `<div class="sysfield sub locked"><label>↳ ${name}<span class="tag-co">check-out</span></label><input type="number" class="syscell-locked" value="${coVal ?? 0}" readonly tabindex="-1" title="Soma do check-out do mês (consultor)"></div>`;
+        } else {
+          subsRates += `<div class="sysfield sub"><label>↳ ${name}</label><input type="number" class="syscell" data-seller="${sellerId}" data-field="${sub.id}" value="${getSystem(sellerId, sub.id) ?? ""}" placeholder="0"></div>`;
+        }
+      });
+    }
+    subsRates += renderLancamentoRatesHtml(sellerId, ind);
+    const hasPrincipal = !ind.pctOnly;
+    if (!hasPrincipal && !subsRates) return "";
+    const exp = lancamentoExpanded[ind.id] === true;
     const sysTitle = matrizBlockTitle(ind.name);
-    return `<div class="sysgroup ${exp?'':'collapsed'}" data-ind="${ind.id}" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head sys-toggle" style="color:${ind.color}" data-ind="${ind.id}"${sysTitle.title}><span class="block-toggle">${exp?'▾':'▸'}</span> ${sysTitle.short}</div><div class="sysgroup-fields">` + fields + `</div></div>`;
-  }).join("") || '<div class="empty">Nenhum indicador com lançamento de sistema.</div>';
-  box.querySelectorAll(".sys-toggle").forEach(h => { h.onclick = () => { const id = h.dataset.ind; lancamentoExpanded[id] = lancamentoExpanded[id] === false; state.ui.lancamentoExpanded = lancamentoExpanded; save(); renderLancamentoCards(sellerId); }; });
-  box.querySelectorAll(".syscell").forEach(inp => inp.addEventListener("input", () => { setSystem(sellerId, inp.dataset.field, inp.value); if (activeView === "matriz") { renderMatriz(); renderAcuracidade(); } }));
-  box.querySelectorAll(".sysratecell").forEach(inp => inp.addEventListener("input", () => { setSystemRate(sellerId, inp.dataset.rate, inp.value); if (activeView === "matriz") renderMatriz(); }));
+    const headLabel = ind.pctOnly ? sysTitle.short : escapeHtml(String(ind.abbr || matrizDisplayName(ind.name)).toUpperCase());
+    const principalHtml = hasPrincipal
+      ? `<div class="sysfield principal"><input type="number" class="syscell" data-seller="${sellerId}" data-field="${ind.id}" value="${getSystem(sellerId, ind.id) ?? ""}" placeholder="0" title="${escapeHtml(ind.name)}"></div>`
+      : "";
+    return `<div class="sysgroup ${exp ? "" : "collapsed"}" data-ind="${ind.id}" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head sys-toggle" style="color:${ind.color}" data-ind="${ind.id}"${sysTitle.title}><span class="block-toggle">${exp ? "▾" : "▸"}</span> ${headLabel}</div>${hasPrincipal ? `<div class="sysgroup-principal">${principalHtml}</div>` : ""}<div class="sysgroup-subs">${subsRates}</div></div>`;
+  }).filter(Boolean).join("");
+}
+function renderLancamentoCards() {
+  const box = document.getElementById("lancamentoSellers");
+  if (!box) return;
+  const days = monthDays();
+  const sellers = lancamentoFilteredSellers(orderedSellers());
+  if (!sellers.length) {
+    box.innerHTML = '<div class="empty">Nenhum vendedor selecionado.</div>';
+    return;
+  }
+  box.innerHTML = sellers.map(s =>
+    `<div class="lancamento-seller-block" data-seller="${s.id}"><div class="lancamento-seller-name">${escapeHtml(s.name)}</div><div class="syscards">${renderLancamentoCardsForSeller(s.id, days) || '<div class="empty">Nenhum indicador.</div>'}</div></div>`
+  ).join("");
+  box.querySelectorAll(".sys-toggle").forEach(h => {
+    h.onclick = () => {
+      const id = h.dataset.ind;
+      lancamentoExpanded[id] = lancamentoExpanded[id] === true ? false : true;
+      state.ui.lancamentoExpanded = lancamentoExpanded;
+      save();
+      renderLancamentoCards();
+    };
+  });
+  box.querySelectorAll(".syscell").forEach(inp => {
+    inp.addEventListener("input", () => {
+      setSystem(inp.dataset.seller, inp.dataset.field, inp.value);
+      if (activeView === "matriz") { renderMatriz(); renderAcuracidade(); }
+    });
+  });
+  box.querySelectorAll(".sysratecell").forEach(inp => {
+    inp.addEventListener("input", () => {
+      setSystemRate(inp.dataset.seller, inp.dataset.rate, inp.value);
+      if (activeView === "matriz") renderMatriz();
+    });
+  });
+}
+function renderLancamentoModal() {
+  renderLancamentoToolbar(orderedSellers());
+  renderLancamentoCards();
 }
 function openLancamentoModal(sellerId) {
-  const s = state.sellers.find(x => x.id === sellerId); if (!s) return;
-  modalSellerId = sellerId; state.ui.sistemaSeller = sellerId; save();
-  document.getElementById("lancamentoName").textContent = s.name;
+  if (sellerId) {
+    const s = state.sellers.find(x => x.id === sellerId);
+    if (!s) return;
+    state.ui.lancamentoFilter = [sellerId];
+    modalSellerId = sellerId;
+    state.ui.sistemaSeller = sellerId;
+  } else {
+    modalSellerId = null;
+    const lf = state.ui.lancamentoFilter;
+    if (!lf || !lf.length) {
+      const mf = state.ui.matrizFilter || [];
+      state.ui.lancamentoFilter = mf.length ? [...mf] : [];
+    }
+  }
+  save();
+  const storeEl = document.getElementById("lancamentoStore");
+  if (storeEl) storeEl.textContent = state.storeName || "Loja";
   document.getElementById("lancamentoMonth").textContent = monthLabel(currentMonth);
-  renderLancamentoCards(sellerId);
+  renderLancamentoModal();
   document.getElementById("lancamentoModal").classList.add("show");
 }
 function closeLancamentoModal() {
@@ -8098,6 +8216,8 @@ function init() {
   document.getElementById("matrizCsv").onclick = exportCsv;
   document.getElementById("storeName").addEventListener("input", e => { state.storeName = e.target.value; save(); });
   document.querySelectorAll("#matrizPeriodo button").forEach(b => b.onclick = () => { document.querySelectorAll("#matrizPeriodo button").forEach(x=>x.classList.remove("active")); b.classList.add("active"); matrizPeriodo = b.dataset.p; state.ui.period = matrizPeriodo; if(matrizPeriodo==="semana"){ matrizWeekIdx = currentWeekIndex(); state.ui.weekIdx = matrizWeekIdx; } save(); renderMatriz(); });
+  const btnLancamento = document.getElementById("btnLancamentoSistema");
+  if (btnLancamento) btnLancamento.onclick = () => openLancamentoModal();
   document.getElementById("closeLancamento").onclick = closeLancamentoModal;
   document.getElementById("lancamentoModal").addEventListener("click", e => { if (e.target.id === "lancamentoModal") closeLancamentoModal(); });
   document.getElementById("closeAuditoria").onclick = closeAuditoriaModal;
