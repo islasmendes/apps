@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v81";
+  var BUILD = "v82";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -1717,9 +1717,9 @@ function save(opts) {
 
 let currentMonth = todayISO();
 function monthData(m = currentMonth) {
-  if (!state.months[m]) state.months[m] = { workdays: autoWorkdays(m), daily: {}, system: {}, systemAt: {}, systemRate: {}, metaLoja: {}, fechamento: {} };
+  if (!state.months[m]) state.months[m] = { workdays: autoWorkdays(m), daily: {}, system: {}, systemAt: {}, systemCoSnap: {}, systemRate: {}, metaLoja: {}, fechamento: {} };
   const md = state.months[m];
-  md.daily = md.daily || {}; md.system = md.system || {}; md.systemAt = md.systemAt || {}; md.systemRate = md.systemRate || {}; md.metaLoja = md.metaLoja || {}; md.fechamento = md.fechamento || {};
+  md.daily = md.daily || {}; md.system = md.system || {}; md.systemAt = md.systemAt || {}; md.systemCoSnap = md.systemCoSnap || {}; md.systemRate = md.systemRate || {}; md.metaLoja = md.metaLoja || {}; md.fechamento = md.fechamento || {};
   return md;
 }
 
@@ -1865,6 +1865,7 @@ async function pushDailyClearsToFirebase({ days, sellerIds, fieldIds, clearSyste
       if (clearSystem) {
         updates[`lojas/${lojaCode}/data/months/${month}/system/${sid}/${fid}`] = null;
         updates[`lojas/${lojaCode}/data/months/${month}/systemAt/${sid}/${fid}`] = null;
+        updates[`lojas/${lojaCode}/data/months/${month}/systemCoSnap/${sid}/${fid}`] = null;
       }
     });
   });
@@ -1914,6 +1915,7 @@ function clearDiarioScope({ days, sellerIds, fieldIds, clearSystem = false, mont
       if (clearSystem) {
         if (md.system?.[sid]?.[fid] != null) delete md.system[sid][fid];
         if (md.systemAt?.[sid]?.[fid] != null) delete md.systemAt[sid][fid];
+        if (md.systemCoSnap?.[sid]?.[fid] != null) delete md.systemCoSnap[sid][fid];
       }
     });
   });
@@ -2472,7 +2474,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v81"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v82"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -2636,6 +2638,13 @@ function arvMetaForTotal(localInd, lojas, days, periodo, subTpl) {
 
 /* Sistema */
 function getSystem(sellerId, fieldId, m = currentMonth) { const md = monthData(m); return (md.system[sellerId] && md.system[sellerId][fieldId] != null) ? Number(md.system[sellerId][fieldId]) : null; }
+function getSystemCoSnap(sellerId, fieldId, m = currentMonth) {
+  const md = monthData(m);
+  const snap = md.systemCoSnap?.[sellerId]?.[fieldId];
+  if (snap != null) return Number(snap);
+  if (getSystem(sellerId, fieldId, m) == null) return null;
+  return checkoutSum(sellerId, fieldId, monthDays(m), m) ?? 0;
+}
 function normKpiName(s) {
   return String(s || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 }
@@ -2745,12 +2754,16 @@ function setSystem(sellerId, fieldId, val, m = currentMonth) {
   const md = monthData(m);
   md.system[sellerId] = md.system[sellerId] || {};
   md.systemAt[sellerId] = md.systemAt[sellerId] || {};
+  md.systemCoSnap = md.systemCoSnap || {};
+  md.systemCoSnap[sellerId] = md.systemCoSnap[sellerId] || {};
   if (val === "" || val === null || isNaN(val)) {
     delete md.system[sellerId][fieldId];
     delete md.systemAt[sellerId][fieldId];
+    delete md.systemCoSnap[sellerId][fieldId];
   } else {
     md.system[sellerId][fieldId] = Number(val);
     md.systemAt[sellerId][fieldId] = Date.now();
+    md.systemCoSnap[sellerId][fieldId] = checkoutSum(sellerId, fieldId, monthDays(m), m) ?? 0;
   }
   save();
 }
@@ -2921,10 +2934,19 @@ function sellerFolgasPast(sellerId, m = currentMonth) {
   for (let d = 1; d < today; d++) if (!sellerWorks(sellerId, d, m)) f++;
   return f;
 }
-function matrizTipReal(fromSystem) {
-  return fromSystem
-    ? "Real: gestor (sistema) ⚙\nCor neutra — leia % (hoje) e Proj. (fechamento)"
-    : "Real: soma do check-out\nCor neutra — leia % (hoje) e Proj. (fechamento)";
+function matrizTipReal(fromSystem, sellerId, fieldId) {
+  if (!fromSystem) return "Real: soma do check-out\nCor neutra — leia % (hoje) e Proj. (fechamento)";
+  let detail = "";
+  if (sellerId && fieldId) {
+    const sys = getSystem(sellerId, fieldId);
+    const co = checkoutSum(sellerId, fieldId, monthDays(), currentMonth) ?? 0;
+    const snap = getSystemCoSnap(sellerId, fieldId, currentMonth) ?? co;
+    const delta = co - snap;
+    if (sys != null) {
+      detail = `\nSistema ⚙ ${fmt(sys)} + check-outs desde o lançamento (${delta >= 0 ? "+" : ""}${fmt(delta)}) = ${fmt(sys + delta)}`;
+    }
+  }
+  return `Real: gestor (sistema) ⚙${detail}\nCor neutra — leia % (hoje) e Proj. (fechamento)`;
 }
 function matrizTipPct(real, meta, dailyFallback, opts) {
   if (!meta || meta <= 0) return "Cadastre meta em KPIs";
@@ -3416,9 +3438,17 @@ function visibleRates(ind) {
   if (!indShowInSemana(ind)) return [];
   return rates.filter(r => !r.manual);
 }
-/** Real na matriz: soma dos check-outs do indicador no período (cada KPI soma só os seus). */
+/** Real na matriz: check-out ou âncora do gestor (sistema ⚙) + delta de check-outs desde o lançamento. */
 function matrizFieldValue(sellerId, fieldId, days, periodo, m = currentMonth) {
-  return checkoutSum(sellerId, fieldId, days, m);
+  const co = checkoutSum(sellerId, fieldId, days, m);
+  const sys = getSystem(sellerId, fieldId, m);
+  if (sys == null || periodo !== "mes") return co;
+  const fullMonth = monthDays(m);
+  const isFullMonth = days.length === fullMonth.length && fullMonth.every(d => days.includes(d));
+  if (!isFullMonth) return co;
+  const monthCo = checkoutSum(sellerId, fieldId, fullMonth, m) ?? 0;
+  const snap = getSystemCoSnap(sellerId, fieldId, m) ?? monthCo;
+  return sys + (monthCo - snap);
 }
 function matrizRealForSellers(ids, fieldId, days, periodo) {
   let real = 0, has = false, fromSystem = false;
@@ -3844,7 +3874,7 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
     const realCls = fromSystem ? "heat matriz-from-sys matriz-real" : "matriz-real";
     const divMeta = isTeam ? getMetaDivisional(ind.id) : null;
     const cellOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days, lowerBetter: cfgLowerBetter(ind), divisionalMeta: !!(isTeam && divMeta) };
-    html += `<td style="border-left:3px solid ${ind.color};"><span class="${realCls}"${matrizTipData(matrizTipReal(fromSystem), ind.color)}>${has ? fmt(real) : "—"}</span></td>`;
+    html += `<td style="border-left:3px solid ${ind.color};"><span class="${realCls}"${matrizTipData(matrizTipReal(fromSystem, isTeam ? null : ids[0], ind.id), ind.color)}>${has ? fmt(real) : "—"}</span></td>`;
     if (matrizShowPct(ind)) html += matrizPctCellHtml(has ? real : null, meta, dailyFb, cellOpts);
     if (periodo === "mes") {
       const proj = has && real != null ? (isTeam ? matrizProjEquipe(real) : matrizProjConsultor(ids, ind.id)) : null;
@@ -3865,7 +3895,7 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
       const subOpts = { sellerId: isTeam ? null : ids[0], isTeam, indColor: ind.color, periodDays: days, lowerBetter: cfgLowerBetter(s), divisionalMeta: !!(isTeam && subDivMeta) };
       const subCls = fs ? "heat matriz-from-sys matriz-real" : "matriz-real";
       const subBorder = !cfgShowInMatriz(ind) && si === 0 ? `border-left:3px solid ${ind.color}` : "border-left:1px solid var(--border-soft)";
-      html += `<td style="${subBorder};"><span class="${subCls}"${matrizTipData(matrizTipReal(fs), ind.color)}>${h ? fmt(sr) : "—"}</span></td>`;
+      html += `<td style="${subBorder};"><span class="${subCls}"${matrizTipData(matrizTipReal(fs, isTeam ? null : ids[0], s.id), ind.color)}>${h ? fmt(sr) : "—"}</span></td>`;
       if (matrizShowPct(s)) html += matrizPctCellHtml(h ? sr : null, subMeta, subDailyFb, subOpts);
       if (periodo === "mes") {
         const subProj = h && sr != null ? (isTeam ? matrizProjEquipe(sr) : matrizProjConsultor(ids, s.id)) : null;
@@ -4859,6 +4889,53 @@ function lancamentoFilteredSellers(allSellers) {
 function lancamentoSubVisible(sub) {
   return !(sub.checkin && !sub.checkout);
 }
+function lancamentoPrincipalLabel(ind) {
+  return escapeHtml(matrizDisplayName(ind.name).toUpperCase());
+}
+let lancamentoTabBound = false;
+function bindLancamentoTabNav() {
+  const root = document.getElementById("lancamentoSellers");
+  if (!root || lancamentoTabBound) return;
+  lancamentoTabBound = true;
+  root.addEventListener("keydown", e => {
+    if (e.key !== "Tab") return;
+    const t = e.target;
+    if (!t.matches(".syscell-principal, .syscell-sub, .sysratecell")) return;
+    const block = t.closest(".lancamento-seller-block");
+    if (!block) return;
+    const forward = !e.shiftKey;
+    if (t.classList.contains("syscell-principal")) {
+      e.preventDefault();
+      const principals = [...block.querySelectorAll(".syscell-principal")];
+      const idx = principals.indexOf(t);
+      const next = forward ? principals[idx + 1] : principals[idx - 1];
+      if (next) { next.focus(); return; }
+      const blocks = [...document.querySelectorAll("#lancamentoSellers .lancamento-seller-block")];
+      const bi = blocks.indexOf(block);
+      const nb = forward ? blocks[bi + 1] : blocks[bi - 1];
+      if (nb) {
+        const ps = [...nb.querySelectorAll(".syscell-principal")];
+        (forward ? ps[0] : ps[ps.length - 1])?.focus();
+      }
+      return;
+    }
+    e.preventDefault();
+    const group = t.closest(".sysgroup");
+    if (!group) return;
+    const subs = [...group.querySelectorAll(".syscell-sub, .sysratecell")];
+    const idx = subs.indexOf(t);
+    const next = forward ? subs[idx + 1] : subs[idx - 1];
+    if (next) { next.focus(); return; }
+    if (!forward) {
+      group.querySelector(".syscell-principal")?.focus();
+      return;
+    }
+    const groups = [...block.querySelectorAll(".sysgroup")];
+    const gi = groups.indexOf(group);
+    const principals = [...block.querySelectorAll(".syscell-principal")];
+    principals[gi + 1]?.focus();
+  });
+}
 function renderLancamentoToolbar(allSellers) {
   const bar = document.getElementById("lancamentoToolbar");
   if (!bar) return;
@@ -4894,7 +4971,7 @@ function renderLancamentoRatesHtml(sellerId, ind) {
     const unit = rateIsAbsolute(r) ? "nº" : "%";
     if (r.manual) {
       const step = rateIsAbsolute(r) ? "1" : (rLb ? "0.01" : "1");
-      html += `<div class="sysfield rate"><label>${unit} ${escapeHtml(r.name)}</label><input type="number" class="sysratecell" data-seller="${sellerId}" data-rate="${r.id}" step="${step}" inputmode="${rateIsAbsolute(r) ? "numeric" : "decimal"}" value="${getSystemRate(sellerId, r.id) ?? ""}" placeholder="${rateIsAbsolute(r) ? "0" : (rLb ? "0,00" : "0")}"></div>`;
+      html += `<div class="sysfield rate"><label>${unit} ${escapeHtml(r.name)}</label><input type="number" class="sysratecell" tabindex="-1" data-seller="${sellerId}" data-rate="${r.id}" step="${step}" inputmode="${rateIsAbsolute(r) ? "numeric" : "decimal"}" value="${getSystemRate(sellerId, r.id) ?? ""}" placeholder="${rateIsAbsolute(r) ? "0" : (rLb ? "0,00" : "0")}"></div>`;
     } else {
       const rv = rateValue(r, [sellerId]);
       const tgt = matrizRateTarget(r);
@@ -4916,7 +4993,7 @@ function renderLancamentoCardsForSeller(sellerId, days) {
           const coVal = checkoutSum(sellerId, sub.id, days);
           subsRates += `<div class="sysfield sub locked"><label>↳ ${name}<span class="tag-co">check-out</span></label><input type="number" class="syscell-locked" value="${coVal ?? 0}" readonly tabindex="-1" title="Soma do check-out do mês (consultor)"></div>`;
         } else {
-          subsRates += `<div class="sysfield sub"><label>↳ ${name}</label><input type="number" class="syscell" data-seller="${sellerId}" data-field="${sub.id}" value="${getSystem(sellerId, sub.id) ?? ""}" placeholder="0"></div>`;
+          subsRates += `<div class="sysfield sub"><label>↳ ${name}</label><input type="number" class="syscell syscell-sub" tabindex="-1" data-seller="${sellerId}" data-field="${sub.id}" value="${getSystem(sellerId, sub.id) ?? ""}" placeholder="0"></div>`;
         }
       });
     }
@@ -4925,9 +5002,9 @@ function renderLancamentoCardsForSeller(sellerId, days) {
     if (!hasPrincipal && !subsRates) return "";
     const exp = lancamentoExpanded[ind.id] === true;
     const sysTitle = matrizBlockTitle(ind.name);
-    const headLabel = ind.pctOnly ? sysTitle.short : escapeHtml(String(ind.abbr || matrizDisplayName(ind.name)).toUpperCase());
+    const headLabel = ind.pctOnly ? sysTitle.short : lancamentoPrincipalLabel(ind);
     const principalHtml = hasPrincipal
-      ? `<div class="sysfield principal"><input type="number" class="syscell" data-seller="${sellerId}" data-field="${ind.id}" value="${getSystem(sellerId, ind.id) ?? ""}" placeholder="0" title="${escapeHtml(ind.name)}"></div>`
+      ? `<div class="sysfield principal"><input type="number" class="syscell syscell-principal" data-seller="${sellerId}" data-field="${ind.id}" value="${getSystem(sellerId, ind.id) ?? ""}" placeholder="0" title="${escapeHtml(ind.name)}"></div>`
       : "";
     return `<div class="sysgroup ${exp ? "" : "collapsed"}" data-ind="${ind.id}" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head sys-toggle" style="color:${ind.color}" data-ind="${ind.id}"${sysTitle.title}><span class="block-toggle">${exp ? "▾" : "▸"}</span> ${headLabel}</div>${hasPrincipal ? `<div class="sysgroup-principal">${principalHtml}</div>` : ""}<div class="sysgroup-subs">${subsRates}</div></div>`;
   }).filter(Boolean).join("");
@@ -4965,6 +5042,7 @@ function renderLancamentoCards() {
       if (activeView === "matriz") renderMatriz();
     });
   });
+  bindLancamentoTabNav();
 }
 function renderLancamentoModal() {
   renderLancamentoToolbar(orderedSellers());
