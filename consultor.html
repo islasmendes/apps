@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v86";
+  var BUILD = "v87";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -242,11 +242,28 @@
   .resumo-hero-left { flex: 1; min-width: 0; }
   .resumo-hero .hero-label { margin: 0 0 4px; font-weight: 800; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-size: 10px; }
   .resumo-hero .big { font-size: 30px; font-weight: 800; line-height: 1; flex-shrink: 0; text-align: right; }
-  .resumo-hero-pct.pulse-bad { animation: resumo-pct-pulse 1.35s ease-in-out infinite; }
-  @keyframes resumo-pct-pulse {
+  .resumo-hero-pct.pulse-bad, .resumo-proj-pct.pulse-bad { animation: resumo-pct-pulse-bad 1.35s ease-in-out infinite; }
+  .resumo-hero-pct.pulse-ok, .resumo-proj-pct.pulse-ok { animation: resumo-pct-pulse-ok 1.6s ease-in-out infinite; }
+  @keyframes resumo-pct-pulse-bad {
     0%, 100% { opacity: 1; text-shadow: 0 0 10px color-mix(in srgb, var(--danger) 35%, transparent); }
     50% { opacity: .72; text-shadow: 0 0 22px color-mix(in srgb, var(--danger) 65%, transparent); }
   }
+  @keyframes resumo-pct-pulse-ok {
+    0%, 100% { opacity: 1; text-shadow: 0 0 10px color-mix(in srgb, var(--ok) 40%, transparent); }
+    50% { opacity: .88; text-shadow: 0 0 24px color-mix(in srgb, var(--ok) 72%, transparent); }
+  }
+  .resumo-hero-venda { border-color: color-mix(in srgb, var(--accent-2) 42%, var(--border)); }
+  .resumo-hero-proj { text-align: right; flex-shrink: 0; }
+  .resumo-hero-abs { font-size: 15px; font-weight: 800; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .resumo-proj-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+  .resumo-proj-pct { font-size: 15px; font-weight: 800; white-space: nowrap; line-height: 1.1; }
+  .resumo-proj-abs { font-size: 11px; font-weight: 800; opacity: .92; font-variant-numeric: tabular-nums; }
+  .resumo-mini-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .resumo-mini-chip {
+    font-size: 9px; font-weight: 800; padding: 4px 8px; border-radius: 99px;
+    border: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 35%, transparent);
+  }
+  .resumo-detail-block { padding: 8px 12px 10px; border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent); background: color-mix(in srgb, var(--panel-2) 55%, transparent); }
   .resumo-hero .subline { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
   .resumo-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 10px; margin-top: 10px; }
   .resumo-chips.resumo-chips-duo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -518,7 +535,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v86"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v87"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -1608,6 +1625,50 @@ function getSystemRate(sellerId, rateId, m = todayISO()) {
   const v = monthData(m).systemRate?.[sellerId]?.[rateId];
   return v != null ? Number(v) : null;
 }
+function getSystemAt(sellerId, fieldId, m = todayISO()) {
+  const at = monthData(m).systemAt?.[sellerId]?.[fieldId];
+  return at != null ? Number(at) : null;
+}
+function getSystemCoSnap(sellerId, fieldId, m = todayISO()) {
+  const snap = monthData(m).systemCoSnap?.[sellerId]?.[fieldId];
+  return snap != null ? Number(snap) : null;
+}
+function systemDeltaFieldIds(fieldId) {
+  const ind = mainIndicatorById(fieldId);
+  if (ind) {
+    const coSubs = (ind.subs || []).filter(s => s.checkout).map(s => s.id);
+    if (coSubs.length) return coSubs;
+    if (ind.checkout) return [ind.id];
+    return [];
+  }
+  return [fieldId];
+}
+function checkoutRealAfterSystem(sellerId, fieldId, days, sinceAt, m = todayISO()) {
+  if (!sinceAt) return 0;
+  let sum = 0;
+  systemDeltaFieldIds(fieldId).forEach(fid => {
+    days.forEach(d => {
+      const c = getCell(sellerId, fid, d, m);
+      if (c.real == null || c.real === "") return;
+      const realAt = Number(c.realAt) || 0;
+      if (realAt > sinceAt) sum += Number(c.real);
+    });
+  });
+  return sum;
+}
+function checkoutDeltaAfterSystem(sellerId, fieldId, days, m = todayISO()) {
+  const at = getSystemAt(sellerId, fieldId, m);
+  if (at) {
+    const tsDelta = checkoutRealAfterSystem(sellerId, fieldId, days, at, m);
+    if (tsDelta !== 0) return tsDelta;
+  }
+  const snap = getSystemCoSnap(sellerId, fieldId, m);
+  if (snap != null) {
+    const co = checkoutSum(sellerId, fieldId, days, m) ?? 0;
+    return co - snap;
+  }
+  return 0;
+}
 function nameHasHoje(name) {
   return /hoje/.test(normName(name));
 }
@@ -1708,8 +1769,15 @@ function checkoutFieldId(fieldId) {
 function checkoutSum(sellerId, fieldId, days, m = todayISO()) {
   return accum(sellerId, checkoutFieldId(fieldId), "real", days, m);
 }
+/** Real espelho da matriz do gestor: ⚙ sistema + delta de check-outs após o lançamento. */
 function matrizFieldValue(sellerId, fieldId, days, periodo, m = todayISO()) {
-  return checkoutSum(sellerId, fieldId, days, m);
+  const co = checkoutSum(sellerId, fieldId, days, m);
+  const sys = getSystem(sellerId, fieldId, m);
+  if (sys == null || periodo !== "mes") return co;
+  const fullMonth = monthDays(m);
+  const isFullMonth = days.length === fullMonth.length && fullMonth.every(d => days.includes(d));
+  if (!isFullMonth) return co;
+  return sys + checkoutDeltaAfterSystem(sellerId, fieldId, fullMonth, m);
 }
 function sellerProjFromReal(sellerId, fieldId, realVal, m = todayISO()) {
   if (realVal == null || isNaN(realVal)) return null;
@@ -1927,9 +1995,10 @@ function fieldProjStats(cfg, sellerId, m = todayISO(), parentInd = null) {
   const lb = cfgLowerBetter(cfg, parentInd);
   const meta = sellerMetaFor(cfg, sellerId, m);
   const { done } = sellerWorkedSplit(sellerId, m);
-  const relato = accum(sellerId, cfg.id, "real", days, m);
+  const fid = checkoutFieldId(cfg.id);
+  const relato = accum(sellerId, fid, "real", days, m);
   const sistema = getSystem(sellerId, cfg.id, m);
-  const real = checkoutSum(sellerId, cfg.id, days, m);
+  const real = matrizFieldValue(sellerId, cfg.id, days, "mes", m);
   const proj = real != null ? sellerProjFromReal(sellerId, cfg.id, real, m) : null;
   const relatoProj = relato != null ? sellerProjFromReal(sellerId, cfg.id, relato, m) : null;
   const perfRatio = meta && proj != null ? matrizProjPerfRatio(proj, meta, lb) : null;
@@ -2244,54 +2313,111 @@ function bindResumoToggles() {
     };
   });
 }
+function resumoPulseClass(st) {
+  const { proj, meta, perfRatio, lb } = st;
+  if (proj == null && perfRatio == null) return "";
+  if (lb && meta != null) {
+    const band = matrizLowerBetterBand(proj, meta, matrizLowerWarnMargin(meta, false), false);
+    if (band === "ok") return " pulse-ok";
+    if (band === "danger") return " pulse-bad";
+    return "";
+  }
+  if (perfRatio != null) {
+    if (perfRatio >= 1) return " pulse-ok";
+    if (perfRatio < 0.7) return " pulse-bad";
+  }
+  return "";
+}
+function resumoProjFmt(st) {
+  const heatColor = resumoHeatColor(st.proj, st.meta, st.perfRatio, st.lb, false);
+  return {
+    pct: st.perfRatio != null ? pctTxt(st.perfRatio) : "—",
+    abs: st.proj != null ? (st.lb ? fmtPctFine(st.proj) : fmt(st.proj)) : "—",
+    metaLbl: st.meta != null ? (st.lb ? fmtPctFine(st.meta) : fmt(st.meta)) : null,
+    heatColor,
+    pulse: resumoPulseClass(st),
+    barW: resumoBarWidth(st.proj, st.meta, st.perfRatio, st.lb, false)
+  };
+}
 function resumoPrincipalKpiLine(ind, sid, m) {
   const days = monthDays(m);
   const rel = checkoutSum(sid, ind.id, days, m);
+  const matriz = matrizFieldValue(sid, ind.id, days, "mes", m);
   const sys = getSystem(sid, ind.id, m);
   const acc = sys != null ? fieldAccuracy(sid, ind.id, days, m) : null;
   const meta = sellerMetaFor(ind, sid, m);
-  const proj = rel != null ? sellerProjFromReal(sid, ind.id, rel, m) : null;
   const lb = cfgLowerBetter(ind);
-  const perf = meta && proj != null ? matrizProjPerfRatio(proj, meta, lb) : null;
-  const accColor = acc != null ? heatMatrizText(acc) : heatMatrizText(perf);
-  if (sys != null) {
-    return `<div class="resumo-principal-kpi">` +
-      `<span>CV <b>${rel != null ? fmt(rel) : "—"}</b></span><span class="sep">·</span>` +
-      `<span>Gestor <b>${fmt(sys)}</b></span><span class="sep">·</span>` +
-      `<span style="color:${accColor}">Acur. ${acc != null ? pctTxt(acc) : "—"}</span></div>`;
-  }
-  if (rel != null) {
-    let html = `<div class="resumo-principal-kpi"><span>Check-out <b>${fmt(rel)}</b></span>`;
-    if (meta) html += `<span class="sep">·</span><span>Meta <b>${lb ? fmtPctFine(meta) : fmt(meta)}</b></span>`;
-    if (perf != null) html += `<span class="sep">·</span><span style="color:${heatMatrizText(perf)}">${pctTxt(perf)}</span>`;
-    return html + `</div>`;
-  }
-  return `<div class="resumo-principal-kpi muted">Sem lançamento neste indicador.</div>`;
+  const accColor = acc != null ? heatMatrizText(acc) : "var(--text-faint)";
+  const parts = [];
+  parts.push(`<span>Matriz <b>${matriz != null ? fmt(matriz) : "—"}</b></span>`);
+  if (rel != null) parts.push(`<span class="sep">·</span><span>CV <b>${fmt(rel)}</b></span>`);
+  if (sys != null) parts.push(`<span class="sep">·</span><span>Gestor <b>${fmt(sys)}</b></span>`);
+  if (acc != null) parts.push(`<span class="sep">·</span><span style="color:${accColor}">Acur. ${pctTxt(acc)}</span>`);
+  if (meta) parts.push(`<span class="sep">·</span><span>Meta <b>${lb ? fmtPctFine(meta) : fmt(meta)}</b></span>`);
+  return `<div class="resumo-principal-kpi">${parts.join("")}</div>`;
+}
+function resumoPrincipalDetailBlock(ind, sid, m, st) {
+  return `<div class="resumo-detail-block">
+    ${resumoPrincipalKpiLine(ind, sid, m)}
+    <div class="resumo-row-meta" style="margin-top:6px">${resumoMetaLine(st)}</div>
+  </div>`;
 }
 function resumoPrincipalCard(ind, sid, m) {
   const color = ind.color || "var(--accent)";
   const subs = (ind.subs || []).filter(s => s.checkin || s.checkout);
   const rates = ind.rates || [];
-  const hasExpandable = subs.length > 0 || rates.length > 0;
   const isOpen = !!resumoExpanded[ind.id];
   const name = matrizDisplayName(ind.name);
-  const chev = hasExpandable ? `<span class="resumo-chev">${isOpen ? "▾" : "▸"}</span>` : "";
+  const chev = `<span class="resumo-chev">${isOpen ? "▾" : "▸"}</span>`;
   const st = fieldProjStats(ind, sid, m);
-  const heatColor = resumoHeatColor(st.proj, st.meta, st.perfRatio, st.lb, false);
-  const pctDisp = st.perfRatio != null ? pctTxt(st.perfRatio) : (st.real != null ? fmt(st.real) : "—");
-  let expandHtml = "";
-  if (hasExpandable) {
-    expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
-    subs.forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false, parentInd: ind }, m); });
-    rates.forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
-    expandHtml += `</div>`;
-  }
+  const p = resumoProjFmt(st);
+  let expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
+  expandHtml += resumoPrincipalDetailBlock(ind, sid, m, st);
+  subs.forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false, parentInd: ind }, m); });
+  rates.forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
+  expandHtml += `</div>`;
+  const metaHint = p.metaLbl ? `<div class="resumo-row-meta">Meta ${p.metaLbl}</div>` : "";
   return `<div class="resumo-card" style="--rc:${color}">
-    <div class="resumo-row resumo-ind-main${hasExpandable ? " toggle" : ""}${isOpen ? " open" : ""}"${hasExpandable ? ` data-ind-toggle="${ind.id}"` : ""} style="--rc:${color};--bc:${heatColor}">
-      <div class="resumo-row-top"><b>${name}${chev}</b><span class="pct" style="color:${heatColor}">${pctDisp}</span></div>
-      ${resumoPrincipalKpiLine(ind, sid, m)}
-      <div class="resumo-bar"><i style="width:${resumoBarWidth(st.proj, st.meta, st.perfRatio, st.lb, false)}%"></i></div>
+    <div class="resumo-row resumo-ind-main toggle${isOpen ? " open" : ""}" data-ind-toggle="${ind.id}" style="--rc:${color};--bc:${p.heatColor}">
+      <div class="resumo-row-top">
+        <b>${name}${chev}</b>
+        <div class="resumo-proj-stack">
+          <span class="pct resumo-proj-pct${p.pulse}" style="color:${p.heatColor}">${p.pct}</span>
+          <span class="resumo-proj-abs" style="color:${p.heatColor}">Proj. ${p.abs}</span>
+        </div>
+      </div>
+      ${metaHint}
+      <div class="resumo-bar"><i style="width:${p.barW}%"></i></div>
     </div>${expandHtml}</div>`;
+}
+function resumoVendaHeroHtml(venda, sid, m, monthLbl, discipline, metrics) {
+  if (!venda) {
+    return `<div class="resumo-hero resumo-hero-venda"><div class="hero-label">Vendas</div><div class="subline">Indicador de vendas não configurado na loja.</div></div>`;
+  }
+  const st = fieldProjStats(venda, sid, m);
+  const p = resumoProjFmt(st);
+  const callout = resumoCallout(venda, sid, m, false);
+  const adhColor = heatMatrizText(discipline.pct);
+  const accColor = heatMatrizText(metrics.acc);
+  const den = discipline.scheduled || 0;
+  return `<div class="resumo-hero resumo-hero-venda">
+    <div class="resumo-hero-head">
+      <div class="resumo-hero-left">
+        <div class="hero-label">Foco principal — ${escText(matrizDisplayName(venda.name))}</div>
+        <div class="subline" style="margin-top:0;">${monthLbl} · espelho da matriz do gestor</div>
+      </div>
+      <div class="resumo-hero-proj">
+        <div class="big resumo-hero-pct${p.pulse}" style="color:${p.heatColor}">${p.pct}</div>
+        <div class="resumo-hero-abs" style="color:${p.heatColor}">Proj. ${p.abs}${p.metaLbl ? ` · meta ${p.metaLbl}` : ""}</div>
+      </div>
+    </div>
+    ${callout.html}
+    <div class="resumo-mini-chips">
+      <span class="resumo-mini-chip" style="color:${adhColor}">Aderência ${discipline.pct != null ? pctTxt(discipline.pct) : "—"}${den ? ` · ${discipline.complete}/${den}` : ""}</span>
+      <span class="resumo-mini-chip" style="color:${accColor}">Acuracidade ${metrics.acc != null ? pctTxt(metrics.acc) : "—"}</span>
+    </div>
+    <div class="resumo-escala-line">${escText(consultorEscalaSummary(sid, m))}</div>
+  </div>`;
 }
 function renderResumo() {
   if (!seller || !lojaData) return;
@@ -2299,11 +2425,10 @@ function renderResumo() {
   const metrics = sellerMetrics(sid, m);
   const discipline = consultantDisciplineStats(sid, m);
   const monthLbl = new Date(m + "-02").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  const den = discipline.scheduled || 0;
-  const adhColor = heatMatrizText(discipline.pct);
-  const accColor = heatMatrizText(metrics.acc);
+  const venda = findVendaIndicator();
   const cards = [];
   resumoPrincipalIndicators().forEach(ind => {
+    if (isVendaIndicator(ind)) return;
     if (!principalHasResumoData(ind, sid, m)) return;
     cards.push(resumoPrincipalCard(ind, sid, m));
   });
@@ -2321,27 +2446,9 @@ function renderResumo() {
     cards.push(`<div class="resumo-card" style="--rc:${color}">${resumoPctOnlyHead(ind, color, isOpen)}${expandHtml}</div>`);
   });
   document.getElementById("resumoRoot").innerHTML = `
-    <div class="resumo-hero">
-      <div class="subline" style="margin:0 0 10px;">${monthLbl} · seu desempenho no mês</div>
-      <div class="resumo-chips resumo-chips-duo">
-        <div class="resumo-chip-item">
-          <span class="resumo-chip" style="color:${adhColor}">Aderência ${discipline.pct != null ? pctTxt(discipline.pct) : "—"}</span>
-          <span class="resumo-chip-leg">Dias ok na sua escala (completo · check-in · check-out).</span>
-          <div class="resumo-adh-grid">
-            <div><span class="k">Completo</span><span class="v">${den ? discipline.complete + "/" + den : "—"}</span></div>
-            <div><span class="k">Check-in</span><span class="v">${den ? discipline.checkinDays + "/" + den : "—"}</span></div>
-            <div><span class="k">Check-out</span><span class="v">${den ? discipline.checkoutDays + "/" + den : "—"}</span></div>
-          </div>
-        </div>
-        <div class="resumo-chip-item">
-          <span class="resumo-chip" style="color:${accColor}">Acuracidade ${metrics.acc != null ? pctTxt(metrics.acc) : "—"}</span>
-          <span class="resumo-chip-leg">Seu check-out acumulado batendo com o que o gestor lançou (indicadores principais).</span>
-        </div>
-      </div>
-      <div class="resumo-escala-line">${escText(consultorEscalaSummary(sid, m))}</div>
-    </div>
-    <div class="resumo-sec">Indicadores principais · toque para subs e taxas</div>
-    ${cards.length ? cards.join("") : '<div class="empty">Nenhum indicador com dados ainda.<br>Lance check-in/out ou aguarde o gestor lançar o sistema.</div>'}`;
+    ${resumoVendaHeroHtml(venda, sid, m, monthLbl, discipline, metrics)}
+    <div class="resumo-sec">Indicadores · toque para ver detalhes, subs e taxas</div>
+    ${cards.length ? cards.join("") : '<div class="empty">Nenhum outro indicador com dados ainda.<br>Lance check-in/out ou aguarde o gestor lançar o sistema.</div>'}`;
   bindResumoToggles();
 }
 function openResumo() {
