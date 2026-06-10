@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v85";
+  var BUILD = "v86";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -186,7 +186,8 @@
   }
   .hero-pills .urgency-pill { min-width: 0; width: 100%; }
   .hero-pills .btn-resumo {
-    cursor: pointer; grid-column: span 2; flex-direction: row; gap: 7px;
+    cursor: pointer; position: relative; z-index: 2; touch-action: manipulation;
+    grid-column: span 2; flex-direction: row; gap: 7px;
     width: 100%; min-height: 46px; padding: 8px 10px;
     background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 24%, var(--panel)), var(--panel-2));
     border: 1.5px solid color-mix(in srgb, var(--accent) 50%, var(--border));
@@ -517,7 +518,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v85"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v86"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -1142,6 +1143,7 @@ function cfgByIdLoqa(id) {
   }
   return null;
 }
+function cfgById(id) { return cfgByIdLoqa(id); }
 function parentIndOfCfg(cfg) {
   for (const ind of orderedIndicators()) {
     if (ind.id === cfg.id) return ind;
@@ -2285,7 +2287,7 @@ function resumoPrincipalCard(ind, sid, m) {
     expandHtml += `</div>`;
   }
   return `<div class="resumo-card" style="--rc:${color}">
-    <div class="resumo-row resumo-ind-main${hasExpandable ? " toggle" : ""}${isOpen ? " open" : ""}" data-ind-toggle="${ind.id}" style="--rc:${color};--bc:${heatColor}">
+    <div class="resumo-row resumo-ind-main${hasExpandable ? " toggle" : ""}${isOpen ? " open" : ""}"${hasExpandable ? ` data-ind-toggle="${ind.id}"` : ""} style="--rc:${color};--bc:${heatColor}">
       <div class="resumo-row-top"><b>${name}${chev}</b><span class="pct" style="color:${heatColor}">${pctDisp}</span></div>
       ${resumoPrincipalKpiLine(ind, sid, m)}
       <div class="resumo-bar"><i style="width:${resumoBarWidth(st.proj, st.meta, st.perfRatio, st.lb, false)}%"></i></div>
@@ -2343,9 +2345,15 @@ function renderResumo() {
   bindResumoToggles();
 }
 function openResumo() {
-  if (!seller) return;
-  renderResumo();
+  if (!seller) { toast("Faça login para ver o resumo.", true); return; }
   const ov = document.getElementById("resumoOverlay");
+  try {
+    renderResumo();
+  } catch (e) {
+    console.error("renderResumo", e);
+    const root = document.getElementById("resumoRoot");
+    if (root) root.innerHTML = `<div class="empty">Não foi possível montar o resumo.<br><span class="muted">${escText(e.message || "erro")}</span></div>`;
+  }
   ov.classList.add("show");
   ov.setAttribute("aria-hidden", "false");
 }
@@ -3089,7 +3097,8 @@ document.getElementById("btnLogin").onclick = () => {
     if (e.key === "Enter") document.getElementById("btnLogin").click();
   });
 });
-document.getElementById("btnResumo").onclick = () => openResumo();
+const btnResumoEl = document.getElementById("btnResumo");
+if (btnResumoEl) btnResumoEl.addEventListener("click", e => { e.preventDefault(); openResumo(); });
 document.getElementById("resumoClose").onclick = () => closeResumo();
 document.getElementById("resumoOverlay").onclick = e => { if (e.target.id === "resumoOverlay") closeResumo(); };
 document.addEventListener("visibilitychange", () => {
