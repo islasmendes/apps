@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v95";
+  var BUILD = "v94";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -1148,12 +1148,6 @@ function migrate(s) {
   if (!Array.isArray(s.ui.fechUnlock.days)) s.ui.fechUnlock.days = [];
   if (s.ui.view === "sistema" || s.ui.view === "resumo" || s.ui.view === "foco") s.ui.view = "matriz";
   if (s.ui.tabOrder) s.ui.tabOrder = s.ui.tabOrder.filter(v => v !== "sistema" && v !== "resumo" && v !== "foco");
-  if (s.ui.tabOrderAt == null) s.ui.tabOrderAt = 0;
-  if (Array.isArray(s.ui.tabOrder) && s.ui.tabOrder.length && !s.ui.tabOrderAt) {
-    const def = ["matriz", "diario", "fechamento", "rscen", "config", "kpis"];
-    const isDefault = s.ui.tabOrder.length === def.length && s.ui.tabOrder.every((v, i) => v === def[i]);
-    if (!isDefault) s.ui.tabOrderAt = Date.now();
-  }
   (s.indicators || []).forEach(i => {
     if (i.pctOnly == null) i.pctOnly = false;
     if (i.lowerBetter == null) i.lowerBetter = false;
@@ -1481,29 +1475,13 @@ function loadLocalStateSnapshot() {
   return null;
 }
 const TAB_VIEW_IDS = ["matriz", "diario", "fechamento", "rscen", "config", "kpis"];
-function uiTabOrderAt(st) { return Number(st?.ui?.tabOrderAt) || 0; }
-function cleanedTabOrder(st) {
-  if (!Array.isArray(st?.ui?.tabOrder)) return null;
-  const valid = new Set(TAB_VIEW_IDS);
-  const cleaned = st.ui.tabOrder.filter(v => valid.has(v));
-  return cleaned.length ? cleaned : null;
-}
-/** Preserva ordem de abas e tema — só aplica local se houve reordenação explícita (tabOrderAt). */
+/** Preserva ordem de abas e tema do navegador quando a nuvem ainda não sincronizou. */
 function mergeUiPrefsFromLocalState(target, local) {
   if (!target || !local) return target;
-  target.ui = target.ui || {};
-  const localOrder = cleanedTabOrder(local);
-  const targetOrder = cleanedTabOrder(target);
-  const localAt = uiTabOrderAt(local);
-  const targetAt = uiTabOrderAt(target);
-  if (localOrder) {
-    if (localAt > 0 && localAt >= targetAt) {
-      target.ui.tabOrder = localOrder.slice();
-      target.ui.tabOrderAt = localAt;
-    } else if (!targetOrder) {
-      target.ui.tabOrder = localOrder.slice();
-      if (localAt) target.ui.tabOrderAt = localAt;
-    }
+  if (Array.isArray(local.ui?.tabOrder) && local.ui.tabOrder.length) {
+    const valid = new Set(TAB_VIEW_IDS);
+    const cleaned = local.ui.tabOrder.filter(v => valid.has(v));
+    if (cleaned.length) target.ui.tabOrder = cleaned;
   }
   if (local.theme === "light" || local.theme === "dark") target.theme = local.theme;
   return target;
@@ -1797,8 +1775,6 @@ function applyTemplateFromCloud() {
     const changed = applyOperationalConfig(state, tpl);
     mergeKpiMetasFromLocalState(state, localSnap);
     if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
-    mergeUiPrefsFromLocalState(state, localSnap);
-    if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
     configApplying = false;
     if (changed) {
       lastPushedConfigHash = configHash(tpl);
@@ -1826,8 +1802,6 @@ function startConfigListener() {
       const changed = applyOperationalConfig(state, tpl);
       mergeKpiMetasFromLocalState(state, localSnap);
       if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
-      mergeUiPrefsFromLocalState(state, localSnap);
-      if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
       configApplying = false;
       if (!changed) return;
       lastPushedConfigHash = configHash(tpl);
@@ -2638,7 +2612,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v95"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v94"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -6751,6 +6725,12 @@ function confirmRecoverKpi() {
 }
 function tryPromptOrphanRecovery() {
   autoRecoverOrphanKpiData(state, { onlyEmpty: true });
+  if (sessionStorage.getItem("gc_orphan_prompt_v57")) return;
+  const orphans = scanOrphanedKpiData();
+  if (!orphans.length) return;
+  sessionStorage.setItem("gc_orphan_prompt_v57", "1");
+  toast("Há dados de KPI desligados — escolha origem e destino com cuidado", true);
+  setTimeout(() => openRecoverKpiModal(orphans[0].fieldId), 500);
 }
 function subShapeFromMain(ind) {
   return {
@@ -7357,9 +7337,7 @@ function reorderTabs(fromV, toV) {
   const fi = order.indexOf(fromV), ti = order.indexOf(toV);
   if (fi < 0 || ti < 0) return;
   order.splice(ti, 0, order.splice(fi, 1)[0]);
-  state.ui = state.ui || {};
   state.ui.tabOrder = order;
-  state.ui.tabOrderAt = Date.now();
   save({ immediatePush: true });
   applyTabOrder();
 }
@@ -8445,7 +8423,6 @@ function pullLoja(){
       watchDivisionalMetas();
       renderActive(); startLojaDataListener();
       tryPromptOrphanRecovery();
-      try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
     };
     if (v && v.data) {
       const localVis = state?.ui?.matrizShow ? { ...state.ui.matrizShow } : null;
@@ -8621,14 +8598,12 @@ function setupDiarioLockDelegation() {
 }
 function init() {
   applyTheme(); syncStore();
-  applyTabOrder();
-  monthData();
-  save({ skipPush: true });
+  monthData(); save();
   setupMonthPicker();
   setupDiarioLockDelegation();
   updateWorkdaysBadge();
   document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => showView(b.dataset.view));
-  setupTabDnD();
+  applyTabOrder(); setupTabDnD();
   document.querySelectorAll("#matrizPeriodo button").forEach(x => x.classList.toggle("active", x.dataset.p === matrizPeriodo));
   document.getElementById("themeToggle").onclick = () => { state.theme = state.theme==="dark"?"light":"dark"; save({ immediatePush: true }); applyTheme(); renderActive(); };
   document.getElementById("matrizReorder").onclick = () => { document.body.classList.toggle("moveon"); toast(document.body.classList.contains("moveon")? "Reordenar: arraste linhas e blocos" : "Reordenar desligado"); renderMatriz(); };
