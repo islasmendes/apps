@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v96";
+  var BUILD = "v95";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -270,7 +270,6 @@
     text-align: center;
   }
   .resumo-disc-block.muted { font-size: 10px; color: var(--text-faint); }
-  .resumo-hero-venda .resumo-proj-block { margin-top: 0; padding-top: 0; border-top: none; }
   .resumo-disc-labels {
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 6px;
     font-size: 8px; text-transform: uppercase; letter-spacing: .25px;
@@ -570,7 +569,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v96"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v95"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -2417,24 +2416,6 @@ function resumoProjCornerHtml(p, cfg, sellerId, m, parentInd) {
 function resumoProjCenterPctHtml(p) {
   return `<div class="resumo-pct-center"><span class="resumo-hero-pct${p.pulse}" style="color:${p.heatColor}">${p.pct}</span></div>`;
 }
-function resumoProjStatsGridHtml(st, p, cfg, sellerId, m, parentInd) {
-  const { pos, total } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
-  const metaDisp = st.meta != null ? fmtMatrizProj(st.meta, st.lb) : "—";
-  const realDisp = st.real != null ? fmt(st.real) : "—";
-  const projDisp = p.abs || "—";
-  const posDisp = pos && total > 1 ? `${pos}º de ${total}` : "—";
-  return `<div class="resumo-disc-block resumo-proj-block">
-    <div class="resumo-disc-labels">
-      <span>Meta</span><span>Real</span><span>Projeção</span><span>Posição na Loja</span>
-    </div>
-    <div class="resumo-disc-vals">
-      <span style="color:${p.heatColor}">${metaDisp}</span>
-      <span style="color:${p.heatColor}">${realDisp}</span>
-      <span style="color:${p.heatColor}">${projDisp}</span>
-      <span style="color:var(--accent-2)">${posDisp}</span>
-    </div>
-  </div>`;
-}
 function resumoDisciplineGridHtml(discipline, metrics) {
   const den = discipline.scheduled || 0;
   if (!den) return `<div class="resumo-disc-block muted">Sem escala no mês.</div>`;
@@ -2542,7 +2523,13 @@ function resumoVendaHeroHtml(venda, sid, m, monthLbl, discipline, metrics) {
   const p = resumoProjFmt(st);
   const motivHtml = resumoMotivHtml(st);
   return `<div class="resumo-hero resumo-hero-venda">
-    ${resumoProjStatsGridHtml(st, p, venda, sid, m, null)}
+    <div class="resumo-hero-head">
+      <div class="resumo-hero-left">
+        <div class="hero-label">Foco principal — ${escText(matrizDisplayName(venda.name))}</div>
+        <div class="subline" style="margin-top:0;">${monthLbl} · espelho da matriz do gestor</div>
+      </div>
+      ${resumoProjCornerHtml(p, venda, sid, m, null)}
+    </div>
     ${resumoProjCenterPctHtml(p)}
     ${motivHtml}
     ${resumoDisciplineGridHtml(discipline, metrics)}
