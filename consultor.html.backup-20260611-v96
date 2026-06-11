@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v97";
+  var BUILD = "v96";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -319,15 +319,12 @@
     font-size: 8px; font-weight: 600; line-height: 1.3; color: var(--text-faint);
     opacity: .62; padding: 0 1px; text-align: center;
   }
-  .resumo-ritmo-note {
+  .resumo-escala-line {
     margin-top: 10px; padding-top: 8px;
     border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
-    font-size: clamp(7px, 2.35vw, 8.5px); font-weight: 600; line-height: 1.25; color: var(--text-dim);
-    text-align: center; white-space: nowrap;
+    font-size: 9px; font-weight: 600; line-height: 1.45; color: var(--text-dim);
+    white-space: normal; word-break: break-word;
   }
-  .resumo-hero-title { margin-bottom: 4px; }
-  .resumo-hero-title b { font-size: 13px; }
-  .resumo-ind-main .resumo-proj-block { margin-top: 6px; padding-top: 0; border-top: none; }
   .resumo-sec { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .45px; color: var(--text-faint); margin: 14px 0 8px; }
   .resumo-card {
     border: 2px solid color-mix(in srgb, var(--rc) 58%, var(--border));
@@ -573,7 +570,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v97"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v96"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -2420,9 +2417,6 @@ function resumoProjCornerHtml(p, cfg, sellerId, m, parentInd) {
 function resumoProjCenterPctHtml(p) {
   return `<div class="resumo-pct-center"><span class="resumo-hero-pct${p.pulse}" style="color:${p.heatColor}">${p.pct}</span></div>`;
 }
-function resumoRitmoFootnoteHtml() {
-  return `<div class="resumo-ritmo-note">Esse % é o ritmo de produtividade pelo que você já fez; mantendo-o, entregará essa % da meta.</div>`;
-}
 function resumoProjStatsGridHtml(st, p, cfg, sellerId, m, parentInd) {
   const { pos, total } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
   const metaDisp = st.meta != null ? fmtMatrizProj(st.meta, st.lb) : "—";
@@ -2531,8 +2525,10 @@ function resumoPrincipalCard(ind, sid, m) {
   const motivHtml = resumoMotivHtml(st);
   return `<div class="resumo-card" style="--rc:${color}">
     <div class="resumo-row resumo-ind-main toggle${isOpen ? " open" : ""}" data-ind-toggle="${ind.id}" style="--rc:${color};--bc:${p.heatColor}">
-      <div class="resumo-row-top"><b>${name}${chev}</b></div>
-      ${resumoProjStatsGridHtml(st, p, ind, sid, m, null)}
+      <div class="resumo-row-top">
+        <b>${name}${chev}</b>
+        ${resumoProjCornerHtml(p, ind, sid, m, null)}
+      </div>
       ${resumoProjCenterPctHtml(p)}
       ${motivHtml}
       <div class="resumo-bar"><i style="width:${p.barW}%"></i></div>
@@ -2545,14 +2541,12 @@ function resumoVendaHeroHtml(venda, sid, m, monthLbl, discipline, metrics) {
   const st = fieldProjStats(venda, sid, m);
   const p = resumoProjFmt(st);
   const motivHtml = resumoMotivHtml(st);
-  const vendaName = escText(matrizDisplayName(venda.name));
   return `<div class="resumo-hero resumo-hero-venda">
-    <div class="resumo-row-top resumo-hero-title"><b>${vendaName}</b></div>
     ${resumoProjStatsGridHtml(st, p, venda, sid, m, null)}
     ${resumoProjCenterPctHtml(p)}
     ${motivHtml}
     ${resumoDisciplineGridHtml(discipline, metrics)}
-    ${resumoRitmoFootnoteHtml()}
+    <div class="resumo-escala-line">${escText(consultorEscalaSummary(sid, m))}</div>
   </div>`;
 }
 function renderResumo() {
