@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v93";
+  var BUILD = "v94";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -54,15 +54,40 @@
     --dio-out-bg: #122820; --dio-out-bd: #1f9a72; --dio-out-lbl: #5ee4b8;
   }
   html[data-theme="light"] {
-    --bg: #e9edf4; --bg-soft: #dfe5ef; --panel: #ffffff; --panel-2: #eef2f8;
-    --border: #b9c4d6; --border-soft: #d6dde8;
-    --text: #111829; --text-dim: #45506a; --text-faint: #6e7890;
-    --accent: #2a63d6; --accent-2: #0a9576; --neon: #07955d;
-    --danger: #d12d3a; --warn: #b86a08; --ok: #12895a; --info: #2a63d6;
-    --cell: #f5f8fc; --shadow: 0 10px 30px rgba(40,60,110,.14);
-    --dio-in-bg: #e8f0ff; --dio-in-bd: #6b9ae8; --dio-in-lbl: #1d4fa8;
-    --dio-out-bg: #e4f7ef; --dio-out-bd: #3cb88a; --dio-out-lbl: #0a6b4c;
+    --bg: #e4eaf3; --bg-soft: #d8e0ec; --panel: #ffffff; --panel-2: #eef2f8;
+    --border: #8fa3bc; --border-soft: #a8b8cc;
+    --text: #0f172a; --text-dim: #334155; --text-faint: #64748b;
+    --accent: #1d4ed8; --accent-2: #047857; --neon: #047857;
+    --danger: #b91c1c; --warn: #b45309; --ok: #047857; --info: #1d4ed8;
+    --cell: #f8fafc; --shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
+    --dio-in-bg: #e8f0ff; --dio-in-bd: #5b8fd9; --dio-in-lbl: #1e40af;
+    --dio-out-bg: #e4f7ef; --dio-out-bd: #2f9d72; --dio-out-lbl: #065f46;
   }
+  html[data-theme="light"] body { background: var(--bg); }
+  html[data-theme="light"] header.app { background: var(--panel); border-bottom-color: var(--border); }
+  html[data-theme="light"] nav.tabs { background: var(--panel); border-bottom-color: var(--border); }
+  html[data-theme="light"] nav.tabs button.active { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); color: var(--text); }
+  html[data-theme="light"] .table-wrap { border-color: var(--border); box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06); }
+  html[data-theme="light"] table th { background: var(--panel-2); border-bottom: 2px solid var(--border); color: var(--text-dim); }
+  html[data-theme="light"] table th, html[data-theme="light"] table td { border-color: var(--border-soft); }
+  html[data-theme="light"] td.name, html[data-theme="light"] th.name { background: var(--panel); border-right: 2px solid var(--border); box-shadow: 2px 0 0 var(--border-soft); }
+  html[data-theme="light"] tbody tr:hover td { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+  html[data-theme="light"] tbody tr:hover td.name { background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+  html[data-theme="light"] tr.total td { background: var(--panel-2); border-top: 2px solid var(--border); }
+  html[data-theme="light"] tr.vend td.name { background: var(--panel-2); }
+  html[data-theme="light"] tr.vend td { background: color-mix(in srgb, var(--panel-2) 85%, var(--panel)); }
+  html[data-theme="light"] .matriz-real { background: var(--cell); border-color: var(--border); color: var(--text); }
+  html[data-theme="light"] .neon { text-shadow: none; color: var(--neon); }
+  html[data-theme="light"] #matrizTip.matriz-tip { background: var(--panel); color: var(--text); box-shadow: var(--shadow); border-color: var(--border); }
+  html[data-theme="light"] .modal-bg { background: rgba(15, 23, 42, 0.42); }
+  html[data-theme="light"] .month-picker-pop { box-shadow: var(--shadow), 0 12px 32px rgba(15, 23, 42, 0.12); }
+  html[data-theme="light"] .dio-clear-week, html[data-theme="light"] .dio-clear-day { color: var(--danger) !important; }
+  html[data-theme="light"] .open-cross-mini .open-cross-msg.bad { color: var(--danger); }
+  html[data-theme="light"] #diarioTable tbody tr.dgroup td.name { box-shadow: inset 3px 0 0 var(--gc), 0 0 8px color-mix(in srgb, var(--gc) 12%, transparent); }
+  html[data-theme="light"] .matriz-filter-chip { border-color: var(--border-soft); background: var(--cell); }
+  html[data-theme="light"] .matriz-filter-chip.active { background: color-mix(in srgb, var(--accent) 16%, var(--cell)); border-color: var(--accent); color: var(--text); }
+  html[data-theme="light"] .panel { box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06); }
+  html[data-theme="light"] .sysgroup { background: var(--panel); }
   * { box-sizing: border-box; }
   body { margin: 0; background: radial-gradient(1100px 560px at 82% -12%, var(--bg-soft), var(--bg)) fixed; color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
   :focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); outline-offset: 1px; border-radius: 4px; }
@@ -741,8 +766,7 @@
 </header>
 
 <nav class="tabs" id="tabs">
-  <button data-view="matriz" class="active">Matriz / Painel</button>
-  <button data-view="foco">Foco</button>
+  <button data-view="matriz" class="active">Matriz</button>
   <button data-view="diario">Check-in / Check-out</button>
   <button data-view="fechamento">Fechamento Diário</button>
   <button data-view="rscen">RSCEN+</button>
@@ -776,36 +800,6 @@
       <div class="table-wrap" style="margin-top:6px;"><table id="acuracidadeTable"></table></div>
       <div class="acur-legend" id="acurLegend"></div>
       <div class="hint" style="margin-top:10px;"><b>Acuracidade</b> = quanto o check-out acumulado do CV “bate” com o ⚙ do gestor (quanto maior, melhor). Não usa a soma da matriz — compara relato puro × sistema. <b>Aderência</b> = na escala do mês: Completo | Check-in | Check-out (dias ok ÷ dias na escala).</div>
-    </div>
-  </section>
-
-  <!-- FOCO -->
-  <section class="view" id="view-foco">
-    <div class="panel">
-      <h2>Foco</h2>
-      <div class="sub">Disciplina de check-in/out, acuracidade do relato e evolução mensal por consultor.</div>
-      <details class="help foco-help" style="margin-top:8px;"><summary>O que significa cada bloco?</summary><div><b>Check-in / check-out</b> — dias encerrados na escala sem plano da manhã ou sem realizado do dia.<br><b>Relato furado</b> — acuracidade do relato (check-out × sistema).<br><b>Dias completos</b> — dias com check-in e check-out ok.<br><b>Ritmo</b> — meta ideal = média histórica × tendência do mês anterior (crescimento).<br><b>Histórico</b> — velas mês a mês (abertura = mês anterior, fechamento = realizado); compare indicadores no período escolhido.</div></details>
-      <div class="hint" style="margin:14px 0 8px; text-transform:uppercase; letter-spacing:.4px; font-weight:700;">⚠ Atenção — quem chamar pra conversar</div>
-      <div class="attn-cols" id="attnCols"></div>
-    </div>
-    <div class="foco-charts-grid">
-      <div class="panel foco-chart-panel">
-        <h2 style="margin:0;font-size:16px;">Ritmo do mês — real vs meta ideal</h2>
-        <div class="sub" style="margin-top:4px;">Meta ideal = média histórica ajustada pela tendência do mês anterior · tracejada = projeção</div>
-        <div class="foco-seller-bar" id="focoRitmoSellerBar"></div>
-        <div class="foco-ind-bar" id="focoRitmoIndBar"></div>
-        <canvas id="ritmoChart" height="280"></canvas>
-        <div class="foco-chart-legend" id="ritmoChartLegend"></div>
-      </div>
-      <div class="panel foco-chart-panel">
-        <h2 style="margin:0;font-size:16px;">Histórico mensal — produtividade</h2>
-        <div class="sub" style="margin-top:4px;">Velas por mês (abertura = mês anterior · fechamento = realizado) · selecione período e indicadores</div>
-        <div class="foco-seller-bar" id="focoHistSellerBar"></div>
-        <div class="foco-ind-bar" id="focoHistIndBar"></div>
-        <div class="foco-period-bar" id="focoHistPeriodBar"></div>
-        <canvas id="histChart" height="320"></canvas>
-        <div class="foco-chart-legend" id="histChartLegend"></div>
-      </div>
     </div>
   </section>
 
@@ -912,7 +906,7 @@
   <section class="view" id="view-rscen">
     <div class="panel">
       <div class="flex-between">
-        <div><h2>RSCEN+ · Árvore de Resultados</h2><div class="sub">Espelho da <b>Matriz / Painel</b> por loja — mesmos indicadores, cores, %, Proj. e ordenação. No <b>⌂ Total RSCEN</b>, passe o mouse nas células para ver escala, meta e fórmula da projeção. Use <b>Metas Divisional</b> para definir a meta real da divisional (base da projeção). Filtre lojas e vendedores acima; clique no <b>＋</b> para expandir.</div></div>
+        <div><h2>RSCEN+ · Árvore de Resultados</h2><div class="sub">Espelho da <b>Matriz</b> por loja — mesmos indicadores, cores, %, Proj. e ordenação. No <b>⌂ Total RSCEN</b>, passe o mouse nas células para ver escala, meta e fórmula da projeção. Use <b>Metas Divisional</b> para definir a meta real da divisional (base da projeção). Filtre lojas e vendedores acima; clique no <b>＋</b> para expandir.</div></div>
       </div>
       <div id="arvoreToolbar" class="matriz-toolbar arvore-toolbar" style="margin-top:10px;"></div>
       <div class="table-wrap" style="margin-top:10px;"><table id="arvoreTable"></table></div>
@@ -1152,8 +1146,8 @@ function migrate(s) {
   }
   if (!s.ui.fechUnlock || typeof s.ui.fechUnlock !== "object") s.ui.fechUnlock = { month: null, days: [] };
   if (!Array.isArray(s.ui.fechUnlock.days)) s.ui.fechUnlock.days = [];
-  if (s.ui.view === "sistema" || s.ui.view === "resumo") s.ui.view = "matriz";
-  if (s.ui.tabOrder) s.ui.tabOrder = s.ui.tabOrder.filter(v => v !== "sistema" && v !== "resumo");
+  if (s.ui.view === "sistema" || s.ui.view === "resumo" || s.ui.view === "foco") s.ui.view = "matriz";
+  if (s.ui.tabOrder) s.ui.tabOrder = s.ui.tabOrder.filter(v => v !== "sistema" && v !== "resumo" && v !== "foco");
   (s.indicators || []).forEach(i => {
     if (i.pctOnly == null) i.pctOnly = false;
     if (i.lowerBetter == null) i.lowerBetter = false;
@@ -1479,6 +1473,18 @@ function mergeKpiMetasFromLocalState(target, local) {
 function loadLocalStateSnapshot() {
   try { const raw = localStorage.getItem(LS_KEY); if (raw) return migrate(JSON.parse(raw)); } catch (e) { /* ignore */ }
   return null;
+}
+const TAB_VIEW_IDS = ["matriz", "diario", "fechamento", "rscen", "config", "kpis"];
+/** Preserva ordem de abas e tema do navegador quando a nuvem ainda não sincronizou. */
+function mergeUiPrefsFromLocalState(target, local) {
+  if (!target || !local) return target;
+  if (Array.isArray(local.ui?.tabOrder) && local.ui.tabOrder.length) {
+    const valid = new Set(TAB_VIEW_IDS);
+    const cleaned = local.ui.tabOrder.filter(v => valid.has(v));
+    if (cleaned.length) target.ui.tabOrder = cleaned;
+  }
+  if (local.theme === "light" || local.theme === "dark") target.theme = local.theme;
+  return target;
 }
 /** Preserva cfg local quando o template ainda usa nome antigo (ex.: após renomear no KPI). */
 function resolveLocalCfgForTemplate(st, reg, tInd) {
@@ -2606,7 +2612,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v93"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v94"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3383,12 +3389,12 @@ function fmt(n, dec = 0) { if (n == null || isNaN(n)) return "—"; return Numbe
 function pctTxt(p) { return p == null ? "—" : Math.round(p * 100) + "%"; }
 
 /* ===== Abas ===== */
-const views = ["matriz","foco","diario","fechamento","rscen","config","kpis"];
+const views = TAB_VIEW_IDS.slice();
 const DIVISIONAL_VIEWS = ["fechamento", "rscen"];
 let activeView = state.ui.view || "matriz";
-if (activeView === "sistema" || !views.includes(activeView)) activeView = "matriz";
+if (activeView === "sistema" || activeView === "resumo" || activeView === "foco" || !views.includes(activeView)) activeView = "matriz";
 function showView(v) {
-  if (v === "resumo") v = "matriz";
+  if (v === "resumo" || v === "foco") v = "matriz";
   if (divisionalMode() && !DIVISIONAL_VIEWS.includes(v)) {
     v = DIVISIONAL_VIEWS.includes(activeView) ? activeView : "rscen";
   }
@@ -3401,7 +3407,6 @@ function showView(v) {
 function renderActive() {
   updateWorkdaysBadge();
   if (activeView === "matriz") renderMatriz();
-  else if (activeView === "foco") renderFoco();
   else if (activeView === "diario") renderDiario();
   else if (activeView === "fechamento") renderFechamento();
   else if (activeView === "rscen") renderArvore();
@@ -5091,6 +5096,15 @@ function lancamentoFilteredSellers(allSellers) {
   const set = new Set(filter);
   return allSellers.filter(s => set.has(s.id));
 }
+/** Vendedores do lançamento na mesma ordem da matriz (filtro + ordenação ativa). */
+function lancamentoDisplaySellers(days = monthDays()) {
+  let sellers = orderedSellers();
+  const lf = state.ui.lancamentoFilter || [];
+  const mf = state.ui.matrizFilter || [];
+  if (lf.length) sellers = sellers.filter(s => lf.includes(s.id));
+  else if (mf.length) sellers = sellers.filter(s => mf.includes(s.id));
+  return matrizApplySellerOrder(sellers, days);
+}
 function lancamentoSubVisible(sub) {
   return !(sub.checkin && !sub.checkout);
 }
@@ -5218,7 +5232,7 @@ function renderLancamentoCards() {
   const box = document.getElementById("lancamentoSellers");
   if (!box) return;
   const days = monthDays();
-  const sellers = lancamentoFilteredSellers(orderedSellers());
+  const sellers = lancamentoDisplaySellers(days);
   if (!sellers.length) {
     box.innerHTML = '<div class="empty">Nenhum vendedor selecionado.</div>';
     return;
@@ -5250,7 +5264,8 @@ function renderLancamentoCards() {
   bindLancamentoTabNav();
 }
 function renderLancamentoModal() {
-  renderLancamentoToolbar(orderedSellers());
+  const days = monthDays();
+  renderLancamentoToolbar(lancamentoDisplaySellers(days));
   renderLancamentoCards();
 }
 function openLancamentoModal(sellerId) {
@@ -6423,7 +6438,7 @@ function renderIndicatorConfig() {
     const lbMode = indHasLowerBetterMode(ind);
     let html = `<div class="ind-card${lbMode ? " lower-better-mode" : ""}" data-ind="${ind.id}" style="border-color:${ind.color}; box-shadow:0 0 0 1px color-mix(in srgb, ${ind.color} 50%, transparent), 0 0 18px color-mix(in srgb, ${ind.color} 24%, transparent);"><div class="head">
       <span class="kpi-draghandle" draggable="true" data-drag-kpi-ind="${ind.id}" title="Arrastar para reordenar">⋮⋮</span>
-      <label class="switch" title="Exibir colunas na Matriz / Painel e RSCEN+"><input type="checkbox" class="ind-field" data-k="showInMatriz" ${ind.showInMatriz!==false?'checked':''}><span class="track"></span>Matriz</label>
+      <label class="switch" title="Exibir colunas na Matriz e RSCEN+"><input type="checkbox" class="ind-field" data-k="showInMatriz" ${ind.showInMatriz!==false?'checked':''}><span class="track"></span>Matriz</label>
       <span class="swatch" style="background:${ind.color}"></span>
       <input type="text" value="${escapeHtml(ind.name)}" data-k="name" class="ind-field" style="font-weight:700; min-width:150px;">
       <input type="color" value="${ind.color}" data-k="color" class="ind-field" style="width:42px; height:34px; padding:2px;">
@@ -7305,8 +7320,27 @@ function syncStore() { document.getElementById("storeName").value = state.storeN
 let toastTimer; function toast(msg, err) { const t = document.getElementById("toast"); t.textContent = msg; t.classList.toggle("err", !!err); t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove("show"), 1800); }
 
 /* ============================================================ INIT */
-function applyTabOrder(){ const nav=document.getElementById("tabs"); const order=state.ui.tabOrder; if(!order) return; order.forEach(v=>{ const btn=nav.querySelector(`button[data-view="${v}"]`); if(btn) nav.appendChild(btn); }); }
-function reorderTabs(fromV,toV){ const nav=document.getElementById("tabs"); const order=[...nav.querySelectorAll("button")].map(b=>b.dataset.view); const fi=order.indexOf(fromV), ti=order.indexOf(toV); if(fi<0||ti<0) return; order.splice(ti,0,order.splice(fi,1)[0]); state.ui.tabOrder=order; save(); applyTabOrder(); }
+function applyTabOrder() {
+  const nav = document.getElementById("tabs");
+  if (!nav) return;
+  const buttons = [...nav.querySelectorAll("button[data-view]")];
+  const byView = Object.fromEntries(buttons.map(b => [b.dataset.view, b]));
+  const defaultOrder = buttons.map(b => b.dataset.view);
+  let order = Array.isArray(state.ui.tabOrder) ? state.ui.tabOrder.filter(v => byView[v]) : [];
+  defaultOrder.forEach(v => { if (!order.includes(v)) order.push(v); });
+  state.ui.tabOrder = order;
+  order.forEach(v => { if (byView[v]) nav.appendChild(byView[v]); });
+}
+function reorderTabs(fromV, toV) {
+  const nav = document.getElementById("tabs");
+  const order = [...nav.querySelectorAll("button")].map(b => b.dataset.view);
+  const fi = order.indexOf(fromV), ti = order.indexOf(toV);
+  if (fi < 0 || ti < 0) return;
+  order.splice(ti, 0, order.splice(fi, 1)[0]);
+  state.ui.tabOrder = order;
+  save({ immediatePush: true });
+  applyTabOrder();
+}
 function setupTabDnD(){ const nav=document.getElementById("tabs"); let dragV=null; nav.querySelectorAll("button").forEach(btn=>{ btn.setAttribute("draggable","true"); btn.addEventListener("dragstart",e=>{ dragV=btn.dataset.view; btn.classList.add("dragging"); if(e.dataTransfer) e.dataTransfer.effectAllowed="move"; }); btn.addEventListener("dragend",()=>{ btn.classList.remove("dragging"); dragV=null; }); btn.addEventListener("dragover",e=>{ e.preventDefault(); btn.classList.add("drag-over"); }); btn.addEventListener("dragleave",()=>btn.classList.remove("drag-over")); btn.addEventListener("drop",e=>{ e.preventDefault(); btn.classList.remove("drag-over"); const t=btn.dataset.view; if(dragV&&t&&dragV!==t) reorderTabs(dragV,t); }); }); }
 /* ============================================================ FECHAMENTO DIÁRIO */
 let fechDay = (todayISO()===currentMonth ? new Date().getDate() : 1);
@@ -7579,7 +7613,7 @@ function recalcFechTotal(){ const tr=document.getElementById("fechTotal"); if(!t
 }
 
 
-/* ---------- Árvore RSCEN+ (espelha Matriz / Painel) ---------- */
+/* ---------- Árvore RSCEN+ (espelha Matriz) ---------- */
 let arvOpenLojas = {};
 function renderArvore() {
   const tbl = document.getElementById("arvoreTable");
@@ -8384,7 +8418,7 @@ function pullLoja(){
   fbDb.ref("lojas/"+lojaCode).once("value").then(snap => {
     const v = snap.val();
     const finish = () => {
-      applyTheme(); syncStore(); expandedBlocks = state.ui.expanded;
+      applyTheme(); applyTabOrder(); syncStore(); expandedBlocks = state.ui.expanded;
       updateDivisionalNav();
       watchDivisionalMetas();
       renderActive(); startLojaDataListener();
@@ -8397,12 +8431,16 @@ function pullLoja(){
       state = migrate(v.data);
       mergeKpiMetasFromLocalState(state, localSnap);
       if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
+      mergeUiPrefsFromLocalState(state, localSnap);
+      if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
       if (localVis) state.ui.matrizShow = { ...(state.ui.matrizShow || {}), ...localVis };
       applyMatrizShowUi(state);
       state.storeName = v.name || lojaCode;
       applyTemplateFromCloud().then(() => {
         mergeKpiMetasFromLocalState(state, localSnap);
         if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
+        mergeUiPrefsFromLocalState(state, localSnap);
+        if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
         applyMatrizShowUi(state);
         autoRecoverOrphanKpiData(state);
         save({ skipConfigPush: !isAdmin, immediatePush: true });
@@ -8567,7 +8605,7 @@ function init() {
   document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => showView(b.dataset.view));
   applyTabOrder(); setupTabDnD();
   document.querySelectorAll("#matrizPeriodo button").forEach(x => x.classList.toggle("active", x.dataset.p === matrizPeriodo));
-  document.getElementById("themeToggle").onclick = () => { state.theme = state.theme==="dark"?"light":"dark"; save(); applyTheme(); renderActive(); };
+  document.getElementById("themeToggle").onclick = () => { state.theme = state.theme==="dark"?"light":"dark"; save({ immediatePush: true }); applyTheme(); renderActive(); };
   document.getElementById("matrizReorder").onclick = () => { document.body.classList.toggle("moveon"); toast(document.body.classList.contains("moveon")? "Reordenar: arraste linhas e blocos" : "Reordenar desligado"); renderMatriz(); };
   document.getElementById("matrizCsv").onclick = exportCsv;
   document.getElementById("storeName").addEventListener("input", e => { state.storeName = e.target.value; save(); });
