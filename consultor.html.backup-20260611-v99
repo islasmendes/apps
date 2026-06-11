@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v100";
+  var BUILD = "v99";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -582,7 +582,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v100"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v99"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -2482,10 +2482,9 @@ function resumoProjStatsGridHtml(st, p, cfg, sellerId, m, parentInd) {
     </div>
   </div>`;
 }
-function resumoDisciplineGridHtml(discipline, metrics, sellerId, m = todayISO()) {
-  const scale = sellerMonthScheduleStats(sellerId, m);
-  const den = scale.trabalho || discipline.scheduled || 0;
-  if (!den) return `<div class="resumo-disc-block muted">Sem escala cadastrada neste mês.</div>`;
+function resumoDisciplineGridHtml(discipline, metrics) {
+  const den = discipline.scheduled || 0;
+  if (!den) return `<div class="resumo-disc-block muted">Sem escala no mês.</div>`;
   const adhCol = discipline.pct != null ? heatMatrizText(discipline.pct) : "var(--text-dim)";
   const accCol = metrics.acc != null ? heatMatrizText(metrics.acc) : "var(--text-dim)";
   const accDisp = metrics.acc != null ? pctTxt(metrics.acc) : "—";
@@ -2618,7 +2617,7 @@ function resumoVendaHeroHtml(venda, sid, m, monthLbl, discipline, metrics) {
     ${resumoProjStatsGridHtml(st, p, venda, sid, m, null)}
     ${resumoProjCenterPctHtml(p)}
     ${motivHtml}
-    ${resumoDisciplineGridHtml(discipline, metrics, sid, m)}
+    ${resumoDisciplineGridHtml(discipline, metrics)}
     ${resumoRitmoFootnoteHtml()}
   </div>`;
 }
