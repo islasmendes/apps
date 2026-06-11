@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v97";
+  var BUILD = "v98";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -322,8 +322,12 @@
   .resumo-ritmo-note {
     margin-top: 10px; padding-top: 8px;
     border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
-    font-size: clamp(7px, 2.35vw, 8.5px); font-weight: 600; line-height: 1.25; color: var(--text-dim);
-    text-align: center; white-space: nowrap;
+    width: 100%; box-sizing: border-box; overflow: hidden;
+    text-align: center; line-height: 1.2; color: var(--text-dim);
+  }
+  .resumo-ritmo-fit {
+    display: inline-block; white-space: nowrap; font-weight: 600;
+    font-size: 8.5px; transform-origin: center center;
   }
   .resumo-hero-title { margin-bottom: 4px; }
   .resumo-hero-title b { font-size: 13px; }
@@ -573,7 +577,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v97"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v98"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -2421,7 +2425,27 @@ function resumoProjCenterPctHtml(p) {
   return `<div class="resumo-pct-center"><span class="resumo-hero-pct${p.pulse}" style="color:${p.heatColor}">${p.pct}</span></div>`;
 }
 function resumoRitmoFootnoteHtml() {
-  return `<div class="resumo-ritmo-note">Esse % é o ritmo de produtividade pelo que você já fez; mantendo-o, entregará essa % da meta.</div>`;
+  return `<div class="resumo-ritmo-note"><span class="resumo-ritmo-fit">Esse % é o ritmo de produtividade pelo que você já fez; mantendo-o, entregará essa % da meta.</span></div>`;
+}
+function fitResumoRitmoNotes() {
+  requestAnimationFrame(() => {
+    document.querySelectorAll(".resumo-ritmo-note").forEach(box => {
+      const span = box.querySelector(".resumo-ritmo-fit");
+      if (!span) return;
+      span.style.transform = "";
+      span.style.fontSize = "8.5px";
+      const maxW = box.clientWidth;
+      if (!maxW) return;
+      let size = 8.5;
+      while (span.scrollWidth > maxW && size > 6) {
+        size -= 0.25;
+        span.style.fontSize = size + "px";
+      }
+      if (span.scrollWidth > maxW) {
+        span.style.transform = `scale(${maxW / span.scrollWidth})`;
+      }
+    });
+  });
 }
 function resumoProjStatsGridHtml(st, p, cfg, sellerId, m, parentInd) {
   const { pos, total } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
@@ -2587,6 +2611,7 @@ function renderResumo() {
     <div class="resumo-sec">Indicadores · toque para ver detalhes, subs e taxas</div>
     ${cards.length ? cards.join("") : '<div class="empty">Nenhum outro indicador com dados ainda.<br>Lance check-in/out ou aguarde o gestor lançar o sistema.</div>'}`;
   bindResumoToggles();
+  fitResumoRitmoNotes();
 }
 function openResumo() {
   if (!seller) { toast("Faça login para ver o resumo.", true); return; }
@@ -2600,6 +2625,13 @@ function openResumo() {
   }
   ov.classList.add("show");
   ov.setAttribute("aria-hidden", "false");
+  if (!window._resumoRitmoFitBound) {
+    window._resumoRitmoFitBound = true;
+    window.addEventListener("resize", () => {
+      if (document.getElementById("resumoOverlay")?.classList.contains("show")) fitResumoRitmoNotes();
+    });
+  }
+  fitResumoRitmoNotes();
 }
 function closeResumo() {
   const ov = document.getElementById("resumoOverlay");
