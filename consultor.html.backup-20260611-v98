@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v99";
+  var BUILD = "v98";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -582,7 +582,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v99"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v98"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -2342,12 +2342,7 @@ function resumoFieldRow(cfg, color, sellerId, opts, m = todayISO()) {
   const { real, meta, proj, perfRatio, lb } = st;
   const heatColor = resumoHeatColor(proj, meta, perfRatio, lb, false);
   const barW = resumoBarWidth(proj, meta, perfRatio, lb, false);
-  const hasTarget = meta != null && meta > 0;
-  const titleColor = hasTarget ? "var(--text)" : "var(--accent)";
-  const pctDisp = hasTarget
-    ? (perfRatio != null ? pctTxt(perfRatio) : "—")
-    : (real != null ? fmt(real) : "—");
-  const rightColor = hasTarget ? heatColor : (real != null ? "var(--text)" : "var(--text-dim)");
+  const pctDisp = perfRatio != null ? pctTxt(perfRatio) : "—";
   const lbTag = lb ? " ↓" : "";
   let rankHtml = "";
   if (opts.showRank) {
@@ -2361,11 +2356,10 @@ function resumoFieldRow(cfg, color, sellerId, opts, m = todayISO()) {
   const chev = opts.toggle ? `<span class="resumo-chev">${opts.open ? "▾" : "▸"}</span>` : "";
   const cls = `resumo-row${opts.sub ? " sub" : ""}${opts.main ? " resumo-ind-main" : ""}${opts.toggle ? " toggle" : ""}${opts.open ? " open" : ""}`;
   const attrs = opts.main && opts.indId ? ` data-ind-toggle="${opts.indId}"` : "";
-  const metaHtml = hasTarget ? `<div class="resumo-row-meta">${resumoMetaLine(st)}</div>` : "";
-  const barHtml = hasTarget ? `<div class="resumo-bar"><i style="width:${barW}%"></i></div>` : "";
   return `<div class="${cls}" style="--rc:${color};--bc:${heatColor}"${attrs}>
-    <div class="resumo-row-top"><b class="${hasTarget ? "" : "resumo-rate-link"}" style="color:${titleColor}">${opts.sub ? "↳ " : ""}${cfg.name}${lbTag}${chev}</b><span class="pct" style="color:${rightColor}">${pctDisp}</span></div>
-    ${metaHtml}${barHtml}${rankHtml}${callout}</div>`;
+    <div class="resumo-row-top"><b>${opts.sub ? "↳ " : ""}${cfg.name}${lbTag}${chev}</b><span class="pct" style="color:${heatColor}">${pctDisp}</span></div>
+    <div class="resumo-row-meta">${resumoMetaLine(st)}</div>
+    <div class="resumo-bar"><i style="width:${barW}%"></i></div>${rankHtml}${callout}</div>`;
 }
 function resumoAtingTxt(perfRatio, lowerBetter) {
   if (perfRatio == null) return "";
@@ -2382,18 +2376,12 @@ function resumoRateRow(rate, ind, color, sellerId, m = todayISO(), sub) {
   const label = rateDisplayName(rate, ind);
   const valDisp = rateFmtValue(rate, val, ind);
   const tgtDisp = rateFmtTarget(rate, target, ind);
-  const hasTarget = target != null && target > 0;
-  const titleColor = hasTarget ? "var(--text)" : "var(--accent)";
-  const rightDisp = hasTarget
-    ? (perfRatio != null ? pctTxt(perfRatio) : "—")
-    : (val != null ? valDisp : "—");
-  const rightColor = hasTarget ? heatColor : (val != null ? "var(--text)" : "var(--text-dim)");
+  const pctDisp = perfRatio != null ? pctTxt(perfRatio) : "—";
   const atingMeta = resumoAtingTxt(perfRatio, lb);
-  const metaHtml = hasTarget ? `<div class="resumo-row-meta">Valor ${valDisp} · Alvo ${tgtDisp}${atingMeta ? " · " + atingMeta : ""}</div>` : "";
-  const barHtml = hasTarget ? `<div class="resumo-bar"><i style="width:${barW}%"></i></div>` : "";
   return `<div class="resumo-row rate${sub ? " sub" : ""}" style="--rc:${color};--bc:${heatColor}">
-    <div class="resumo-row-top"><b class="${hasTarget ? "" : "resumo-rate-link"}" style="color:${titleColor}">${sub ? "↳ " : ""}${label}${lb ? " ↓" : ""}</b><span class="pct" style="color:${rightColor}">${rightDisp}</span></div>
-    ${metaHtml}${barHtml}</div>`;
+    <div class="resumo-row-top"><b>${sub ? "↳ " : ""}${label}${lb ? " ↓" : ""}</b><span class="pct" style="color:${heatColor}">${pctDisp}</span></div>
+    <div class="resumo-row-meta">Valor ${valDisp} · Alvo ${tgtDisp}${atingMeta ? " · " + atingMeta : ""}</div>
+    <div class="resumo-bar"><i style="width:${barW}%"></i></div></div>`;
 }
 function resumoPctOnlyHead(ind, color, isOpen) {
   const rates = ind.rates || [];
@@ -2531,56 +2519,28 @@ function resumoProjFmt(st) {
     barW: resumoBarWidth(st.proj, st.meta, st.perfRatio, st.lb, false)
   };
 }
-function sellerMonthScheduleStats(sellerId, m = todayISO()) {
-  const n = daysInMonth(m);
-  const isCurrent = todayISO() === m;
-  const today = isCurrent ? todayDay() : n + 1;
-  const { ahead } = sellerWorkedSplit(sellerId, m);
-  let folgasConcluidas = 0;
-  for (let d = 1; d <= n; d++) {
-    if (sellerWorks(sellerId, d, m)) continue;
-    if (isCurrent && d >= today) continue;
-    folgasConcluidas++;
-  }
-  const discipline = consultantDisciplineStats(sellerId, m);
-  return {
-    trabalho: discipline.scheduled || sellerWorkedCount(sellerId, m),
-    concluido: discipline.complete,
-    folgasConcluidas,
-    faltam: ahead
-  };
-}
-function resumoDetailGridHtml(cols, labels, values, colors) {
-  const cells = values.map((v, i) => `<span style="color:${colors[i] || "var(--text)"}">${v}</span>`).join("");
-  return `<div class="resumo-detail-grid cols${cols}">
-    <div class="resumo-disc-labels">${labels.map(l => `<span>${l}</span>`).join("")}</div>
-    <div class="resumo-disc-vals">${cells}</div>
-  </div>`;
-}
-function resumoIndInputStats(ind, sid, m) {
+function resumoPrincipalKpiLine(ind, sid, m) {
   const days = monthDays(m);
-  const cv = checkoutSum(sid, ind.id, days, m);
-  const gestor = getSystem(sid, ind.id, m);
-  const acc = gestor != null ? fieldAccuracy(sid, ind.id, days, m) : null;
-  return { cv, gestor, acc };
+  const rel = checkoutSum(sid, ind.id, days, m);
+  const matriz = matrizFieldValue(sid, ind.id, days, "mes", m);
+  const sys = getSystem(sid, ind.id, m);
+  const acc = sys != null ? fieldAccuracy(sid, ind.id, days, m) : null;
+  const meta = sellerMetaFor(ind, sid, m);
+  const lb = cfgLowerBetter(ind);
+  const accColor = acc != null ? heatMatrizText(acc) : "var(--text-faint)";
+  const parts = [];
+  parts.push(`<span>Matriz <b>${matriz != null ? fmt(matriz) : "—"}</b></span>`);
+  if (rel != null) parts.push(`<span class="sep">·</span><span>CV <b>${fmt(rel)}</b></span>`);
+  if (sys != null) parts.push(`<span class="sep">·</span><span>Gestor <b>${fmt(sys)}</b></span>`);
+  if (acc != null) parts.push(`<span class="sep">·</span><span style="color:${accColor}">Acur. ${pctTxt(acc)}</span>`);
+  if (meta) parts.push(`<span class="sep">·</span><span>Meta <b>${lb ? fmtPctFine(meta) : fmt(meta)}</b></span>`);
+  return `<div class="resumo-principal-kpi">${parts.join("")}</div>`;
 }
-function resumoPrincipalDetailBlock(ind, sid, m) {
-  const input = resumoIndInputStats(ind, sid, m);
-  const sched = sellerMonthScheduleStats(sid, m);
-  const accCol = input.acc != null ? heatMatrizText(input.acc) : "var(--text-dim)";
-  const row1 = resumoDetailGridHtml(
-    3,
-    ["Input CV (acum.)", "Input Gestor (últ.)", "Acurácia"],
-    [input.cv != null ? fmt(input.cv) : "—", input.gestor != null ? fmt(input.gestor) : "—", input.acc != null ? pctTxt(input.acc) : "—"],
-    ["var(--text)", input.gestor != null ? "var(--accent)" : "var(--text-dim)", accCol]
-  );
-  const row2 = resumoDetailGridHtml(
-    4,
-    ["Dias Trabalho", "Total Concluído", "Folgas Concl.", "Faltam"],
-    [sched.trabalho, sched.concluido, sched.folgasConcluidas, sched.faltam],
-    ["var(--text)", "var(--ok)", "var(--text-dim)", "var(--warn)"]
-  );
-  return `<div class="resumo-detail-block resumo-detail-grids">${row1}${row2}</div>`;
+function resumoPrincipalDetailBlock(ind, sid, m, st) {
+  return `<div class="resumo-detail-block">
+    ${resumoPrincipalKpiLine(ind, sid, m)}
+    <div class="resumo-row-meta" style="margin-top:6px">${resumoMetaLine(st)}</div>
+  </div>`;
 }
 function resumoPrincipalCard(ind, sid, m) {
   const color = ind.color || "var(--accent)";
@@ -2592,9 +2552,9 @@ function resumoPrincipalCard(ind, sid, m) {
   const st = fieldProjStats(ind, sid, m);
   const p = resumoProjFmt(st);
   let expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
-  expandHtml += resumoPrincipalDetailBlock(ind, sid, m);
-  subs.forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false, parentInd: ind }, m); });
-  rates.forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
+  expandHtml += resumoPrincipalDetailBlock(ind, sid, m, st);
+  subs.filter(sub => resumoFieldRowHasData(sub, sid, m, ind)).forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false, parentInd: ind }, m); });
+  rates.filter(rate => resumoRateHasData(rate, sid, m)).forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
   expandHtml += resumoRankNoteHtml(ind, sid, m);
   expandHtml += `</div>`;
   const motivHtml = resumoMotivHtml(st);
