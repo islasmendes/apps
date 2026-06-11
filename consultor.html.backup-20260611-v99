@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v100";
+  var BUILD = "v99";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2482,10 +2482,9 @@ function resumoProjStatsGridHtml(st, p, cfg, sellerId, m, parentInd) {
     </div>
   </div>`;
 }
-function resumoDisciplineGridHtml(discipline, metrics, sellerId, m = todayISO()) {
-  const scale = sellerMonthScheduleStats(sellerId, m);
-  const den = scale.trabalho || discipline.scheduled || 0;
-  if (!den) return `<div class="resumo-disc-block muted">Sem escala cadastrada neste mês.</div>`;
+function resumoDisciplineGridHtml(discipline, metrics) {
+  const den = discipline.scheduled || 0;
+  if (!den) return `<div class="resumo-disc-block muted">Sem escala no mês.</div>`;
   const adhCol = discipline.pct != null ? heatMatrizText(discipline.pct) : "var(--text-dim)";
   const accCol = metrics.acc != null ? heatMatrizText(metrics.acc) : "var(--text-dim)";
   const accDisp = metrics.acc != null ? pctTxt(metrics.acc) : "—";
