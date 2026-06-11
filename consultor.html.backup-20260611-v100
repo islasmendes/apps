@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v88";
+  var BUILD = "v100";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -242,9 +242,9 @@
   .resumo-hero-left { flex: 1; min-width: 0; }
   .resumo-hero .hero-label { margin: 0 0 4px; font-weight: 800; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; font-size: 10px; }
   .resumo-hero .big { font-size: 30px; font-weight: 800; line-height: 1; flex-shrink: 0; text-align: right; }
-  .resumo-hero-pct.pulse-bad, .resumo-proj-pct.pulse-bad, .resumo-motiv.bad.pulse-bad { animation: resumo-pct-pulse-bad 1.35s ease-in-out infinite; }
-  .resumo-hero-pct.pulse-ok, .resumo-proj-pct.pulse-ok, .resumo-motiv.ok.pulse-ok { animation: resumo-pct-pulse-ok 1.6s ease-in-out infinite; }
-  .resumo-motiv.warn.pulse-warn { animation: resumo-pct-pulse-warn 1.45s ease-in-out infinite; }
+  .resumo-hero-pct.pulse-bad, .resumo-pct-center .resumo-hero-pct.pulse-bad, .resumo-motiv.bad.pulse-bad { animation: resumo-pct-pulse-bad 1.35s ease-in-out infinite; }
+  .resumo-hero-pct.pulse-ok, .resumo-pct-center .resumo-hero-pct.pulse-ok, .resumo-motiv.ok.pulse-ok { animation: resumo-pct-pulse-ok 1.6s ease-in-out infinite; }
+  .resumo-motiv.warn.pulse-warn, .resumo-pct-center .resumo-hero-pct.pulse-warn { animation: resumo-pct-pulse-warn 1.45s ease-in-out infinite; }
   @keyframes resumo-pct-pulse-bad {
     0%, 100% { opacity: 1; text-shadow: 0 0 10px color-mix(in srgb, var(--danger) 35%, transparent); }
     50% { opacity: .72; text-shadow: 0 0 22px color-mix(in srgb, var(--danger) 65%, transparent); }
@@ -258,24 +258,52 @@
     50% { opacity: .8; text-shadow: 0 0 18px color-mix(in srgb, var(--warn) 58%, transparent); }
   }
   .resumo-motiv {
-    font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .35px;
-    margin-top: 6px; line-height: 1.35; text-align: center;
+    font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .35px;
+    margin-top: 2px; line-height: 1.4; text-align: center;
   }
+  .resumo-pct-center { text-align: center; margin: 6px 0 2px; }
+  .resumo-pct-center .resumo-hero-pct { font-size: 30px; font-weight: 800; line-height: 1; display: inline-block; }
+  .resumo-proj-corner { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; text-align: right; }
+  .resumo-disc-block {
+    margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+    text-align: center;
+  }
+  .resumo-disc-block.muted { font-size: 10px; color: var(--text-faint); }
+  .resumo-hero-venda .resumo-proj-block { margin-top: 0; padding-top: 0; border-top: none; }
+  .resumo-disc-labels {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 6px;
+    font-size: 8px; text-transform: uppercase; letter-spacing: .25px;
+    color: var(--text-faint); font-weight: 700; margin-bottom: 4px;
+  }
+  .resumo-disc-vals {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 6px;
+    font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; align-items: center;
+  }
+  .resumo-disc-sep { display: none; }
+  .resumo-proj-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; text-align: right; }
+  .resumo-proj-stack-hero .big.resumo-hero-pct { font-size: 30px; line-height: 1; }
+  .resumo-proj-meta, .resumo-proj-abs, .resumo-proj-rank { font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.25; }
+  .resumo-proj-stack-hero .resumo-proj-meta, .resumo-proj-stack-hero .resumo-proj-abs { font-size: 12px; }
+  .resumo-proj-rank { font-size: 10px; color: var(--accent-2); margin-top: 2px; }
   .resumo-motiv.ok { color: var(--ok); }
   .resumo-motiv.warn { color: var(--warn); }
   .resumo-motiv.bad { color: #ff8a94; }
   .resumo-hero-venda { border-color: color-mix(in srgb, var(--accent-2) 42%, var(--border)); }
   .resumo-hero-proj { text-align: right; flex-shrink: 0; }
   .resumo-hero-abs { font-size: 15px; font-weight: 800; margin-top: 3px; font-variant-numeric: tabular-nums; }
-  .resumo-proj-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
   .resumo-proj-pct { font-size: 15px; font-weight: 800; white-space: nowrap; line-height: 1.1; }
-  .resumo-proj-abs { font-size: 11px; font-weight: 800; opacity: .92; font-variant-numeric: tabular-nums; }
   .resumo-mini-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .resumo-mini-chip {
     font-size: 9px; font-weight: 800; padding: 4px 8px; border-radius: 99px;
     border: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 35%, transparent);
   }
   .resumo-detail-block { padding: 8px 12px 10px; border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent); background: color-mix(in srgb, var(--panel-2) 55%, transparent); }
+  .resumo-detail-grids { display: flex; flex-direction: column; gap: 8px; }
+  .resumo-detail-grid .resumo-disc-labels { font-size: 7.5px; letter-spacing: .15px; }
+  .resumo-detail-grid.cols3 .resumo-disc-labels,
+  .resumo-detail-grid.cols3 .resumo-disc-vals { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .resumo-row.rate .resumo-row-top b.resumo-rate-link { font-weight: 800; }
   .resumo-hero .subline { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
   .resumo-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 10px; margin-top: 10px; }
   .resumo-chips.resumo-chips-duo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -296,12 +324,19 @@
     font-size: 8px; font-weight: 600; line-height: 1.3; color: var(--text-faint);
     opacity: .62; padding: 0 1px; text-align: center;
   }
-  .resumo-escala-line {
+  .resumo-ritmo-note {
     margin-top: 10px; padding-top: 8px;
     border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
-    font-size: 9px; font-weight: 600; line-height: 1.45; color: var(--text-dim);
-    white-space: normal; word-break: break-word;
+    width: 100%; box-sizing: border-box; overflow: hidden;
+    text-align: center; line-height: 1.2; color: var(--text-dim);
   }
+  .resumo-ritmo-fit {
+    display: inline-block; white-space: nowrap; font-weight: 600;
+    font-size: 8.5px; transform-origin: center center;
+  }
+  .resumo-hero-title { margin-bottom: 4px; }
+  .resumo-hero-title b { font-size: 13px; }
+  .resumo-ind-main .resumo-proj-block { margin-top: 6px; padding-top: 0; border-top: none; }
   .resumo-sec { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .45px; color: var(--text-faint); margin: 14px 0 8px; }
   .resumo-card {
     border: 2px solid color-mix(in srgb, var(--rc) 58%, var(--border));
@@ -547,7 +582,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v88"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v100"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -983,7 +1018,7 @@ function mergeConsultorLojaFromRemote(remote) {
     if (!lojaData.months) lojaData.months = {};
     if (!lojaData.months[month]) lojaData.months[month] = { daily: {} };
     const lm = lojaData.months[month];
-    ["system", "systemRate", "systemAt", "systemCoSnap", "meta", "sched"].forEach(k => {
+    ["system", "systemRate", "systemAt", "systemCoSnap", "meta", "metaLoja", "sched", "diasUteis", "sabados"].forEach(k => {
       if (rm[k] !== undefined) lm[k] = rm[k];
     });
     if (rm.daily?.[seller?.id]) mergeSellerDailyFromRemote(rm.daily[seller.id], seller.id, month);
@@ -1808,11 +1843,29 @@ function sellerMetaCapacity(cfg, sellerId, m = todayISO()) {
   for (let d = 1; d <= n; d++) if (sellerWorks(sellerId, d, m)) s += metaForDay(cfg, m, d);
   return s;
 }
-function sellerMetaFor(cfg, sellerId, m = todayISO()) {
+/** Meta Loja repartida por consultor ativo (espelha metaLojaTargetForMatriz do painel). */
+function metaLojaTargetForSeller(cfg, m = todayISO()) {
+  const ml = getMetaLoja(cfg.id, m);
+  if (ml == null || ml <= 0) return null;
+  return ml / Math.max(1, teamSellerTotal());
+}
+/** Meta mensal / capacidade na escala / Meta Loja para um cfg (espelha matrizMetaForProj do painel). */
+function sellerMetaFromCfg(cfg, sellerId, m = todayISO()) {
   const mm = metaMonthFor(cfg);
   if (mm > 0) return mm;
   const cap = sellerMetaCapacity(cfg, sellerId, m);
-  return cap > 0 ? cap : null;
+  if (cap > 0) return cap;
+  return metaLojaTargetForSeller(cfg, m);
+}
+function sellerMetaFor(cfg, sellerId, m = todayISO()) {
+  let meta = sellerMetaFromCfg(cfg, sellerId, m);
+  if (meta != null) return meta;
+  const ind = mainIndicatorById(cfg.id);
+  if (ind && ind.id === cfg.id) {
+    const sub = parentRollupHojeSub(ind);
+    if (sub) meta = sellerMetaFromCfg(sub, sellerId, m);
+  }
+  return meta;
 }
 function rateIsFunnelConversion(rate) {
   return !!(rate && !rate.manual && !rate.absolute && /\s+p\/\s+/i.test(String(rate.name || "")));
@@ -2117,8 +2170,8 @@ function consultantDisciplineStats(sellerId, m = todayISO()) {
       }
     });
     const dayComplete = !gaps.length;
-    if (isCurrent && d >= today) continue;
-    closed++;
+    if (isCurrent && d > today) continue;
+    if (!(isCurrent && d === today)) closed++;
     if (dayComplete) complete++;
     if (needsIn && inOk) checkinDays++;
     if (needsOut && outOk) checkoutDays++;
@@ -2289,7 +2342,12 @@ function resumoFieldRow(cfg, color, sellerId, opts, m = todayISO()) {
   const { real, meta, proj, perfRatio, lb } = st;
   const heatColor = resumoHeatColor(proj, meta, perfRatio, lb, false);
   const barW = resumoBarWidth(proj, meta, perfRatio, lb, false);
-  const pctDisp = perfRatio != null ? pctTxt(perfRatio) : "—";
+  const hasTarget = meta != null && meta > 0;
+  const titleColor = hasTarget ? "var(--text)" : "var(--accent)";
+  const pctDisp = hasTarget
+    ? (perfRatio != null ? pctTxt(perfRatio) : "—")
+    : (real != null ? fmt(real) : "—");
+  const rightColor = hasTarget ? heatColor : (real != null ? "var(--text)" : "var(--text-dim)");
   const lbTag = lb ? " ↓" : "";
   let rankHtml = "";
   if (opts.showRank) {
@@ -2303,10 +2361,11 @@ function resumoFieldRow(cfg, color, sellerId, opts, m = todayISO()) {
   const chev = opts.toggle ? `<span class="resumo-chev">${opts.open ? "▾" : "▸"}</span>` : "";
   const cls = `resumo-row${opts.sub ? " sub" : ""}${opts.main ? " resumo-ind-main" : ""}${opts.toggle ? " toggle" : ""}${opts.open ? " open" : ""}`;
   const attrs = opts.main && opts.indId ? ` data-ind-toggle="${opts.indId}"` : "";
+  const metaHtml = hasTarget ? `<div class="resumo-row-meta">${resumoMetaLine(st)}</div>` : "";
+  const barHtml = hasTarget ? `<div class="resumo-bar"><i style="width:${barW}%"></i></div>` : "";
   return `<div class="${cls}" style="--rc:${color};--bc:${heatColor}"${attrs}>
-    <div class="resumo-row-top"><b>${opts.sub ? "↳ " : ""}${cfg.name}${lbTag}${chev}</b><span class="pct" style="color:${heatColor}">${pctDisp}</span></div>
-    <div class="resumo-row-meta">${resumoMetaLine(st)}</div>
-    <div class="resumo-bar"><i style="width:${barW}%"></i></div>${rankHtml}${callout}</div>`;
+    <div class="resumo-row-top"><b class="${hasTarget ? "" : "resumo-rate-link"}" style="color:${titleColor}">${opts.sub ? "↳ " : ""}${cfg.name}${lbTag}${chev}</b><span class="pct" style="color:${rightColor}">${pctDisp}</span></div>
+    ${metaHtml}${barHtml}${rankHtml}${callout}</div>`;
 }
 function resumoAtingTxt(perfRatio, lowerBetter) {
   if (perfRatio == null) return "";
@@ -2323,12 +2382,18 @@ function resumoRateRow(rate, ind, color, sellerId, m = todayISO(), sub) {
   const label = rateDisplayName(rate, ind);
   const valDisp = rateFmtValue(rate, val, ind);
   const tgtDisp = rateFmtTarget(rate, target, ind);
-  const pctDisp = perfRatio != null ? pctTxt(perfRatio) : "—";
+  const hasTarget = target != null && target > 0;
+  const titleColor = hasTarget ? "var(--text)" : "var(--accent)";
+  const rightDisp = hasTarget
+    ? (perfRatio != null ? pctTxt(perfRatio) : "—")
+    : (val != null ? valDisp : "—");
+  const rightColor = hasTarget ? heatColor : (val != null ? "var(--text)" : "var(--text-dim)");
   const atingMeta = resumoAtingTxt(perfRatio, lb);
+  const metaHtml = hasTarget ? `<div class="resumo-row-meta">Valor ${valDisp} · Alvo ${tgtDisp}${atingMeta ? " · " + atingMeta : ""}</div>` : "";
+  const barHtml = hasTarget ? `<div class="resumo-bar"><i style="width:${barW}%"></i></div>` : "";
   return `<div class="resumo-row rate${sub ? " sub" : ""}" style="--rc:${color};--bc:${heatColor}">
-    <div class="resumo-row-top"><b>${sub ? "↳ " : ""}${label}${lb ? " ↓" : ""}</b><span class="pct" style="color:${heatColor}">${pctDisp}</span></div>
-    <div class="resumo-row-meta">Valor ${valDisp} · Alvo ${tgtDisp}${atingMeta ? " · " + atingMeta : ""}</div>
-    <div class="resumo-bar"><i style="width:${barW}%"></i></div></div>`;
+    <div class="resumo-row-top"><b class="${hasTarget ? "" : "resumo-rate-link"}" style="color:${titleColor}">${sub ? "↳ " : ""}${label}${lb ? " ↓" : ""}</b><span class="pct" style="color:${rightColor}">${rightDisp}</span></div>
+    ${metaHtml}${barHtml}</div>`;
 }
 function resumoPctOnlyHead(ind, color, isOpen) {
   const rates = ind.rates || [];
@@ -2360,13 +2425,99 @@ function resumoMotivHtml(st) {
   if (!m.msg) return "";
   return `<div class="resumo-motiv ${m.tone}${m.pulse}">${m.msg}</div>`;
 }
-function resumoRankHtml(cfg, sellerId, m, parentInd = null) {
-  const { pos, total, note } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
-  if (!pos || total <= 1) return "";
-  const label = pos === 1 ? "1º na loja" : pos === 2 ? "2º na loja" : pos === 3 ? "3º na loja" : `${pos}º na loja`;
-  let html = `<div class="resumo-rank">${label} · ${total} vendedores</div>`;
-  if (note) html += `<div class="resumo-rank-note">${note}</div>`;
+function resumoRankNoteHtml(cfg, sellerId, m, parentInd = null) {
+  const { note } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
+  return note ? `<div class="resumo-rank-note">${note}</div>` : "";
+}
+function resumoProjCornerHtml(p, cfg, sellerId, m, parentInd) {
+  const { pos, total } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
+  let html = `<div class="resumo-proj-corner">`;
+  if (p.metaLbl) html += `<span class="resumo-proj-meta" style="color:${p.heatColor}">Meta = ${p.metaLbl}</span>`;
+  html += `<span class="resumo-proj-abs" style="color:${p.heatColor}">Proj. ${p.abs}</span>`;
+  if (pos && total > 1) html += `<span class="resumo-proj-rank">${pos}º / ${total}</span>`;
+  html += `</div>`;
   return html;
+}
+function resumoProjCenterPctHtml(p) {
+  return `<div class="resumo-pct-center"><span class="resumo-hero-pct${p.pulse}" style="color:${p.heatColor}">${p.pct}</span></div>`;
+}
+function resumoRitmoFootnoteHtml() {
+  return `<div class="resumo-ritmo-note"><span class="resumo-ritmo-fit">Esse % é o ritmo de produtividade pelo que você já fez; mantendo-o, entregará essa % da meta.</span></div>`;
+}
+function fitResumoRitmoNotes() {
+  requestAnimationFrame(() => {
+    document.querySelectorAll(".resumo-ritmo-note").forEach(box => {
+      const span = box.querySelector(".resumo-ritmo-fit");
+      if (!span) return;
+      span.style.transform = "";
+      span.style.fontSize = "8.5px";
+      const maxW = box.clientWidth;
+      if (!maxW) return;
+      let size = 8.5;
+      while (span.scrollWidth > maxW && size > 6) {
+        size -= 0.25;
+        span.style.fontSize = size + "px";
+      }
+      if (span.scrollWidth > maxW) {
+        span.style.transform = `scale(${maxW / span.scrollWidth})`;
+      }
+    });
+  });
+}
+function resumoProjStatsGridHtml(st, p, cfg, sellerId, m, parentInd) {
+  const { pos, total } = teamRankByProjPct(cfg.id, cfg, sellerId, m, parentInd);
+  const metaDisp = st.meta != null ? fmtMatrizProj(st.meta, st.lb) : "—";
+  const realDisp = st.real != null ? fmt(st.real) : "—";
+  const projDisp = p.abs || "—";
+  const posDisp = pos && total > 1 ? `${pos}º de ${total}` : "—";
+  return `<div class="resumo-disc-block resumo-proj-block">
+    <div class="resumo-disc-labels">
+      <span>Meta</span><span>Real</span><span>Projeção</span><span>Posição na Loja</span>
+    </div>
+    <div class="resumo-disc-vals">
+      <span style="color:${p.heatColor}">${metaDisp}</span>
+      <span style="color:${p.heatColor}">${realDisp}</span>
+      <span style="color:${p.heatColor}">${projDisp}</span>
+      <span style="color:var(--accent-2)">${posDisp}</span>
+    </div>
+  </div>`;
+}
+function resumoDisciplineGridHtml(discipline, metrics, sellerId, m = todayISO()) {
+  const scale = sellerMonthScheduleStats(sellerId, m);
+  const den = scale.trabalho || discipline.scheduled || 0;
+  if (!den) return `<div class="resumo-disc-block muted">Sem escala cadastrada neste mês.</div>`;
+  const adhCol = discipline.pct != null ? heatMatrizText(discipline.pct) : "var(--text-dim)";
+  const accCol = metrics.acc != null ? heatMatrizText(metrics.acc) : "var(--text-dim)";
+  const accDisp = metrics.acc != null ? pctTxt(metrics.acc) : "—";
+  return `<div class="resumo-disc-block">
+    <div class="resumo-disc-labels">
+      <span>Completo</span><span>Check-in</span><span>Check-out</span><span>Acur. média</span>
+    </div>
+    <div class="resumo-disc-vals">
+      <span style="color:${adhCol}">${discipline.complete}/${den}</span>
+      <span style="color:${adhCol}">${discipline.checkinDays}/${den}</span>
+      <span style="color:${adhCol}">${discipline.checkoutDays}/${den}</span>
+      <span style="color:${accCol}">${accDisp}</span>
+    </div>
+  </div>`;
+}
+function resumoGestorSubs(ind) {
+  return (ind.subs || []).filter(s => !s.checkin && !s.checkout);
+}
+function resumoGestorRates(ind) {
+  return ind.rates || [];
+}
+function resumoFieldRowHasData(cfg, sellerId, m, parentInd) {
+  if (fieldHasMonthData(sellerId, cfg.id, m)) return true;
+  if (getSystem(sellerId, cfg.id, m) != null) return true;
+  const st = fieldProjStats(cfg, sellerId, m, parentInd);
+  return st.meta != null || st.real != null || st.relato != null || st.sistema != null;
+}
+function resumoRateHasData(rate, sellerId, m) {
+  if (rateValueForSeller(rate, sellerId, m) != null) return true;
+  if (getSystemRate(sellerId, rate.id, m) != null) return true;
+  const target = matrizRateTarget(rate, m);
+  return target != null && target > 0;
 }
 function resumoProjFmt(st) {
   const heatColor = resumoHeatColor(st.proj, st.meta, st.perfRatio, st.lb, false);
@@ -2381,57 +2532,75 @@ function resumoProjFmt(st) {
     barW: resumoBarWidth(st.proj, st.meta, st.perfRatio, st.lb, false)
   };
 }
-function resumoPrincipalKpiLine(ind, sid, m) {
-  const days = monthDays(m);
-  const rel = checkoutSum(sid, ind.id, days, m);
-  const matriz = matrizFieldValue(sid, ind.id, days, "mes", m);
-  const sys = getSystem(sid, ind.id, m);
-  const acc = sys != null ? fieldAccuracy(sid, ind.id, days, m) : null;
-  const meta = sellerMetaFor(ind, sid, m);
-  const lb = cfgLowerBetter(ind);
-  const accColor = acc != null ? heatMatrizText(acc) : "var(--text-faint)";
-  const parts = [];
-  parts.push(`<span>Matriz <b>${matriz != null ? fmt(matriz) : "—"}</b></span>`);
-  if (rel != null) parts.push(`<span class="sep">·</span><span>CV <b>${fmt(rel)}</b></span>`);
-  if (sys != null) parts.push(`<span class="sep">·</span><span>Gestor <b>${fmt(sys)}</b></span>`);
-  if (acc != null) parts.push(`<span class="sep">·</span><span style="color:${accColor}">Acur. ${pctTxt(acc)}</span>`);
-  if (meta) parts.push(`<span class="sep">·</span><span>Meta <b>${lb ? fmtPctFine(meta) : fmt(meta)}</b></span>`);
-  return `<div class="resumo-principal-kpi">${parts.join("")}</div>`;
+/** Escala individual do CV (monthData.sched[sellerId]) — dias de trabalho, folgas e ritmo do mês. */
+function sellerMonthScheduleStats(sellerId, m = todayISO()) {
+  const n = daysInMonth(m);
+  const isCurrent = todayISO() === m;
+  const today = isCurrent ? todayDay() : n + 1;
+  const trabalho = sellerWorkedCount(sellerId, m);
+  const concluido = sellerScaleClosedDays(sellerId, m);
+  const { ahead } = sellerWorkedSplit(sellerId, m);
+  let folgasConcluidas = 0;
+  for (let d = 1; d <= n; d++) {
+    if (sellerWorks(sellerId, d, m)) continue;
+    if (isCurrent && d >= today) continue;
+    folgasConcluidas++;
+  }
+  return { trabalho, concluido, folgasConcluidas, faltam: ahead };
 }
-function resumoPrincipalDetailBlock(ind, sid, m, st) {
-  return `<div class="resumo-detail-block">
-    ${resumoPrincipalKpiLine(ind, sid, m)}
-    <div class="resumo-row-meta" style="margin-top:6px">${resumoMetaLine(st)}</div>
+function resumoDetailGridHtml(cols, labels, values, colors) {
+  const cells = values.map((v, i) => `<span style="color:${colors[i] || "var(--text)"}">${v}</span>`).join("");
+  return `<div class="resumo-detail-grid cols${cols}">
+    <div class="resumo-disc-labels">${labels.map(l => `<span>${l}</span>`).join("")}</div>
+    <div class="resumo-disc-vals">${cells}</div>
   </div>`;
+}
+function resumoIndInputStats(ind, sid, m) {
+  const days = monthDays(m);
+  const cv = checkoutSum(sid, ind.id, days, m);
+  const gestor = getSystem(sid, ind.id, m);
+  const acc = gestor != null ? fieldAccuracy(sid, ind.id, days, m) : null;
+  return { cv, gestor, acc };
+}
+function resumoPrincipalDetailBlock(ind, sid, m) {
+  const input = resumoIndInputStats(ind, sid, m);
+  const sched = sellerMonthScheduleStats(sid, m);
+  const accCol = input.acc != null ? heatMatrizText(input.acc) : "var(--text-dim)";
+  const row1 = resumoDetailGridHtml(
+    3,
+    ["Input CV (acum.)", "Input Gestor (últ.)", "Acurácia"],
+    [input.cv != null ? fmt(input.cv) : "—", input.gestor != null ? fmt(input.gestor) : "—", input.acc != null ? pctTxt(input.acc) : "—"],
+    ["var(--text)", input.gestor != null ? "var(--accent)" : "var(--text-dim)", accCol]
+  );
+  const row2 = resumoDetailGridHtml(
+    4,
+    ["Dias Trabalho", "Total Concluído", "Folgas Concl.", "Faltam"],
+    [sched.trabalho, sched.concluido, sched.folgasConcluidas, sched.faltam],
+    ["var(--text)", "var(--ok)", "var(--text-dim)", "var(--warn)"]
+  );
+  return `<div class="resumo-detail-block resumo-detail-grids">${row1}${row2}</div>`;
 }
 function resumoPrincipalCard(ind, sid, m) {
   const color = ind.color || "var(--accent)";
-  const subs = (ind.subs || []).filter(s => s.checkin || s.checkout);
-  const rates = ind.rates || [];
+  const subs = resumoGestorSubs(ind);
+  const rates = resumoGestorRates(ind);
   const isOpen = !!resumoExpanded[ind.id];
   const name = matrizDisplayName(ind.name);
   const chev = `<span class="resumo-chev">${isOpen ? "▾" : "▸"}</span>`;
   const st = fieldProjStats(ind, sid, m);
   const p = resumoProjFmt(st);
   let expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
-  expandHtml += resumoPrincipalDetailBlock(ind, sid, m, st);
+  expandHtml += resumoPrincipalDetailBlock(ind, sid, m);
   subs.forEach(sub => { expandHtml += resumoFieldRow(sub, color, sid, { sub: true, showRank: false, parentInd: ind }, m); });
   rates.forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
+  expandHtml += resumoRankNoteHtml(ind, sid, m);
   expandHtml += `</div>`;
-  const metaHint = p.metaLbl ? `<div class="resumo-row-meta">Meta ${p.metaLbl}</div>` : "";
-  const rankHtml = resumoRankHtml(ind, sid, m);
   const motivHtml = resumoMotivHtml(st);
   return `<div class="resumo-card" style="--rc:${color}">
     <div class="resumo-row resumo-ind-main toggle${isOpen ? " open" : ""}" data-ind-toggle="${ind.id}" style="--rc:${color};--bc:${p.heatColor}">
-      <div class="resumo-row-top">
-        <b>${name}${chev}</b>
-        <div class="resumo-proj-stack">
-          <span class="pct resumo-proj-pct${p.pulse}" style="color:${p.heatColor}">${p.pct}</span>
-          <span class="resumo-proj-abs" style="color:${p.heatColor}">Proj. ${p.abs}</span>
-        </div>
-      </div>
-      ${metaHint}
-      ${rankHtml}
+      <div class="resumo-row-top"><b>${name}${chev}</b></div>
+      ${resumoProjStatsGridHtml(st, p, ind, sid, m, null)}
+      ${resumoProjCenterPctHtml(p)}
       ${motivHtml}
       <div class="resumo-bar"><i style="width:${p.barW}%"></i></div>
     </div>${expandHtml}</div>`;
@@ -2442,29 +2611,15 @@ function resumoVendaHeroHtml(venda, sid, m, monthLbl, discipline, metrics) {
   }
   const st = fieldProjStats(venda, sid, m);
   const p = resumoProjFmt(st);
-  const rankHtml = resumoRankHtml(venda, sid, m);
   const motivHtml = resumoMotivHtml(st);
-  const adhColor = heatMatrizText(discipline.pct);
-  const accColor = heatMatrizText(metrics.acc);
-  const den = discipline.scheduled || 0;
+  const vendaName = escText(matrizDisplayName(venda.name));
   return `<div class="resumo-hero resumo-hero-venda">
-    <div class="resumo-hero-head">
-      <div class="resumo-hero-left">
-        <div class="hero-label">Foco principal — ${escText(matrizDisplayName(venda.name))}</div>
-        <div class="subline" style="margin-top:0;">${monthLbl} · espelho da matriz do gestor</div>
-      </div>
-      <div class="resumo-hero-proj">
-        <div class="big resumo-hero-pct${p.pulse}" style="color:${p.heatColor}">${p.pct}</div>
-        <div class="resumo-hero-abs" style="color:${p.heatColor}">Proj. ${p.abs}${p.metaLbl ? ` · meta ${p.metaLbl}` : ""}</div>
-      </div>
-    </div>
-    ${rankHtml}
+    <div class="resumo-row-top resumo-hero-title"><b>${vendaName}</b></div>
+    ${resumoProjStatsGridHtml(st, p, venda, sid, m, null)}
+    ${resumoProjCenterPctHtml(p)}
     ${motivHtml}
-    <div class="resumo-mini-chips">
-      <span class="resumo-mini-chip" style="color:${adhColor}">Aderência ${discipline.pct != null ? pctTxt(discipline.pct) : "—"}${den ? ` · ${discipline.complete}/${den}` : ""}</span>
-      <span class="resumo-mini-chip" style="color:${accColor}">Acuracidade ${metrics.acc != null ? pctTxt(metrics.acc) : "—"}</span>
-    </div>
-    <div class="resumo-escala-line">${escText(consultorEscalaSummary(sid, m))}</div>
+    ${resumoDisciplineGridHtml(discipline, metrics, sid, m)}
+    ${resumoRitmoFootnoteHtml()}
   </div>`;
 }
 function renderResumo() {
@@ -2488,16 +2643,18 @@ function renderResumo() {
     let expandHtml = "";
     if (rates.length) {
       expandHtml = `<div class="resumo-expand${isOpen ? " open" : ""}">`;
-      rates.forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
+      rates.filter(rate => resumoRateHasData(rate, sid, m)).forEach(rate => { expandHtml += resumoRateRow(rate, ind, color, sid, m, true); });
       expandHtml += `</div>`;
     }
     cards.push(`<div class="resumo-card" style="--rc:${color}">${resumoPctOnlyHead(ind, color, isOpen)}${expandHtml}</div>`);
   });
+  if (venda) cards.push(resumoPrincipalCard(venda, sid, m));
   document.getElementById("resumoRoot").innerHTML = `
     ${resumoVendaHeroHtml(venda, sid, m, monthLbl, discipline, metrics)}
     <div class="resumo-sec">Indicadores · toque para ver detalhes, subs e taxas</div>
     ${cards.length ? cards.join("") : '<div class="empty">Nenhum outro indicador com dados ainda.<br>Lance check-in/out ou aguarde o gestor lançar o sistema.</div>'}`;
   bindResumoToggles();
+  fitResumoRitmoNotes();
 }
 function openResumo() {
   if (!seller) { toast("Faça login para ver o resumo.", true); return; }
@@ -2511,6 +2668,13 @@ function openResumo() {
   }
   ov.classList.add("show");
   ov.setAttribute("aria-hidden", "false");
+  if (!window._resumoRitmoFitBound) {
+    window._resumoRitmoFitBound = true;
+    window.addEventListener("resize", () => {
+      if (document.getElementById("resumoOverlay")?.classList.contains("show")) fitResumoRitmoNotes();
+    });
+  }
+  fitResumoRitmoNotes();
 }
 function closeResumo() {
   const ov = document.getElementById("resumoOverlay");
@@ -2792,6 +2956,23 @@ function scheduleRenderFields() {
   renderFieldsNow();
 }
 function renderFields() { scheduleRenderFields(); }
+function patchOpenQuestionBoxAfterSave(fieldId, day, month) {
+  const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
+  const box = document.querySelector(`.dio-box.open-q[data-open-fid="${fieldId}"]`);
+  if (!cfg || !box || !seller) { scheduleRenderFields(); return; }
+  const c = getCell(seller.id, fieldId, day, month);
+  const locked = cellLockedForConsultor(c, "plan", day, month, cfg);
+  const planMine = cellIsMine(c, "plan", cfg);
+  box.classList.toggle("locked", locked);
+  box.classList.toggle("mine", planMine && !locked);
+  const slotLbl = box.classList.contains("out") ? "Check-out" : "Check-in";
+  const lbl = box.querySelector(".dio-lbl");
+  if (lbl) lbl.innerHTML = `${slotLbl} ${lockLabel(c, "plan", day, month, cfg)}`;
+  box.querySelectorAll("[data-open-save]").forEach(el => el.remove());
+  box.querySelectorAll(".open-yn-btn, [data-open-qty], [data-open-justif]").forEach(el => { el.disabled = locked; });
+  updateOpenCrossUi(box);
+  updateProgress();
+}
 function patchDioBoxAfterConfirm(fieldId, key, day, month) {
   const cfg = fieldList().find(f => f.cfg.id === fieldId)?.cfg;
   const inp = document.querySelector(`input[data-fid="${fieldId}"][data-key="${key}"]`);
@@ -2934,7 +3115,7 @@ async function saveOpenPlan(box) {
     const cell = snap.val() || {};
     if (cellLockedForConsultor(cell, "plan", day, month, cfg) && isOpenPlanComplete(cell)) {
       toast(cell.planBy === "gestor" ? "Preenchido pelo gestor — não pode alterar" : "Resposta já salva — não pode alterar", true);
-      renderFields();
+      patchOpenQuestionBoxAfterSave(fieldId, day, month);
       return;
     }
     if (planYes === null) { toast("Escolha Sim ou Não", true); return; }
@@ -2942,7 +3123,7 @@ async function saveOpenPlan(box) {
     if (planYes === true) {
       if (qtyRaw === "" || isNaN(Number(qtyRaw)) || Number(qtyRaw) < 0) { toast("Informe quantas confirmações", true); return; }
     }
-    const payload = { planYes, planJustif: justif, planBy: "consultor", planAt: Date.now() };
+    const payload = { planYes, planJustif: justif, planBy: "consultor", planAt: Date.now(), planConfirm: true };
     if (planYes === true) payload.plan = Number(qtyRaw);
     await ref.update(payload);
     if (planYes === false) await ref.child("plan").remove();
@@ -2950,15 +3131,19 @@ async function saveOpenPlan(box) {
     setLocalCell(seller.id, fieldId, day, month, "planJustif", justif);
     setLocalCell(seller.id, fieldId, day, month, "planBy", "consultor");
     setLocalCell(seller.id, fieldId, day, month, "planAt", Date.now());
+    setLocalCellFlag(seller.id, fieldId, day, month, "planConfirm", true);
+    persistConfirmLocal(seller.id, fieldId, day, month, "plan");
     if (planYes === true) setLocalCell(seller.id, fieldId, day, month, "plan", Number(qtyRaw));
     else {
       const md = lojaData.months?.[month];
       if (md?.daily?.[seller.id]?.[fieldId]?.[day]) delete md.daily[seller.id][fieldId][day].plan;
     }
     await fbDb.ref("lojas/" + lojaCode).update({ updatedAt: Date.now() });
-    toast(planYes ? "Sim registrado · sincronizado" : "Não registrado · sincronizado");
-    renderFields();
+    armConsultorMergeGuard(seller.id, fieldId, day, month);
+    toast(planYes ? "Check-in salvo · travado" : "Resposta salva · travada");
+    patchOpenQuestionBoxAfterSave(fieldId, day, month);
     refreshOpenCrossAll();
+    if (document.getElementById("resumoOverlay")?.classList.contains("show")) renderResumo();
   } catch (e) {
     console.warn(e);
     toast("Erro ao salvar. Verifique a conexão.", true);
