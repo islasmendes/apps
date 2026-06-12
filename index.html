@@ -775,7 +775,7 @@
         </div>
       </div>
     </div>
-    <div class="header-stat-bar" id="workdaysBadge" title="Calendário do mês (edite dias úteis/sábados em Regras de Negócio)"></div>
+    <div class="header-stat-bar" id="workdaysBadge" title="Calendário do mês (edite dias úteis/sábados em Gestão Loja)"></div>
     <div class="header-presence is-local" id="fbBadge" title="Status das lojas na plataforma"></div>
   </div>
 </header>
@@ -785,8 +785,9 @@
   <button data-view="diario">Check-in / Check-out</button>
   <button data-view="fechamento">Fechamento Diário</button>
   <button data-view="rscen">RSCEN+</button>
-  <button data-view="config">Regras de Negócio</button>
   <button data-view="kpis">KPIs</button>
+  <button data-view="gestao">Gestão Loja</button>
+  <button data-view="config">Regras de Negócio</button>
 </nav>
 
 <main>
@@ -832,8 +833,8 @@
     </div>
   </section>
 
-  <!-- CONFIG -->
-  <section class="view" id="view-config">
+  <!-- GESTÃO LOJA -->
+  <section class="view" id="view-gestao">
     <div class="row" style="align-items:stretch; gap:18px;">
       <div class="panel" style="flex:1; min-width:280px; margin:0;">
         <h2>Configuração do Mês</h2>
@@ -892,7 +893,7 @@
       </div>
       <div class="hint" id="consultorScheduleHint" style="margin-top:10px; line-height:1.55;">—</div>
     </div>
-    <div class="panel" id="syncPanel"></div>
+    <div class="panel" id="gestaoSenhaPanel"></div>
     <div class="panel">
       <h2>Backup &amp; dados</h2>
       <div class="sub">Salvo neste navegador, por mês. Exporte um backup para não perder nada.</div>
@@ -904,6 +905,11 @@
       </div>
       <details class="help"><summary>Como funciona o armazenamento?</summary><div>Tudo é salvo localmente (localStorage) no navegador de cada gestor — sem servidor e sem login. Cada mês é guardado separadamente: troque o mês no topo para ver/editar o período. Limpar o cache apaga os dados, por isso use o backup.</div></details>
     </div>
+  </section>
+
+  <!-- REGRAS DE NEGÓCIO -->
+  <section class="view" id="view-config">
+    <div class="panel" id="syncPanel"></div>
   </section>
 
   <section class="view" id="view-fechamento">
@@ -1171,6 +1177,11 @@ function migrate(s) {
     const def = ["matriz", "diario", "fechamento", "rscen", "config", "kpis"];
     const isDefault = s.ui.tabOrder.length === def.length && s.ui.tabOrder.every((v, i) => v === def[i]);
     if (!isDefault) s.ui.tabOrderAt = Date.now();
+  }
+  if (Array.isArray(s.ui.tabOrder) && !s.ui.tabOrder.includes("gestao")) {
+    const ci = s.ui.tabOrder.indexOf("config");
+    if (ci >= 0) s.ui.tabOrder.splice(ci, 0, "gestao");
+    else s.ui.tabOrder.push("gestao");
   }
   (s.indicators || []).forEach(i => {
     if (i.pctOnly == null) i.pctOnly = false;
@@ -1528,7 +1539,7 @@ function loadLocalStateSnapshot() {
   try { const raw = localStorage.getItem(LS_KEY); if (raw) return migrate(JSON.parse(raw)); } catch (e) { /* ignore */ }
   return null;
 }
-const TAB_VIEW_IDS = ["matriz", "diario", "fechamento", "rscen", "config", "kpis"];
+const TAB_VIEW_IDS = ["matriz", "diario", "fechamento", "rscen", "kpis", "gestao", "config"];
 function uiTabOrderAt(st) { return Number(st?.ui?.tabOrderAt) || 0; }
 function cleanedTabOrder(st) {
   if (!Array.isArray(st?.ui?.tabOrder)) return null;
@@ -1891,7 +1902,7 @@ function startConfigListener() {
       lastPushedConfigHash = configHash(tpl);
       save({ skipPush: divisionalMode(), skipConfigPush: true, immediatePush: true });
       expandedBlocks = state.ui.expanded;
-      if (["matriz", "rscen", "kpis", "config", "diario"].includes(activeView)) renderActive();
+      if (["matriz", "rscen", "kpis", "gestao", "config", "diario"].includes(activeView)) renderActive();
     }, 300);
   });
 }
@@ -3473,7 +3484,8 @@ function renderActive() {
   else if (activeView === "fechamento") renderFechamento();
   else if (activeView === "rscen") renderArvore();
   else if (activeView === "kpis") renderIndicatorConfig();
-  else if (activeView === "config") { renderConfig(); if (typeof renderSync === "function") renderSync(); }
+  else if (activeView === "gestao") renderGestao();
+  else if (activeView === "config") { if (typeof renderSync === "function") renderSync(); }
 }
 function updateWorkdaysBadge() {
   const el = document.getElementById("workdaysBadge");
@@ -3481,7 +3493,7 @@ function updateWorkdaysBadge() {
   const du = diasUteisOf(currentMonth), sb = sabadosOf(currentMonth), dom = countSundays(currentMonth), comp = completosOf(currentMonth);
   const mk = (k, v) => `<span class="hs-item"><span class="hs-k">${k}</span><b class="hs-v">${v}</b></span>`;
   el.innerHTML = mk("Dias Úteis", du) + '<span class="hs-sep">/</span>' + mk("Sábados", sb) + '<span class="hs-sep">/</span>' + mk("Domingos", dom) + '<span class="hs-sep">/</span>' + mk("Completos", comp);
-  el.title = `Calendário de ${monthLabel(currentMonth)} · Completos = dias úteis+sáb até ontem · Edite em Regras de Negócio`;
+  el.title = `Calendário de ${monthLabel(currentMonth)} · Completos = dias úteis+sáb até ontem · Edite em Gestão Loja`;
   updateMonthPickerLabel();
 }
 
@@ -4332,7 +4344,7 @@ function renderMatriz() {
     wpick.querySelectorAll("button").forEach(b => b.onclick = () => { matrizWeekIdx = +b.dataset.w; state.ui.weekIdx = matrizWeekIdx; save(); renderMatriz(); });
   } else if (wpick) wpick.style.display = "none";
 
-  if (!allSellers.length) { tbl.innerHTML = '<tbody><tr><td class="empty">Nenhum vendedor cadastrado.<br><button class="btn" onclick="document.querySelector(\'nav.tabs [data-view=config]\').click()">Ir para Regras de Negócio</button></td></tr></tbody>'; document.getElementById("acuracidadeTable").innerHTML = ""; return; }
+  if (!allSellers.length) { tbl.innerHTML = '<tbody><tr><td class="empty">Nenhum vendedor cadastrado.<br><button class="btn" onclick="document.querySelector(\'nav.tabs [data-view=gestao]\').click()">Ir para Gestão Loja</button></td></tr></tbody>'; document.getElementById("acuracidadeTable").innerHTML = ""; return; }
   if (!withData.length) { tbl.innerHTML = '<tbody><tr><td class="empty">Nenhum vendedor com dados neste mês.<br>Quando o CV lançar check-in/out ou o gestor usar <b>⚙ Lançamento do Sistema</b>, o vendedor aparece aqui.</td></tr></tbody>'; renderAcuracidade(); return; }
   if (!sellers.length) { tbl.innerHTML = '<tbody><tr><td class="empty">Nenhum vendedor no filtro.<br>Clique em <b>Todos</b> ou selecione colaboradores na barra acima.</td></tr></tbody>'; renderAcuracidade(); return; }
   if (!inds.length) {
@@ -4975,7 +4987,7 @@ function renderDiario() {
   const bar = document.getElementById("diarioSellerBar");
   if (!sellers.length) {
     if (bar) bar.innerHTML = "";
-    document.getElementById("diarioTable").innerHTML = '<tbody><tr><td class="empty">Cadastre vendedores na aba Regras de Negócio.</td></tr></tbody>';
+    document.getElementById("diarioTable").innerHTML = '<tbody><tr><td class="empty">Cadastre vendedores na aba Gestão Loja.</td></tr></tbody>';
     return;
   }
   renderDiarioSellerBar(sellers);
@@ -6459,10 +6471,10 @@ function renderConsultorSchedulePanel() {
   bindOverrideBtn("schedCheckoutOverrideClear", "checkout", null);
   if (schedStatusTimer) clearInterval(schedStatusTimer);
   schedStatusTimer = setInterval(() => {
-    if (document.getElementById("view-config")?.classList.contains("active")) renderConsultorSchedulePanel();
+    if (document.getElementById("view-gestao")?.classList.contains("active")) renderConsultorSchedulePanel();
   }, 30000);
 }
-function renderConfig() {
+function renderGestao() {
   const md = monthData();
   document.getElementById("diasUteis").value = diasUteisOf(currentMonth);
   document.getElementById("sabados").value = sabadosOf(currentMonth);
@@ -6481,7 +6493,7 @@ function renderConfig() {
       i.addEventListener("input", () => { i.style.width = Math.max(4, i.value.length + 1) + "ch"; });
       i.addEventListener("change", () => { const s = state.sellers.find(x=>x.id===i.dataset.seller); if(s){ s.name=i.value; save(); toast("Salvo"); } });
     });
-    sl.querySelectorAll("[data-del-seller]").forEach(b => b.addEventListener("click", () => { if(confirm("Remover este vendedor e seus dados deste mês?")){ state.sellers = state.sellers.filter(x=>x.id!==b.dataset.delSeller); if(state.order.sellers) state.order.sellers = state.order.sellers.filter(id=>id!==b.dataset.delSeller); save(); renderConfig(); } }));
+    sl.querySelectorAll("[data-del-seller]").forEach(b => b.addEventListener("click", () => { if(confirm("Remover este vendedor e seus dados deste mês?")){ state.sellers = state.sellers.filter(x=>x.id!==b.dataset.delSeller); if(state.order.sellers) state.order.sellers = state.order.sellers.filter(id=>id!==b.dataset.delSeller); save(); renderGestao(); } }));
     sl.querySelectorAll("[data-mat-seller]").forEach(i => {
       i.addEventListener("change", () => {
         const s = state.sellers.find(x => x.id === i.dataset.matSeller);
@@ -6493,7 +6505,7 @@ function renderConfig() {
     });
     sl.querySelectorAll("[data-portal-seller]").forEach(b => b.addEventListener("click", () => openConsultorPortal(b.dataset.portalSeller)));
     sl.querySelectorAll("[data-esc-seller]").forEach(b => b.addEventListener("click", () => openEscala(b.dataset.escSeller)));
-    const tg = document.getElementById("toggleSellers"); if (tg) tg.onclick = () => { sellersExpanded = !sellersExpanded; renderConfig(); };
+    const tg = document.getElementById("toggleSellers"); if (tg) tg.onclick = () => { sellersExpanded = !sellersExpanded; renderGestao(); };
   }
   const clearAll = document.getElementById("clearAllSellers");
   if (clearAll) clearAll.onclick = () => {
@@ -6502,11 +6514,11 @@ function renderConfig() {
     state.sellers = [];
     if (state.order.sellers) state.order.sellers = [];
     save();
-    renderConfig();
+    renderGestao();
     toast("Todos os vendedores removidos");
   };
-  renderIndicatorConfig();
   renderConsultorSchedulePanel();
+  renderGestaoSenha();
 }
 function monthLabel(m){ const {y,mo}=parseMonth(m); return new Date(y,mo-1,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"}); }
 function escapeHtml(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
@@ -8702,18 +8714,6 @@ function renderSync(){
   } else {
     html += `<div class="hint" style="margin-top:8px;">Admin: cadastre o ID acima em <code>/auth/adminDevices</code> no Firebase.</div>`;
   }
-  if ((lojaCode || divisionalCode) && authUnlocked) {
-    const ctxCode = lojaCode || divisionalCode;
-    const ctxLbl = divisionalMode() ? "Divisional · " + ctxCode : ctxCode;
-    html += `<div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--border-soft);">
-      <b style="font-size:12px;">Senha de acesso · ${escapeHtml(ctxLbl)}</b>
-      <div class="hint" style="margin-top:4px;">Redefina a senha individual ${divisionalMode() ? "do regional" : "desta loja"} (a anterior deixa de funcionar em todos os aparelhos).</div>
-      <div class="row" style="margin-top:8px; align-items:flex-end; flex-wrap:wrap;">
-        <div class="field"><label>Senha atual da loja</label><input type="password" id="authGestorCur" autocomplete="current-password"></div>
-        <button class="btn sec sm" id="authGestorReset">↻ Redefinir senha da loja</button>
-      </div>
-    </div>`;
-  }
   html += `</div>`;
   el.innerHTML = html;
   const tl=document.getElementById("trocarLoja"); if(tl) tl.onclick=trocarLoja;
@@ -8742,18 +8742,36 @@ function renderSync(){
       showAuthRevealModal(ctxCode, np, () => toast("Nova senha ativa — compartilhe com a equipe"));
     }catch(e){ toast(e.message||"Erro", true); }
   };
-  const gr=document.getElementById("authGestorReset");
-  if(gr) gr.onclick=async()=>{
-    const ctxCode = lojaCode || divisionalCode;
-    if(!ctxCode) return;
-    const cur = (document.getElementById("authGestorCur").value || "").trim();
-    if(!cur) { toast("Digite a senha atual", true); return; }
-    if(!confirm("Gerar nova senha para "+ctxCode+"? A anterior deixa de funcionar em todos os aparelhos.")) return;
-    try{
+}
+function renderGestaoSenha() {
+  const el = document.getElementById("gestaoSenhaPanel");
+  if (!el) return;
+  if (divisionalMode()) {
+    el.innerHTML = `<h2>Senha de acesso</h2><div class="hint">No modo Divisional, redefina a senha em <b>Regras de Negócio</b> (admin) ou use o fluxo de troca de loja.</div>`;
+    return;
+  }
+  const ctxCode = lojaCode;
+  if (!ctxCode || !authUnlocked) {
+    el.innerHTML = `<h2>Senha de acesso</h2><div class="hint">Entre na loja para redefinir a senha individual de acesso.</div>`;
+    return;
+  }
+  el.innerHTML = `<h2>Senha de acesso · ${escapeHtml(ctxCode)}</h2>
+    <div class="sub">Redefina a senha individual desta filial. A senha anterior deixa de funcionar em todos os aparelhos.</div>
+    <div class="row" style="margin-top:12px; align-items:flex-end; flex-wrap:wrap; gap:10px;">
+      <div class="field"><label>Senha atual</label><input type="password" id="authGestorCur" autocomplete="current-password"></div>
+      <button class="btn sec" id="authGestorReset">↻ Redefinir senha da loja</button>
+    </div>`;
+  const gr = document.getElementById("authGestorReset");
+  if (gr) gr.onclick = async () => {
+    const cur = (document.getElementById("authGestorCur")?.value || "").trim();
+    if (!cur) { toast("Digite a senha atual", true); return; }
+    if (!confirm("Gerar nova senha para " + ctxCode + "? A anterior deixa de funcionar em todos os aparelhos.")) return;
+    try {
       const np = await gestorResetLojaPassword(ctxCode, cur);
-      document.getElementById("authGestorCur").value = "";
+      const inp = document.getElementById("authGestorCur");
+      if (inp) inp.value = "";
       showAuthRevealModal(ctxCode, np, () => toast("Nova senha ativa — copie e compartilhe com a equipe"));
-    }catch(e){ toast(e.message||"Erro", true); }
+    } catch (e) { toast(e.message || "Erro", true); }
   };
 }
 
@@ -8804,8 +8822,8 @@ function init() {
   document.getElementById("auditoriaParaLancamento").onclick = () => { const sid = modalSellerId; closeAuditoriaModal(); if (sid) openLancamentoModal(sid); };
   const goKpis = document.getElementById("goKpisMetas");
   if (goKpis) goKpis.onclick = () => { showView("kpis"); toast("Cadastre metas em cada indicador abaixo"); };
-  document.getElementById("closeEscala").onclick = () => { saveEscalaMatricula(); document.getElementById("escalaModal").classList.remove("show"); renderConfig(); };
-  document.getElementById("escalaModal").addEventListener("click", e => { if (e.target.id === "escalaModal") { saveEscalaMatricula(); e.currentTarget.classList.remove("show"); renderConfig(); } });
+  document.getElementById("closeEscala").onclick = () => { saveEscalaMatricula(); document.getElementById("escalaModal").classList.remove("show"); renderGestao(); };
+  document.getElementById("escalaModal").addEventListener("click", e => { if (e.target.id === "escalaModal") { saveEscalaMatricula(); e.currentTarget.classList.remove("show"); renderGestao(); } });
   document.getElementById("kpiMoveClose").onclick = closeKpiMoveModal;
   document.getElementById("kpiMoveCancel").onclick = closeKpiMoveModal;
   document.getElementById("kpiMoveConfirm").onclick = confirmKpiMove;
@@ -8839,10 +8857,10 @@ function init() {
   if (consultorQrModal) consultorQrModal.addEventListener("click", e => { if (e.target.id === "consultorQrModal") e.currentTarget.classList.remove("show"); });
   const copyLink2 = document.getElementById("consultorCopyLink2");
   if (copyLink2) copyLink2.onclick = () => { const url = consultorPortalUrl(); try { navigator.clipboard.writeText(url); toast("Link copiado"); } catch (e) { prompt("Copie:", url); } };
-  document.getElementById("diasUteis").addEventListener("change", e => { monthData().diasUteis = Number(e.target.value)||0; save(); updateWorkdaysBadge(); renderConfig(); toast("Dias úteis salvos"); });
-  document.getElementById("sabados").addEventListener("change", e => { monthData().sabados = Number(e.target.value)||0; save(); updateWorkdaysBadge(); renderConfig(); toast("Sábados salvos"); });
-  document.getElementById("autoWorkdays").onclick = () => { const md = monthData(); delete md.diasUteis; delete md.sabados; save(); renderConfig(); updateWorkdaysBadge(); toast("Recalculado automático"); };
-  document.getElementById("addSeller").onclick = () => { const i = document.getElementById("newSeller"); const v = i.value.trim(); if(!v) return; const sid = uid(); state.sellers.push({ id: sid, name: v }); i.value=""; save(); renderConfig(); openEscala(sid); toast("Vendedor adicionado"); };
+  document.getElementById("diasUteis").addEventListener("change", e => { monthData().diasUteis = Number(e.target.value)||0; save(); updateWorkdaysBadge(); renderGestao(); toast("Dias úteis salvos"); });
+  document.getElementById("sabados").addEventListener("change", e => { monthData().sabados = Number(e.target.value)||0; save(); updateWorkdaysBadge(); renderGestao(); toast("Sábados salvos"); });
+  document.getElementById("autoWorkdays").onclick = () => { const md = monthData(); delete md.diasUteis; delete md.sabados; save(); renderGestao(); updateWorkdaysBadge(); toast("Recalculado automático"); };
+  document.getElementById("addSeller").onclick = () => { const i = document.getElementById("newSeller"); const v = i.value.trim(); if(!v) return; const sid = uid(); state.sellers.push({ id: sid, name: v }); i.value=""; save(); renderGestao(); openEscala(sid); toast("Vendedor adicionado"); };
   document.getElementById("newSeller").addEventListener("keydown", e => { if(e.key==="Enter") document.getElementById("addSeller").click(); });
   document.getElementById("addIndicator").onclick = () => {
     const id = uid();
