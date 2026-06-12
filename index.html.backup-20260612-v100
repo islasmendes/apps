@@ -929,7 +929,6 @@
         <div><h2>KPIs · Indicadores</h2><div class="sub">Principal → sub-indicadores (qtd) e taxas (%). <b>↳</b> desce o principal (pode <b>trocar lugar</b> com um sub) · <b>↑</b> sobe o sub (pode trocar com um principal). Preenchimentos preservados. <b>⋮⋮</b> define a ordem no app do CV, diário e matriz.</div></div>
         <button class="btn" id="addIndicator">+ Indicador principal</button>
       </div>
-      <div id="kpiToolbar" class="matriz-toolbar" style="margin-top:14px;"></div>
       <div id="indicatorList" style="margin-top:14px;"></div>
     </div>
   </section>
@@ -1081,10 +1080,10 @@ function defaultState() {
       { id: agto, name: "Agendamento", abbr: "AGTO", color: "#4f8cff", checkin: true, checkout: true, role: "", pctOnly: false, metaDay: 4, metaSat: 6, metaMonth: 96, subs: [], rates: [] },
       { id: comp, name: "Comparecimento", abbr: "COMP", color: "#22d3aa", checkin: false, checkout: true, role: "", pctOnly: false, metaDay: 2, metaSat: 4, metaMonth: 40, subs: [], rates: [] },
       { id: troca, name: "Carro Troca", abbr: "TROCA", color: "#a78bfa", checkin: false, checkout: true, role: "", pctOnly: false, metaDay: 1, metaSat: 2, metaMonth: 28,
-        subs: [ { id: sTrocaEf, name: "Efetivação", checkin: false, checkout: true, metaDay: 0, metaSat: 0, metaSun: 0, metaMonth: 0 } ],
+        subs: [ { id: sTrocaEf, name: "Efetivação", checkin: false, checkout: true, metaDay: 1, metaSat: 1, metaMonth: 12 } ],
         rates: [ { id: uid(), name: "Pen%", numId: sTrocaEf, denId: venda, invert: false, target: 48, manual: false } ] },
       { id: fichas, name: "Financiamento", abbr: "FIN", color: "#ffb74d", checkin: true, checkout: true, role: "fichas", pctOnly: false, metaDay: 1, metaSat: 1, metaMonth: 24,
-        subs: [ { id: sFinEf, name: "Efetivados", checkin: false, checkout: true, metaDay: 0, metaSat: 0, metaSun: 0, metaMonth: 0 } ],
+        subs: [ { id: sFinEf, name: "Efetivados", checkin: false, checkout: true, metaDay: 1, metaSat: 1, metaMonth: 18 } ],
         rates: [ { id: uid(), name: "Pen%", numId: sFinEf, denId: venda, invert: false, target: 45, manual: false } ] },
       { id: venda, name: "Vendas", abbr: "VENDA", color: "#46d39a", checkin: true, checkout: true, role: "venda", pctOnly: false, metaDay: 1, metaSat: 2, metaMonth: 14, subs: [], rates: [] },
       { id: leads, name: "Leads", abbr: "LEADS", color: "#38bdf8", checkin: false, checkout: true, role: "", pctOnly: false, metaDay: 2, metaSat: 2, metaMonth: 36, subs: [], rates: [] },
@@ -1117,14 +1116,13 @@ function migrate(s) {
   if (!s.order) s.order = { sellers: null, indicators: null };
   if (!s.months) s.months = {};
   if (!s.theme) s.theme = "dark";
-  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, lancamentoFilter: [], matrizFilter: [], kpiFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" }, kpiReorgAt: 0, dailyTombstones: {} }, s.ui || {});
+  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, lancamentoFilter: [], matrizFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" }, kpiReorgAt: 0, dailyTombstones: {} }, s.ui || {});
   if (s.ui.kpiReorgAt == null) s.ui.kpiReorgAt = 0;
   if (!s.ui.dailyTombstones) s.ui.dailyTombstones = {};
   if (!Array.isArray(s.ui.dioClearFields)) s.ui.dioClearFields = null;
   if (!s.ui.expanded) s.ui.expanded = {};
   if (!s.ui.lancamentoExpanded) s.ui.lancamentoExpanded = {};
   if (!s.ui.lancamentoFilter) s.ui.lancamentoFilter = [];
-  if (!Array.isArray(s.ui.kpiFilter)) s.ui.kpiFilter = [];
   if (!Array.isArray(s.ui.matrizFilter)) s.ui.matrizFilter = [];
   if (!Array.isArray(s.ui.arvLojaFilter)) s.ui.arvLojaFilter = [];
   if (!Array.isArray(s.ui.arvSellerFilter)) s.ui.arvSellerFilter = [];
@@ -1186,30 +1184,10 @@ function migrate(s) {
   });
   s.consultorSchedule = normalizeConsultorSchedule(s.consultorSchedule);
   repairBlockMetasFromSubsInState(s);
-  clearTemplateSubMetasInState(s);
   mergeKpiIdHistory(s);
   applyMatrizShowUi(s);
   autoRecoverOrphanKpiData(s);
   return s;
-}
-/** Remove metas de sub vindas do template operacional (metas de sub são só do gestor). */
-function clearTemplateSubMetasInState(s) {
-  if (s.ui?.subMetaGestorOnly) return;
-  s.ui = s.ui || {};
-  s.ui.subMetaGestorOnly = true;
-  const tplDefaults = {
-    "carro troca|efetivacao": { metaDay: 1, metaSat: 1, metaSun: 0, metaMonth: 12 },
-    "financiamento|efetivados": { metaDay: 1, metaSat: 1, metaSun: 0, metaMonth: 18 }
-  };
-  (s.indicators || []).forEach(ind => {
-    const pKey = normKpiName(ind.name);
-    (ind.subs || []).forEach(sub => {
-      const tpl = tplDefaults[pKey + "|" + normKpiName(sub.name)];
-      if (!tpl) return;
-      const matchesTpl = KPI_META_KEYS.every(k => (Number(sub[k]) || 0) === (Number(tpl[k]) || 0));
-      if (matchesTpl) KPI_META_KEYS.forEach(k => { sub[k] = 0; });
-    });
-  });
 }
 function consultorMetaScore(cfg) {
   if (!cfg) return 0;
@@ -1414,7 +1392,6 @@ function buildLocalFieldRegistry(st) {
     if (ind.name && !reg[ind.name]) reg[ind.name] = { id: ind.id, cfg: ind };
     (ind.subs || []).forEach(s => {
       if (s.name && !reg[s.name]) reg[s.name] = { id: s.id, cfg: s };
-      if (ind.name && s.name) reg[ind.name + "::" + s.name] = { id: s.id, cfg: s };
     });
   });
   return reg;
@@ -1454,11 +1431,6 @@ const KPI_META_KEYS = ["metaDay", "metaSat", "metaSun", "metaMonth"];
 function pickKpiMetaField(local, tplField, key) {
   if (local != null && local[key] != null && local[key] !== "") return Number(local[key]) || 0;
   if (tplField != null && tplField[key] != null && tplField[key] !== "") return Number(tplField[key]) || 0;
-  return 0;
-}
-/** Metas de sub-indicador: só o gestor define (não herda template operacional). */
-function pickSubKpiMetaField(local, key) {
-  if (local != null && local[key] != null && local[key] !== "") return Number(local[key]) || 0;
   return 0;
 }
 function shouldPreferLocalKpiMeta(localVal, remoteVal) {
@@ -1554,21 +1526,6 @@ function resolveLocalCfgForTemplate(st, reg, tInd) {
   }
   return { id: null, cfg: null };
 }
-/** Resolve sub dentro do bloco pai (evita colisão de nomes iguais entre indicadores). */
-function resolveLocalSubForTemplate(st, parentLocal, tplSub, reg) {
-  if (parentLocal) {
-    const inParent = (parentLocal.subs || []).find(s => s.name === tplSub.name);
-    if (inParent) return { id: inParent.id, cfg: inParent };
-  }
-  const parentName = parentLocal?.name;
-  if (parentName && tplSub.name) {
-    const scoped = reg[parentName + "::" + tplSub.name];
-    if (scoped?.cfg) return scoped;
-  }
-  const hit = reg[tplSub.name];
-  if (hit?.cfg) return hit;
-  return { id: null, cfg: null };
-}
 function extractOperationalConfig(st) {
   const indicators = (st.indicators || []).map(ind => ({
     name: ind.name,
@@ -1592,6 +1549,10 @@ function extractOperationalConfig(st) {
       lowerBetter: !!s.lowerBetter,
       sundayOnly: !!s.sundayOnly,
       openQuestion: !!s.openQuestion,
+      metaDay: Number(s.metaDay) || 0,
+      metaSat: Number(s.metaSat) || 0,
+      metaSun: Number(s.metaSun) || 0,
+      metaMonth: Number(s.metaMonth) || 0,
       planCrossNames: normalizePlanCrossIds(s).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean)
     })),
     rates: (ind.rates || []).map(r => ({
@@ -1679,10 +1640,10 @@ function applyOperationalConfig(st, tpl, opts) {
     };
     const tplSubNames = new Set((tInd.subs || []).map(s => s.name));
     ind.subs = (tInd.subs || []).map(ts => {
-      const subHit = resolveLocalSubForTemplate(st, local, ts, reg);
+      const subHit = resolveLocalCfgForTemplate(st, reg, ts);
       const ls = subHit.cfg;
       return {
-        id: subHit.id || reg[tInd.name + "::" + ts.name]?.id || reg[ts.name]?.id || uid(),
+        id: subHit.id || reg[ts.name]?.id || uid(),
         name: ts.name,
         checkin: ts.checkin,
         checkout: ts.checkout,
@@ -1692,10 +1653,10 @@ function applyOperationalConfig(st, tpl, opts) {
         showInMatriz: showInMatrizFromLocal(ls),
         planCrossId: ls?.planCrossId || "",
         planCrossIds: Array.isArray(ls?.planCrossIds) ? ls.planCrossIds.slice() : (ls?.planCrossId ? [ls.planCrossId] : []),
-        metaDay: pickSubKpiMetaField(ls, "metaDay"),
-        metaSat: pickSubKpiMetaField(ls, "metaSat"),
-        metaSun: pickSubKpiMetaField(ls, "metaSun"),
-        metaMonth: pickSubKpiMetaField(ls, "metaMonth"),
+        metaDay: pickKpiMetaField(ls, ts, "metaDay"),
+        metaSat: pickKpiMetaField(ls, ts, "metaSat"),
+        metaSun: pickKpiMetaField(ls, ts, "metaSun"),
+        metaMonth: pickKpiMetaField(ls, ts, "metaMonth"),
         cvHint: ls?.cvHint || ""
       };
     });
@@ -5177,21 +5138,10 @@ function lancamentoPrincipalLabel(ind) {
   return escapeHtml(matrizDisplayName(ind.name).toUpperCase());
 }
 let lancamentoTabBound = false;
-function focusLancamentoCell(el) {
-  if (!el) return;
-  el.focus();
-  if (typeof el.select === "function") el.select();
-}
 function bindLancamentoTabNav() {
   const root = document.getElementById("lancamentoSellers");
   if (!root || lancamentoTabBound) return;
   lancamentoTabBound = true;
-  root.addEventListener("focusin", e => {
-    const t = e.target;
-    if (t.matches(".syscell-principal, .syscell-sub, .sysratecell")) {
-      if (typeof t.select === "function") t.select();
-    }
-  });
   root.addEventListener("keydown", e => {
     if (e.key !== "Tab") return;
     const t = e.target;
@@ -5204,13 +5154,13 @@ function bindLancamentoTabNav() {
       const principals = [...block.querySelectorAll(".syscell-principal")];
       const idx = principals.indexOf(t);
       const next = forward ? principals[idx + 1] : principals[idx - 1];
-      if (next) { focusLancamentoCell(next); return; }
+      if (next) { next.focus(); return; }
       const blocks = [...document.querySelectorAll("#lancamentoSellers .lancamento-seller-block")];
       const bi = blocks.indexOf(block);
       const nb = forward ? blocks[bi + 1] : blocks[bi - 1];
       if (nb) {
         const ps = [...nb.querySelectorAll(".syscell-principal")];
-        focusLancamentoCell(forward ? ps[0] : ps[ps.length - 1]);
+        (forward ? ps[0] : ps[ps.length - 1])?.focus();
       }
       return;
     }
@@ -5220,15 +5170,15 @@ function bindLancamentoTabNav() {
     const subs = [...group.querySelectorAll(".syscell-sub, .sysratecell")];
     const idx = subs.indexOf(t);
     const next = forward ? subs[idx + 1] : subs[idx - 1];
-    if (next) { focusLancamentoCell(next); return; }
+    if (next) { next.focus(); return; }
     if (!forward) {
-      focusLancamentoCell(group.querySelector(".syscell-principal"));
+      group.querySelector(".syscell-principal")?.focus();
       return;
     }
     const groups = [...block.querySelectorAll(".sysgroup")];
     const gi = groups.indexOf(group);
     const principals = [...block.querySelectorAll(".syscell-principal")];
-    focusLancamentoCell(principals[gi + 1]);
+    principals[gi + 1]?.focus();
   });
 }
 function renderLancamentoToolbar(allSellers) {
@@ -5339,12 +5289,9 @@ function renderLancamentoCards() {
   });
   bindLancamentoTabNav();
 }
-function lancamentoToolbarSellers(days = monthDays()) {
-  return matrizApplySellerOrder(orderedSellers(), days);
-}
 function renderLancamentoModal() {
   const days = monthDays();
-  renderLancamentoToolbar(lancamentoToolbarSellers(days));
+  renderLancamentoToolbar(lancamentoDisplaySellers(days));
   renderLancamentoCards();
 }
 function openLancamentoModal(sellerId) {
@@ -6511,47 +6458,9 @@ function lowerBetterPanelHtml(ind) {
     <span class="hint" style="display:block; font-size:11px;">Alerta = ${m} p.p. abaixo do alvo · exibição até 2 casas (2%, 2,6%, 2,56%) · meta ${unit ? fmtPctFine(t) : fmt(t, 0)}${unit}</span>
   </div>`;
 }
-function renderKpiToolbar() {
-  const bar = document.getElementById("kpiToolbar");
-  if (!bar) return;
-  const inds = orderedIndicators();
-  const filter = state.ui.kpiFilter || [];
-  const hasFilter = filter.length > 0;
-  const filterSet = new Set(filter);
-  bar.innerHTML = `<span class="hint">Filtrar indicador</span>
-    <button type="button" class="ghost-btn sm kpi-filter-all${!hasFilter ? " active" : ""}">Todos</button>
-    <div class="matriz-filter-chips">${inds.map(ind =>
-      `<button type="button" class="matriz-filter-chip kpi-filter-chip${hasFilter && filterSet.has(ind.id) ? " active" : ""}" data-iid="${ind.id}" style="border-left:3px solid ${ind.color}"><span class="swatch" style="background:${ind.color};width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:4px;vertical-align:middle;"></span>${escapeHtml(ind.name)}</button>`
-    ).join("")}</div>`;
-  bar.querySelector(".kpi-filter-all").onclick = () => {
-    state.ui.kpiFilter = [];
-    save();
-    renderIndicatorConfig();
-  };
-  bar.querySelectorAll(".kpi-filter-chip").forEach(btn => {
-    btn.onclick = () => {
-      const id = btn.dataset.iid;
-      const f = new Set(state.ui.kpiFilter || []);
-      if (f.has(id)) f.delete(id);
-      else f.add(id);
-      state.ui.kpiFilter = [...f];
-      save();
-      renderIndicatorConfig();
-    };
-  });
-}
-function kpiFilteredIndicators() {
-  const filter = state.ui.kpiFilter || [];
-  const inds = orderedIndicators();
-  if (!filter.length) return inds;
-  const set = new Set(filter);
-  return inds.filter(ind => set.has(ind.id));
-}
 function renderIndicatorConfig() {
-  renderKpiToolbar();
   const fields = allFields(); const list = document.getElementById("indicatorList");
-  const visible = kpiFilteredIndicators();
-  list.innerHTML = visible.map(ind => {
+  list.innerHTML = orderedIndicators().map(ind => {
     const lbMode = indHasLowerBetterMode(ind);
     let html = `<div class="ind-card${lbMode ? " lower-better-mode" : ""}" data-ind="${ind.id}" style="border-color:${ind.color}; box-shadow:0 0 0 1px color-mix(in srgb, ${ind.color} 50%, transparent), 0 0 18px color-mix(in srgb, ${ind.color} 24%, transparent);"><div class="head">
       <span class="kpi-draghandle" draggable="true" data-drag-kpi-ind="${ind.id}" title="Arrastar para reordenar">⋮⋮</span>
@@ -6581,7 +6490,7 @@ function renderIndicatorConfig() {
     (ind.rates||[]).forEach(r => { html += rateConfigRowHtml(r, ind, opts); });
     html += `</div></div>`;
     return html;
-  }).join("") || (orderedIndicators().length ? '<div class="empty">Nenhum indicador selecionado — use <b>Todos</b> ou escolha um ou mais indicadores acima.</div>' : '<div class="empty">Nenhum indicador.</div>');
+  }).join("") || '<div class="empty">Nenhum indicador.</div>';
   list.querySelectorAll('[data-rate]').forEach(row => { const ind = findIndByRate(row.dataset.rate); const r = ind && ind.rates.find(x=>x.id===row.dataset.rate); if(r && !r.manual){ const num=row.querySelector('[data-rk="numId"]'); const den=row.querySelector('[data-rk="denId"]'); if(num)num.value=r.numId||''; if(den)den.value=r.denId||''; } });
   bindIndicatorEvents();
 }
