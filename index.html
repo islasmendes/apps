@@ -2870,16 +2870,9 @@ function getSystemCoSnap(sellerId, fieldId, m = currentMonth) {
   const snap = md.systemCoSnap?.[sellerId]?.[fieldId];
   return snap != null ? Number(snap) : null;
 }
-/** IDs de check-out a somar no delta após lançamento do gestor (principal = todos os subs de CO). */
+/** IDs de check-out no delta após lançamento do gestor — mesmo critério do Real (só sub “de HOJE”, ex. Agendamentos de HOJE). */
 function systemDeltaFieldIds(fieldId) {
-  const ind = mainIndicatorById(fieldId);
-  if (ind) {
-    const coSubs = (ind.subs || []).filter(s => s.checkout).map(s => s.id);
-    if (coSubs.length) return coSubs;
-    if (ind.checkout) return [ind.id];
-    return [];
-  }
-  return [fieldId];
+  return [checkoutFieldId(fieldId)];
 }
 /** Soma check-outs com realAt posterior ao lançamento do gestor (consultor após o ⚙). */
 function checkoutRealAfterSystem(sellerId, fieldId, days, sinceAt, m = currentMonth) {
@@ -8352,7 +8345,7 @@ function adminLojaOptions() {
   Object.entries(remoteLojas || {}).forEach(([id, r]) => {
     if (!isRealLojaRemoteId(id, r)) return;
     const code = lojaCodeFromRemote(id, r);
-    if (code) add(code, r?.name || code);
+    if (code) add(code, lojaRemoteDisplayName(id, r));
   });
   if (lojaCode) add(lojaCode, state.storeName || lojaCode);
   list.sort((a, b) => {
