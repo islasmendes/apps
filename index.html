@@ -327,12 +327,27 @@
     color: var(--text);
     box-shadow: none;
   }
-  .diario-seller-bar .matriz-filter-chip.dio-ci-done,
-  .diario-seller-bar .matriz-filter-chip.active.dio-ci-done { border-top-color: var(--accent); }
-  .diario-seller-bar .matriz-filter-chip.dio-co-done,
-  .diario-seller-bar .matriz-filter-chip.active.dio-co-done { border-bottom-color: var(--ok); }
-  .diario-seller-bar .matriz-filter-chip.dio-co-done { color: var(--ok); font-weight: 700; }
-  .diario-seller-bar .matriz-filter-chip.dio-co-pending { color: var(--danger); font-weight: 700; }
+  .diario-seller-bar .matriz-filter-chip.dio-all-done,
+  .diario-seller-bar .matriz-filter-chip.active.dio-all-done {
+    border-top: 3px solid var(--ok);
+    border-bottom: 3px solid var(--ok);
+    color: var(--ok);
+    font-weight: 700;
+  }
+  .diario-seller-bar .matriz-filter-chip.dio-ci-partial,
+  .diario-seller-bar .matriz-filter-chip.active.dio-ci-partial {
+    border-top: 3px solid var(--warn);
+    color: var(--warn);
+    font-weight: 700;
+  }
+  .diario-seller-bar .matriz-filter-chip.dio-co-partial,
+  .diario-seller-bar .matriz-filter-chip.active.dio-co-partial {
+    border-bottom: 3px solid var(--warn);
+    color: var(--warn);
+    font-weight: 700;
+  }
+  .diario-seller-bar .matriz-filter-chip.dio-none-done,
+  .diario-seller-bar .matriz-filter-chip.active.dio-none-done { color: var(--danger); font-weight: 700; }
   html[data-theme="light"] .diario-seller-bar .matriz-filter-chip.active { color: var(--text); }
   .matriz-filter-all.active { border-color: var(--accent); color: var(--accent); }
   .arvore-toolbar { flex-direction: column; align-items: flex-start; gap: 10px; }
@@ -813,7 +828,7 @@
       <div id="diarioSellerBar" class="matriz-toolbar diario-seller-bar" style="margin-top:10px;"></div>
       <div id="diarioLockBar" class="dio-lock-bar"></div>
       <div class="table-wrap" style="margin-top:12px;"><table id="diarioTable"></table></div>
-      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Só o <b>dia de hoje</b> fica liberado; demais dias exigem <b>Desbloquear</b> na coluna ou nos botões acima (reset à 00:00). <b>Limpar semana/dia:</b> desbloqueie o cadeado 🔒 — escolha dia, vendedor e <b>Indicadores</b> (vários com ☑); apaga <b>check-in e check-out do consultor e do gestor</b> na nuvem. Marque <b>⚙ sistema</b> se o erro estiver na matriz (Real do gestor). <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar. Nome <b style="color:var(--ok)">verde</b> = check-out de hoje ok · <b style="color:var(--danger)">vermelho</b> = pendente · borda <b style="color:var(--accent)">superior</b> = check-in ok · borda <b style="color:var(--ok)">inferior</b> = check-out ok. Justificativas longas: arraste <b>⋮⋮</b> na lateral (coluna não alarga).</div>
+      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Só o <b>dia de hoje</b> fica liberado; demais dias exigem <b>Desbloquear</b> na coluna ou nos botões acima (reset à 00:00). <b>Limpar semana/dia:</b> desbloqueie o cadeado 🔒 — escolha dia, vendedor e <b>Indicadores</b> (vários com ☑); apaga <b>check-in e check-out do consultor e do gestor</b> na nuvem. Marque <b>⚙ sistema</b> se o erro estiver na matriz (Real do gestor). <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar. Chip do vendedor: <b style="color:var(--ok)">verde</b> = check-in e check-out de hoje ok · <b style="color:var(--warn)">amarelo</b> = só um dos dois · <b style="color:var(--danger)">vermelho</b> = nenhum. A semana atual é selecionada automaticamente. Justificativas longas: arraste <b>⋮⋮</b> na lateral (coluna não alarga).</div>
     </div>
   </section>
 
@@ -1117,11 +1132,12 @@ function migrate(s) {
   if (!s.order) s.order = { sellers: null, indicators: null };
   if (!s.months) s.months = {};
   if (!s.theme) s.theme = "dark";
-  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, lancamentoFilter: [], matrizFilter: [], kpiFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" }, kpiReorgAt: 0, dailyTombstones: {} }, s.ui || {});
+  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, arvExpanded: {}, lancamentoExpanded: {}, lancamentoFilter: [], matrizFilter: [], kpiFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" }, kpiReorgAt: 0, dailyTombstones: {} }, s.ui || {});
   if (s.ui.kpiReorgAt == null) s.ui.kpiReorgAt = 0;
   if (!s.ui.dailyTombstones) s.ui.dailyTombstones = {};
   if (!Array.isArray(s.ui.dioClearFields)) s.ui.dioClearFields = null;
   if (!s.ui.expanded) s.ui.expanded = {};
+  if (!s.ui.arvExpanded) s.ui.arvExpanded = {};
   if (!s.ui.lancamentoExpanded) s.ui.lancamentoExpanded = {};
   if (!s.ui.lancamentoFilter) s.ui.lancamentoFilter = [];
   if (!Array.isArray(s.ui.kpiFilter)) s.ui.kpiFilter = [];
@@ -1456,10 +1472,14 @@ function pickKpiMetaField(local, tplField, key) {
   if (tplField != null && tplField[key] != null && tplField[key] !== "") return Number(tplField[key]) || 0;
   return 0;
 }
-/** Metas de sub-indicador: só o gestor define (não herda template operacional). */
-function pickSubKpiMetaField(local, key) {
+/** Metas de KPI/sub/taxa: só o gestor da loja define (não herda template operacional). */
+function pickGestorKpiMetaField(local, key) {
   if (local != null && local[key] != null && local[key] !== "") return Number(local[key]) || 0;
   return 0;
+}
+const pickSubKpiMetaField = pickGestorKpiMetaField;
+function showInMatrizFromTpl(tplField) {
+  return tplField?.showInMatriz !== false;
 }
 function shouldPreferLocalKpiMeta(localVal, remoteVal) {
   const lv = Number(localVal), rv = Number(remoteVal);
@@ -1580,10 +1600,7 @@ function extractOperationalConfig(st) {
     pctOnly: !!ind.pctOnly,
     lowerBetter: !!ind.lowerBetter,
     openQuestion: !!ind.openQuestion,
-    metaDay: Number(ind.metaDay) || 0,
-    metaSat: Number(ind.metaSat) || 0,
-    metaSun: Number(ind.metaSun) || 0,
-    metaMonth: Number(ind.metaMonth) || 0,
+    showInMatriz: ind.showInMatriz !== false,
     planCrossNames: normalizePlanCrossIds(ind).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean),
     subs: (ind.subs || []).map(s => ({
       name: s.name,
@@ -1592,6 +1609,7 @@ function extractOperationalConfig(st) {
       lowerBetter: !!s.lowerBetter,
       sundayOnly: !!s.sundayOnly,
       openQuestion: !!s.openQuestion,
+      showInMatriz: s.showInMatriz !== false,
       planCrossNames: normalizePlanCrossIds(s).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean)
     })),
     rates: (ind.rates || []).map(r => ({
@@ -1601,7 +1619,8 @@ function extractOperationalConfig(st) {
       invert: !!r.invert,
       manual: !!r.manual,
       lowerBetter: !!r.lowerBetter,
-      absolute: !!r.absolute
+      absolute: !!r.absolute,
+      showInMatriz: r.showInMatriz !== false
     }))
   }));
   const idToName = Object.fromEntries((st.indicators || []).map(i => [i.id, i.name]));
@@ -1666,13 +1685,13 @@ function applyOperationalConfig(st, tpl, opts) {
       pctOnly: tInd.pctOnly,
       lowerBetter: tInd.lowerBetter != null ? tInd.lowerBetter : !!local?.lowerBetter,
       openQuestion: !!tInd.openQuestion,
-      showInMatriz: showInMatrizFromLocal(local),
+      showInMatriz: showInMatrizFromTpl(tInd),
       planCrossId: local?.planCrossId || "",
       planCrossIds: Array.isArray(local?.planCrossIds) ? local.planCrossIds.slice() : (local?.planCrossId ? [local.planCrossId] : []),
-      metaDay: pickKpiMetaField(local, tInd, "metaDay"),
-      metaSat: pickKpiMetaField(local, tInd, "metaSat"),
-      metaSun: pickKpiMetaField(local, tInd, "metaSun"),
-      metaMonth: pickKpiMetaField(local, tInd, "metaMonth"),
+      metaDay: pickGestorKpiMetaField(local, "metaDay"),
+      metaSat: pickGestorKpiMetaField(local, "metaSat"),
+      metaSun: pickGestorKpiMetaField(local, "metaSun"),
+      metaMonth: pickGestorKpiMetaField(local, "metaMonth"),
       cvHint: local?.cvHint || "",
       subs: [],
       rates: []
@@ -1689,13 +1708,13 @@ function applyOperationalConfig(st, tpl, opts) {
         lowerBetter: ts.lowerBetter != null ? ts.lowerBetter : !!ls?.lowerBetter,
         sundayOnly: !!ts.sundayOnly,
         openQuestion: !!ts.openQuestion,
-        showInMatriz: showInMatrizFromLocal(ls),
+        showInMatriz: showInMatrizFromTpl(ts),
         planCrossId: ls?.planCrossId || "",
         planCrossIds: Array.isArray(ls?.planCrossIds) ? ls.planCrossIds.slice() : (ls?.planCrossId ? [ls.planCrossId] : []),
-        metaDay: pickSubKpiMetaField(ls, "metaDay"),
-        metaSat: pickSubKpiMetaField(ls, "metaSat"),
-        metaSun: pickSubKpiMetaField(ls, "metaSun"),
-        metaMonth: pickSubKpiMetaField(ls, "metaMonth"),
+        metaDay: pickGestorKpiMetaField(ls, "metaDay"),
+        metaSat: pickGestorKpiMetaField(ls, "metaSat"),
+        metaSun: pickGestorKpiMetaField(ls, "metaSun"),
+        metaMonth: pickGestorKpiMetaField(ls, "metaMonth"),
         cvHint: ls?.cvHint || ""
       };
     });
@@ -1732,7 +1751,7 @@ function applyOperationalConfig(st, tpl, opts) {
         manual: tr.manual,
         lowerBetter: tr.lowerBetter,
         absolute: lr?.absolute ?? !!tr.absolute,
-        showInMatriz: showInMatrizFromLocal(lr),
+        showInMatriz: showInMatrizFromTpl(tr),
         target: lr?.target ?? 0,
         cvHint: lr?.cvHint || ""
       };
@@ -1774,7 +1793,7 @@ function applyOperationalConfig(st, tpl, opts) {
   st.indicators = newIndicators;
   st.order = st.order || {};
   st.order.indicators = newOrder;
-  applyMatrizShowUi(st);
+  persistMatrizShowUi(st);
   autoRecoverOrphanKpiData(st);
   repairBlockMetasFromSubsInState(st);
   if (!opts?.ignoreVersion) lastAppliedConfigVersion = tpl.updatedAt;
@@ -3634,6 +3653,12 @@ function attachFechNav(table) {
 let matrizPeriodo = state.ui.period || "mes";
 let matrizWeekIdx = state.ui.weekIdx || 0;
 let expandedBlocks = state.ui.expanded;
+let arvExpandedBlocks = state.ui.arvExpanded || {};
+function withExpandedMap(map, fn) {
+  const prev = expandedBlocks;
+  expandedBlocks = map;
+  try { return fn(); } finally { expandedBlocks = prev; }
+}
 function daysForPeriod() { if (matrizPeriodo === "semana") { const w = weeksOf(currentMonth); return w[Math.min(matrizWeekIdx, w.length - 1)] || monthDays(); } return monthDays(); }
 function cfgHasDiario(cfg) { return !!(cfg && (cfg.checkin || cfg.checkout)); }
 function cfgHasMeta(cfg) {
@@ -4878,6 +4903,24 @@ function diarioSellerCheckoutDone(sellerId, day) {
     return c.real != null && c.real !== "";
   });
 }
+function diarioSellerStatusCls(ci, co) {
+  const hasCi = ci !== null;
+  const hasCo = co !== null;
+  if (!hasCi && !hasCo) return "";
+  const ciOk = ci === true;
+  const coOk = co === true;
+  if ((hasCi ? ciOk : true) && (hasCo ? coOk : true)) return " dio-all-done";
+  if (ciOk || coOk) return ciOk ? " dio-ci-partial" : " dio-co-partial";
+  return " dio-none-done";
+}
+function diarioEnsureCurrentWeek() {
+  if (todayISO() !== currentMonth) return;
+  const wIdx = currentWeekIndex();
+  if (diarioWeekIdx !== wIdx) {
+    diarioWeekIdx = wIdx;
+    state.ui.diarioWeek = wIdx;
+  }
+}
 function diarioWeekCellHtml(realSum, metaSum) {
   const pctW = metaSum ? realSum / metaSum : null;
   return `<b style="color:${heatText(pctW)}">${fmt(realSum)}</b> <span class="muted">/ ${fmt(metaSum)}</span>`;
@@ -4905,9 +4948,8 @@ function renderDiarioSellerBar(sellers) {
     <div class="matriz-filter-chips">${sellers.map(s => {
       const ci = today != null ? diarioSellerCheckinDone(s.id, today) : null;
       const co = today != null ? diarioSellerCheckoutDone(s.id, today) : null;
-      const ciCls = ci === true ? " dio-ci-done" : "";
-      const coCls = co === true ? " dio-co-done" : co === false ? " dio-co-pending" : "";
-      return `<button type="button" class="matriz-filter-chip diario-seller-chip${s.id === diarioSeller ? " active" : ""}${ciCls}${coCls}" data-sid="${s.id}">${escapeHtml(s.name)}</button>`;
+      const stCls = diarioSellerStatusCls(ci, co);
+      return `<button type="button" class="matriz-filter-chip diario-seller-chip${s.id === diarioSeller ? " active" : ""}${stCls}" data-sid="${s.id}">${escapeHtml(s.name)}</button>`;
     }).join("")}</div>`;
   bar.querySelectorAll(".diario-seller-chip").forEach(btn => {
     btn.onclick = () => {
@@ -4944,6 +4986,7 @@ function patchDiarioCells() {
 }
 function renderDiario() {
   /* overlay só é limpo no blur — não apagar aqui para não perder valor otimista */
+  diarioEnsureCurrentWeek();
   const sellers = orderedSellers();
   const bar = document.getElementById("diarioSellerBar");
   if (!sellers.length) {
@@ -7423,7 +7466,7 @@ function exportCsv() {
 }
 function exportJson() { download("backup_gestao_"+todayISO()+".json", JSON.stringify(state, null, 2), "application/json"); toast("Backup exportado"); }
 function download(name, content, type) { const blob = new Blob([content], { type }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url); }
-function importJson(file) { const r = new FileReader(); r.onload = () => { try { state = migrate(JSON.parse(r.result)); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; lancamentoExpanded = state.ui.lancamentoExpanded || {}; renderActive(); toast("Backup importado"); } catch(e){ toast("Arquivo inválido", true); } }; r.readAsText(file); }
+function importJson(file) { const r = new FileReader(); r.onload = () => { try { state = migrate(JSON.parse(r.result)); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; arvExpandedBlocks = state.ui.arvExpanded || {}; lancamentoExpanded = state.ui.lancamentoExpanded || {}; renderActive(); toast("Backup importado"); } catch(e){ toast("Arquivo inválido", true); } }; r.readAsText(file); }
 
 /* ============================================================ TEMA/LOJA/TOAST */
 function applyTheme() { document.documentElement.setAttribute("data-theme", state.theme); document.getElementById("themeToggle").textContent = state.theme === "dark" ? "🌙" : "☀️"; }
@@ -7751,19 +7794,21 @@ function renderArvore() {
     const periodo = "mes";
     const days = monthDays();
     renderArvoreToolbar();
-    const _heads = matrizBuildHeaders(localInds, { periodo, moveOn: false, nameLabel: "Loja / Vendedor" });
-    let head1 = _heads.head1, head2 = _heads.head2;
-    const filterLbl = hasSellerFilter ? "(vendedor)" : hasLojaFilter ? "(loja)" : "";
-    let body = `<tr class="total"><td class="name">⌂ Total RSCEN${filterLbl ? ' <span class="muted" style="font-weight:600">' + filterLbl + "</span>" : ""}</td>${localInds.map(li => arvTotalBlockCells(lojas, li, days, periodo)).join("")}</tr>`;
-    lojas.forEach(L => {
-      const open = !!arvOpenLojas[L.id];
-      const ids = arvTeamSellerIds(L);
-      body += `<tr class="tree-row" data-loja="${L.id}"><td class="name"><span class="tw">${open ? "－" : "＋"}</span> <b>${escapeHtml(L.name)}</b>${L.self ? ' <span class="tag" style="background:color-mix(in srgb,var(--accent-2) 18%,transparent);color:var(--accent-2)">você</span>' : ""}</td>${localInds.map(li => arvBlockCells(L, li, ids, true)).join("")}</tr>`;
-      arvSortedSellers(L).forEach(s => {
-        body += `<tr class="vend arv-v arv-${L.id}" style="display:${open ? "table-row" : "none"}"><td class="name">↳ ${escapeHtml(s.name)}</td>${localInds.map(li => arvBlockCells(L, li, [s.id], false)).join("")}</tr>`;
+    const arvHtml = withExpandedMap(arvExpandedBlocks, () => {
+      const _heads = matrizBuildHeaders(localInds, { periodo, moveOn: false, nameLabel: "Loja / Vendedor" });
+      const filterLbl = hasSellerFilter ? "(vendedor)" : hasLojaFilter ? "(loja)" : "";
+      let body = `<tr class="total"><td class="name">⌂ Total RSCEN${filterLbl ? ' <span class="muted" style="font-weight:600">' + filterLbl + "</span>" : ""}</td>${localInds.map(li => arvTotalBlockCells(lojas, li, days, periodo)).join("")}</tr>`;
+      lojas.forEach(L => {
+        const open = !!arvOpenLojas[L.id];
+        const ids = arvTeamSellerIds(L);
+        body += `<tr class="tree-row" data-loja="${L.id}"><td class="name"><span class="tw">${open ? "－" : "＋"}</span> <b>${escapeHtml(L.name)}</b>${L.self ? ' <span class="tag" style="background:color-mix(in srgb,var(--accent-2) 18%,transparent);color:var(--accent-2)">você</span>' : ""}</td>${localInds.map(li => arvBlockCells(L, li, ids, true)).join("")}</tr>`;
+        arvSortedSellers(L).forEach(s => {
+          body += `<tr class="vend arv-v arv-${L.id}" style="display:${open ? "table-row" : "none"}"><td class="name">↳ ${escapeHtml(s.name)}</td>${localInds.map(li => arvBlockCells(L, li, [s.id], false)).join("")}</tr>`;
+        });
       });
+      return { head1: _heads.head1, head2: _heads.head2, body };
     });
-    tbl.innerHTML = "<thead>" + head1 + head2 + "</thead><tbody>" + body + "</tbody>";
+    tbl.innerHTML = "<thead>" + arvHtml.head1 + arvHtml.head2 + "</thead><tbody>" + arvHtml.body + "</tbody>";
     bindMatrizTips(tbl);
     renderMatrizLegend("arvoreLegend", "arvoreLegendHint");
     bindMatrizSort(tbl, false);
@@ -7773,9 +7818,10 @@ function renderArvore() {
         const ind = state.indicators.find(i => i.id === el.dataset.block);
         if (ind && ind.pctOnly) return;
         const id = el.dataset.block;
-        expandedBlocks[id] = expandedBlocks[id] === false ? true : false;
+        arvExpandedBlocks[id] = arvExpandedBlocks[id] === false ? true : false;
+        state.ui.arvExpanded = arvExpandedBlocks;
         save();
-        matrizUiRerender();
+        renderArvore();
       };
     });
     tbl.querySelectorAll("tr.tree-row[data-loja]").forEach(tr => {
@@ -8531,7 +8577,7 @@ function pullLoja(){
   fbDb.ref("lojas/"+lojaCode).once("value").then(snap => {
     const v = snap.val();
     const finish = () => {
-      applyTheme(); applyTabOrder(); syncStore(); expandedBlocks = state.ui.expanded;
+      applyTheme(); applyTabOrder(); syncStore(); expandedBlocks = state.ui.expanded; arvExpandedBlocks = state.ui.arvExpanded || {};
       updateDivisionalNav();
       watchDivisionalMetas();
       renderActive(); startLojaDataListener();
@@ -8787,7 +8833,7 @@ function init() {
   document.getElementById("exportJson").onclick = exportJson;
   document.getElementById("importJsonBtn").onclick = () => document.getElementById("importJson").click();
   document.getElementById("importJson").addEventListener("change", e => { if(e.target.files[0]) importJson(e.target.files[0]); });
-  document.getElementById("resetAll").onclick = () => { if(confirm("Apagar TODOS os dados deste navegador?")){ localStorage.removeItem(LS_KEY); state = defaultState(); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); toast("Tudo apagado"); } };
+  document.getElementById("resetAll").onclick = () => { if(confirm("Apagar TODOS os dados deste navegador?")){ localStorage.removeItem(LS_KEY); state = defaultState(); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; arvExpandedBlocks = state.ui.arvExpanded || {}; renderActive(); toast("Tudo apagado"); } };
   document.getElementById("fechPull").onclick = fechPull;
   bindAuthEvents();
   if (!window._diarioFlushBound) {

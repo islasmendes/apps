@@ -327,12 +327,27 @@
     color: var(--text);
     box-shadow: none;
   }
-  .diario-seller-bar .matriz-filter-chip.dio-ci-done,
-  .diario-seller-bar .matriz-filter-chip.active.dio-ci-done { border-top-color: var(--accent); }
-  .diario-seller-bar .matriz-filter-chip.dio-co-done,
-  .diario-seller-bar .matriz-filter-chip.active.dio-co-done { border-bottom-color: var(--ok); }
-  .diario-seller-bar .matriz-filter-chip.dio-co-done { color: var(--ok); font-weight: 700; }
-  .diario-seller-bar .matriz-filter-chip.dio-co-pending { color: var(--danger); font-weight: 700; }
+  .diario-seller-bar .matriz-filter-chip.dio-all-done,
+  .diario-seller-bar .matriz-filter-chip.active.dio-all-done {
+    border-top: 3px solid var(--ok);
+    border-bottom: 3px solid var(--ok);
+    color: var(--ok);
+    font-weight: 700;
+  }
+  .diario-seller-bar .matriz-filter-chip.dio-ci-partial,
+  .diario-seller-bar .matriz-filter-chip.active.dio-ci-partial {
+    border-top: 3px solid var(--warn);
+    color: var(--warn);
+    font-weight: 700;
+  }
+  .diario-seller-bar .matriz-filter-chip.dio-co-partial,
+  .diario-seller-bar .matriz-filter-chip.active.dio-co-partial {
+    border-bottom: 3px solid var(--warn);
+    color: var(--warn);
+    font-weight: 700;
+  }
+  .diario-seller-bar .matriz-filter-chip.dio-none-done,
+  .diario-seller-bar .matriz-filter-chip.active.dio-none-done { color: var(--danger); font-weight: 700; }
   html[data-theme="light"] .diario-seller-bar .matriz-filter-chip.active { color: var(--text); }
   .matriz-filter-all.active { border-color: var(--accent); color: var(--accent); }
   .arvore-toolbar { flex-direction: column; align-items: flex-start; gap: 10px; }
@@ -813,7 +828,7 @@
       <div id="diarioSellerBar" class="matriz-toolbar diario-seller-bar" style="margin-top:10px;"></div>
       <div id="diarioLockBar" class="dio-lock-bar"></div>
       <div class="table-wrap" style="margin-top:12px;"><table id="diarioTable"></table></div>
-      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Só o <b>dia de hoje</b> fica liberado; demais dias exigem <b>Desbloquear</b> na coluna ou nos botões acima (reset à 00:00). <b>Limpar semana/dia:</b> desbloqueie o cadeado 🔒 — escolha dia, vendedor e <b>Indicadores</b> (vários com ☑); apaga <b>check-in e check-out do consultor e do gestor</b> na nuvem. Marque <b>⚙ sistema</b> se o erro estiver na matriz (Real do gestor). <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar. Nome <b style="color:var(--ok)">verde</b> = check-out de hoje ok · <b style="color:var(--danger)">vermelho</b> = pendente · borda <b style="color:var(--accent)">superior</b> = check-in ok · borda <b style="color:var(--ok)">inferior</b> = check-out ok. Justificativas longas: arraste <b>⋮⋮</b> na lateral (coluna não alarga).</div>
+      <div class="hint" style="margin-top:10px;"><span class="tag dio-tag-in">Check-in</span> plano da manhã · <span class="tag dio-tag-out">Check-out</span> realizado no fim do dia. Só o <b>dia de hoje</b> fica liberado; demais dias exigem <b>Desbloquear</b> na coluna ou nos botões acima (reset à 00:00). <b>Limpar semana/dia:</b> desbloqueie o cadeado 🔒 — escolha dia, vendedor e <b>Indicadores</b> (vários com ☑); apaga <b>check-in e check-out do consultor e do gestor</b> na nuvem. Marque <b>⚙ sistema</b> se o erro estiver na matriz (Real do gestor). <kbd>Enter</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> para navegar. Chip do vendedor: <b style="color:var(--ok)">verde</b> = check-in e check-out de hoje ok · <b style="color:var(--warn)">amarelo</b> = só um dos dois · <b style="color:var(--danger)">vermelho</b> = nenhum. A semana atual é selecionada automaticamente. Justificativas longas: arraste <b>⋮⋮</b> na lateral (coluna não alarga).</div>
     </div>
   </section>
 
@@ -929,6 +944,7 @@
         <div><h2>KPIs · Indicadores</h2><div class="sub">Principal → sub-indicadores (qtd) e taxas (%). <b>↳</b> desce o principal (pode <b>trocar lugar</b> com um sub) · <b>↑</b> sobe o sub (pode trocar com um principal). Preenchimentos preservados. <b>⋮⋮</b> define a ordem no app do CV, diário e matriz.</div></div>
         <button class="btn" id="addIndicator">+ Indicador principal</button>
       </div>
+      <div id="kpiToolbar" class="matriz-toolbar" style="margin-top:14px;"></div>
       <div id="indicatorList" style="margin-top:14px;"></div>
     </div>
   </section>
@@ -1080,10 +1096,10 @@ function defaultState() {
       { id: agto, name: "Agendamento", abbr: "AGTO", color: "#4f8cff", checkin: true, checkout: true, role: "", pctOnly: false, metaDay: 4, metaSat: 6, metaMonth: 96, subs: [], rates: [] },
       { id: comp, name: "Comparecimento", abbr: "COMP", color: "#22d3aa", checkin: false, checkout: true, role: "", pctOnly: false, metaDay: 2, metaSat: 4, metaMonth: 40, subs: [], rates: [] },
       { id: troca, name: "Carro Troca", abbr: "TROCA", color: "#a78bfa", checkin: false, checkout: true, role: "", pctOnly: false, metaDay: 1, metaSat: 2, metaMonth: 28,
-        subs: [ { id: sTrocaEf, name: "Efetivação", checkin: false, checkout: true, metaDay: 1, metaSat: 1, metaMonth: 12 } ],
+        subs: [ { id: sTrocaEf, name: "Efetivação", checkin: false, checkout: true, metaDay: 0, metaSat: 0, metaSun: 0, metaMonth: 0 } ],
         rates: [ { id: uid(), name: "Pen%", numId: sTrocaEf, denId: venda, invert: false, target: 48, manual: false } ] },
       { id: fichas, name: "Financiamento", abbr: "FIN", color: "#ffb74d", checkin: true, checkout: true, role: "fichas", pctOnly: false, metaDay: 1, metaSat: 1, metaMonth: 24,
-        subs: [ { id: sFinEf, name: "Efetivados", checkin: false, checkout: true, metaDay: 1, metaSat: 1, metaMonth: 18 } ],
+        subs: [ { id: sFinEf, name: "Efetivados", checkin: false, checkout: true, metaDay: 0, metaSat: 0, metaSun: 0, metaMonth: 0 } ],
         rates: [ { id: uid(), name: "Pen%", numId: sFinEf, denId: venda, invert: false, target: 45, manual: false } ] },
       { id: venda, name: "Vendas", abbr: "VENDA", color: "#46d39a", checkin: true, checkout: true, role: "venda", pctOnly: false, metaDay: 1, metaSat: 2, metaMonth: 14, subs: [], rates: [] },
       { id: leads, name: "Leads", abbr: "LEADS", color: "#38bdf8", checkin: false, checkout: true, role: "", pctOnly: false, metaDay: 2, metaSat: 2, metaMonth: 36, subs: [], rates: [] },
@@ -1116,13 +1132,15 @@ function migrate(s) {
   if (!s.order) s.order = { sellers: null, indicators: null };
   if (!s.months) s.months = {};
   if (!s.theme) s.theme = "dark";
-  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, lancamentoExpanded: {}, lancamentoFilter: [], matrizFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" }, kpiReorgAt: 0, dailyTombstones: {} }, s.ui || {});
+  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, arvExpanded: {}, lancamentoExpanded: {}, lancamentoFilter: [], matrizFilter: [], kpiFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" }, kpiReorgAt: 0, dailyTombstones: {} }, s.ui || {});
   if (s.ui.kpiReorgAt == null) s.ui.kpiReorgAt = 0;
   if (!s.ui.dailyTombstones) s.ui.dailyTombstones = {};
   if (!Array.isArray(s.ui.dioClearFields)) s.ui.dioClearFields = null;
   if (!s.ui.expanded) s.ui.expanded = {};
+  if (!s.ui.arvExpanded) s.ui.arvExpanded = {};
   if (!s.ui.lancamentoExpanded) s.ui.lancamentoExpanded = {};
   if (!s.ui.lancamentoFilter) s.ui.lancamentoFilter = [];
+  if (!Array.isArray(s.ui.kpiFilter)) s.ui.kpiFilter = [];
   if (!Array.isArray(s.ui.matrizFilter)) s.ui.matrizFilter = [];
   if (!Array.isArray(s.ui.arvLojaFilter)) s.ui.arvLojaFilter = [];
   if (!Array.isArray(s.ui.arvSellerFilter)) s.ui.arvSellerFilter = [];
@@ -1184,10 +1202,30 @@ function migrate(s) {
   });
   s.consultorSchedule = normalizeConsultorSchedule(s.consultorSchedule);
   repairBlockMetasFromSubsInState(s);
+  clearTemplateSubMetasInState(s);
   mergeKpiIdHistory(s);
   applyMatrizShowUi(s);
   autoRecoverOrphanKpiData(s);
   return s;
+}
+/** Remove metas de sub vindas do template operacional (metas de sub são só do gestor). */
+function clearTemplateSubMetasInState(s) {
+  if (s.ui?.subMetaGestorOnly) return;
+  s.ui = s.ui || {};
+  s.ui.subMetaGestorOnly = true;
+  const tplDefaults = {
+    "carro troca|efetivacao": { metaDay: 1, metaSat: 1, metaSun: 0, metaMonth: 12 },
+    "financiamento|efetivados": { metaDay: 1, metaSat: 1, metaSun: 0, metaMonth: 18 }
+  };
+  (s.indicators || []).forEach(ind => {
+    const pKey = normKpiName(ind.name);
+    (ind.subs || []).forEach(sub => {
+      const tpl = tplDefaults[pKey + "|" + normKpiName(sub.name)];
+      if (!tpl) return;
+      const matchesTpl = KPI_META_KEYS.every(k => (Number(sub[k]) || 0) === (Number(tpl[k]) || 0));
+      if (matchesTpl) KPI_META_KEYS.forEach(k => { sub[k] = 0; });
+    });
+  });
 }
 function consultorMetaScore(cfg) {
   if (!cfg) return 0;
@@ -1392,6 +1430,7 @@ function buildLocalFieldRegistry(st) {
     if (ind.name && !reg[ind.name]) reg[ind.name] = { id: ind.id, cfg: ind };
     (ind.subs || []).forEach(s => {
       if (s.name && !reg[s.name]) reg[s.name] = { id: s.id, cfg: s };
+      if (ind.name && s.name) reg[ind.name + "::" + s.name] = { id: s.id, cfg: s };
     });
   });
   return reg;
@@ -1432,6 +1471,15 @@ function pickKpiMetaField(local, tplField, key) {
   if (local != null && local[key] != null && local[key] !== "") return Number(local[key]) || 0;
   if (tplField != null && tplField[key] != null && tplField[key] !== "") return Number(tplField[key]) || 0;
   return 0;
+}
+/** Metas de KPI/sub/taxa: só o gestor da loja define (não herda template operacional). */
+function pickGestorKpiMetaField(local, key) {
+  if (local != null && local[key] != null && local[key] !== "") return Number(local[key]) || 0;
+  return 0;
+}
+const pickSubKpiMetaField = pickGestorKpiMetaField;
+function showInMatrizFromTpl(tplField) {
+  return tplField?.showInMatriz !== false;
 }
 function shouldPreferLocalKpiMeta(localVal, remoteVal) {
   const lv = Number(localVal), rv = Number(remoteVal);
@@ -1526,6 +1574,21 @@ function resolveLocalCfgForTemplate(st, reg, tInd) {
   }
   return { id: null, cfg: null };
 }
+/** Resolve sub dentro do bloco pai (evita colisão de nomes iguais entre indicadores). */
+function resolveLocalSubForTemplate(st, parentLocal, tplSub, reg) {
+  if (parentLocal) {
+    const inParent = (parentLocal.subs || []).find(s => s.name === tplSub.name);
+    if (inParent) return { id: inParent.id, cfg: inParent };
+  }
+  const parentName = parentLocal?.name;
+  if (parentName && tplSub.name) {
+    const scoped = reg[parentName + "::" + tplSub.name];
+    if (scoped?.cfg) return scoped;
+  }
+  const hit = reg[tplSub.name];
+  if (hit?.cfg) return hit;
+  return { id: null, cfg: null };
+}
 function extractOperationalConfig(st) {
   const indicators = (st.indicators || []).map(ind => ({
     name: ind.name,
@@ -1537,10 +1600,7 @@ function extractOperationalConfig(st) {
     pctOnly: !!ind.pctOnly,
     lowerBetter: !!ind.lowerBetter,
     openQuestion: !!ind.openQuestion,
-    metaDay: Number(ind.metaDay) || 0,
-    metaSat: Number(ind.metaSat) || 0,
-    metaSun: Number(ind.metaSun) || 0,
-    metaMonth: Number(ind.metaMonth) || 0,
+    showInMatriz: ind.showInMatriz !== false,
     planCrossNames: normalizePlanCrossIds(ind).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean),
     subs: (ind.subs || []).map(s => ({
       name: s.name,
@@ -1549,10 +1609,7 @@ function extractOperationalConfig(st) {
       lowerBetter: !!s.lowerBetter,
       sundayOnly: !!s.sundayOnly,
       openQuestion: !!s.openQuestion,
-      metaDay: Number(s.metaDay) || 0,
-      metaSat: Number(s.metaSat) || 0,
-      metaSun: Number(s.metaSun) || 0,
-      metaMonth: Number(s.metaMonth) || 0,
+      showInMatriz: s.showInMatriz !== false,
       planCrossNames: normalizePlanCrossIds(s).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean)
     })),
     rates: (ind.rates || []).map(r => ({
@@ -1562,7 +1619,8 @@ function extractOperationalConfig(st) {
       invert: !!r.invert,
       manual: !!r.manual,
       lowerBetter: !!r.lowerBetter,
-      absolute: !!r.absolute
+      absolute: !!r.absolute,
+      showInMatriz: r.showInMatriz !== false
     }))
   }));
   const idToName = Object.fromEntries((st.indicators || []).map(i => [i.id, i.name]));
@@ -1627,36 +1685,36 @@ function applyOperationalConfig(st, tpl, opts) {
       pctOnly: tInd.pctOnly,
       lowerBetter: tInd.lowerBetter != null ? tInd.lowerBetter : !!local?.lowerBetter,
       openQuestion: !!tInd.openQuestion,
-      showInMatriz: showInMatrizFromLocal(local),
+      showInMatriz: showInMatrizFromTpl(tInd),
       planCrossId: local?.planCrossId || "",
       planCrossIds: Array.isArray(local?.planCrossIds) ? local.planCrossIds.slice() : (local?.planCrossId ? [local.planCrossId] : []),
-      metaDay: pickKpiMetaField(local, tInd, "metaDay"),
-      metaSat: pickKpiMetaField(local, tInd, "metaSat"),
-      metaSun: pickKpiMetaField(local, tInd, "metaSun"),
-      metaMonth: pickKpiMetaField(local, tInd, "metaMonth"),
+      metaDay: pickGestorKpiMetaField(local, "metaDay"),
+      metaSat: pickGestorKpiMetaField(local, "metaSat"),
+      metaSun: pickGestorKpiMetaField(local, "metaSun"),
+      metaMonth: pickGestorKpiMetaField(local, "metaMonth"),
       cvHint: local?.cvHint || "",
       subs: [],
       rates: []
     };
     const tplSubNames = new Set((tInd.subs || []).map(s => s.name));
     ind.subs = (tInd.subs || []).map(ts => {
-      const subHit = resolveLocalCfgForTemplate(st, reg, ts);
+      const subHit = resolveLocalSubForTemplate(st, local, ts, reg);
       const ls = subHit.cfg;
       return {
-        id: subHit.id || reg[ts.name]?.id || uid(),
+        id: subHit.id || reg[tInd.name + "::" + ts.name]?.id || reg[ts.name]?.id || uid(),
         name: ts.name,
         checkin: ts.checkin,
         checkout: ts.checkout,
         lowerBetter: ts.lowerBetter != null ? ts.lowerBetter : !!ls?.lowerBetter,
         sundayOnly: !!ts.sundayOnly,
         openQuestion: !!ts.openQuestion,
-        showInMatriz: showInMatrizFromLocal(ls),
+        showInMatriz: showInMatrizFromTpl(ts),
         planCrossId: ls?.planCrossId || "",
         planCrossIds: Array.isArray(ls?.planCrossIds) ? ls.planCrossIds.slice() : (ls?.planCrossId ? [ls.planCrossId] : []),
-        metaDay: pickKpiMetaField(ls, ts, "metaDay"),
-        metaSat: pickKpiMetaField(ls, ts, "metaSat"),
-        metaSun: pickKpiMetaField(ls, ts, "metaSun"),
-        metaMonth: pickKpiMetaField(ls, ts, "metaMonth"),
+        metaDay: pickGestorKpiMetaField(ls, "metaDay"),
+        metaSat: pickGestorKpiMetaField(ls, "metaSat"),
+        metaSun: pickGestorKpiMetaField(ls, "metaSun"),
+        metaMonth: pickGestorKpiMetaField(ls, "metaMonth"),
         cvHint: ls?.cvHint || ""
       };
     });
@@ -1693,7 +1751,7 @@ function applyOperationalConfig(st, tpl, opts) {
         manual: tr.manual,
         lowerBetter: tr.lowerBetter,
         absolute: lr?.absolute ?? !!tr.absolute,
-        showInMatriz: showInMatrizFromLocal(lr),
+        showInMatriz: showInMatrizFromTpl(tr),
         target: lr?.target ?? 0,
         cvHint: lr?.cvHint || ""
       };
@@ -1735,7 +1793,7 @@ function applyOperationalConfig(st, tpl, opts) {
   st.indicators = newIndicators;
   st.order = st.order || {};
   st.order.indicators = newOrder;
-  applyMatrizShowUi(st);
+  persistMatrizShowUi(st);
   autoRecoverOrphanKpiData(st);
   repairBlockMetasFromSubsInState(st);
   if (!opts?.ignoreVersion) lastAppliedConfigVersion = tpl.updatedAt;
@@ -3595,6 +3653,12 @@ function attachFechNav(table) {
 let matrizPeriodo = state.ui.period || "mes";
 let matrizWeekIdx = state.ui.weekIdx || 0;
 let expandedBlocks = state.ui.expanded;
+let arvExpandedBlocks = state.ui.arvExpanded || {};
+function withExpandedMap(map, fn) {
+  const prev = expandedBlocks;
+  expandedBlocks = map;
+  try { return fn(); } finally { expandedBlocks = prev; }
+}
 function daysForPeriod() { if (matrizPeriodo === "semana") { const w = weeksOf(currentMonth); return w[Math.min(matrizWeekIdx, w.length - 1)] || monthDays(); } return monthDays(); }
 function cfgHasDiario(cfg) { return !!(cfg && (cfg.checkin || cfg.checkout)); }
 function cfgHasMeta(cfg) {
@@ -4839,6 +4903,24 @@ function diarioSellerCheckoutDone(sellerId, day) {
     return c.real != null && c.real !== "";
   });
 }
+function diarioSellerStatusCls(ci, co) {
+  const hasCi = ci !== null;
+  const hasCo = co !== null;
+  if (!hasCi && !hasCo) return "";
+  const ciOk = ci === true;
+  const coOk = co === true;
+  if ((hasCi ? ciOk : true) && (hasCo ? coOk : true)) return " dio-all-done";
+  if (ciOk || coOk) return ciOk ? " dio-ci-partial" : " dio-co-partial";
+  return " dio-none-done";
+}
+function diarioEnsureCurrentWeek() {
+  if (todayISO() !== currentMonth) return;
+  const wIdx = currentWeekIndex();
+  if (diarioWeekIdx !== wIdx) {
+    diarioWeekIdx = wIdx;
+    state.ui.diarioWeek = wIdx;
+  }
+}
 function diarioWeekCellHtml(realSum, metaSum) {
   const pctW = metaSum ? realSum / metaSum : null;
   return `<b style="color:${heatText(pctW)}">${fmt(realSum)}</b> <span class="muted">/ ${fmt(metaSum)}</span>`;
@@ -4866,9 +4948,8 @@ function renderDiarioSellerBar(sellers) {
     <div class="matriz-filter-chips">${sellers.map(s => {
       const ci = today != null ? diarioSellerCheckinDone(s.id, today) : null;
       const co = today != null ? diarioSellerCheckoutDone(s.id, today) : null;
-      const ciCls = ci === true ? " dio-ci-done" : "";
-      const coCls = co === true ? " dio-co-done" : co === false ? " dio-co-pending" : "";
-      return `<button type="button" class="matriz-filter-chip diario-seller-chip${s.id === diarioSeller ? " active" : ""}${ciCls}${coCls}" data-sid="${s.id}">${escapeHtml(s.name)}</button>`;
+      const stCls = diarioSellerStatusCls(ci, co);
+      return `<button type="button" class="matriz-filter-chip diario-seller-chip${s.id === diarioSeller ? " active" : ""}${stCls}" data-sid="${s.id}">${escapeHtml(s.name)}</button>`;
     }).join("")}</div>`;
   bar.querySelectorAll(".diario-seller-chip").forEach(btn => {
     btn.onclick = () => {
@@ -4905,6 +4986,7 @@ function patchDiarioCells() {
 }
 function renderDiario() {
   /* overlay só é limpo no blur — não apagar aqui para não perder valor otimista */
+  diarioEnsureCurrentWeek();
   const sellers = orderedSellers();
   const bar = document.getElementById("diarioSellerBar");
   if (!sellers.length) {
@@ -5138,10 +5220,21 @@ function lancamentoPrincipalLabel(ind) {
   return escapeHtml(matrizDisplayName(ind.name).toUpperCase());
 }
 let lancamentoTabBound = false;
+function focusLancamentoCell(el) {
+  if (!el) return;
+  el.focus();
+  if (typeof el.select === "function") el.select();
+}
 function bindLancamentoTabNav() {
   const root = document.getElementById("lancamentoSellers");
   if (!root || lancamentoTabBound) return;
   lancamentoTabBound = true;
+  root.addEventListener("focusin", e => {
+    const t = e.target;
+    if (t.matches(".syscell-principal, .syscell-sub, .sysratecell")) {
+      if (typeof t.select === "function") t.select();
+    }
+  });
   root.addEventListener("keydown", e => {
     if (e.key !== "Tab") return;
     const t = e.target;
@@ -5154,13 +5247,13 @@ function bindLancamentoTabNav() {
       const principals = [...block.querySelectorAll(".syscell-principal")];
       const idx = principals.indexOf(t);
       const next = forward ? principals[idx + 1] : principals[idx - 1];
-      if (next) { next.focus(); return; }
+      if (next) { focusLancamentoCell(next); return; }
       const blocks = [...document.querySelectorAll("#lancamentoSellers .lancamento-seller-block")];
       const bi = blocks.indexOf(block);
       const nb = forward ? blocks[bi + 1] : blocks[bi - 1];
       if (nb) {
         const ps = [...nb.querySelectorAll(".syscell-principal")];
-        (forward ? ps[0] : ps[ps.length - 1])?.focus();
+        focusLancamentoCell(forward ? ps[0] : ps[ps.length - 1]);
       }
       return;
     }
@@ -5170,15 +5263,15 @@ function bindLancamentoTabNav() {
     const subs = [...group.querySelectorAll(".syscell-sub, .sysratecell")];
     const idx = subs.indexOf(t);
     const next = forward ? subs[idx + 1] : subs[idx - 1];
-    if (next) { next.focus(); return; }
+    if (next) { focusLancamentoCell(next); return; }
     if (!forward) {
-      group.querySelector(".syscell-principal")?.focus();
+      focusLancamentoCell(group.querySelector(".syscell-principal"));
       return;
     }
     const groups = [...block.querySelectorAll(".sysgroup")];
     const gi = groups.indexOf(group);
     const principals = [...block.querySelectorAll(".syscell-principal")];
-    principals[gi + 1]?.focus();
+    focusLancamentoCell(principals[gi + 1]);
   });
 }
 function renderLancamentoToolbar(allSellers) {
@@ -5289,9 +5382,12 @@ function renderLancamentoCards() {
   });
   bindLancamentoTabNav();
 }
+function lancamentoToolbarSellers(days = monthDays()) {
+  return matrizApplySellerOrder(orderedSellers(), days);
+}
 function renderLancamentoModal() {
   const days = monthDays();
-  renderLancamentoToolbar(lancamentoDisplaySellers(days));
+  renderLancamentoToolbar(lancamentoToolbarSellers(days));
   renderLancamentoCards();
 }
 function openLancamentoModal(sellerId) {
@@ -6458,9 +6554,47 @@ function lowerBetterPanelHtml(ind) {
     <span class="hint" style="display:block; font-size:11px;">Alerta = ${m} p.p. abaixo do alvo · exibição até 2 casas (2%, 2,6%, 2,56%) · meta ${unit ? fmtPctFine(t) : fmt(t, 0)}${unit}</span>
   </div>`;
 }
+function renderKpiToolbar() {
+  const bar = document.getElementById("kpiToolbar");
+  if (!bar) return;
+  const inds = orderedIndicators();
+  const filter = state.ui.kpiFilter || [];
+  const hasFilter = filter.length > 0;
+  const filterSet = new Set(filter);
+  bar.innerHTML = `<span class="hint">Filtrar indicador</span>
+    <button type="button" class="ghost-btn sm kpi-filter-all${!hasFilter ? " active" : ""}">Todos</button>
+    <div class="matriz-filter-chips">${inds.map(ind =>
+      `<button type="button" class="matriz-filter-chip kpi-filter-chip${hasFilter && filterSet.has(ind.id) ? " active" : ""}" data-iid="${ind.id}" style="border-left:3px solid ${ind.color}"><span class="swatch" style="background:${ind.color};width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:4px;vertical-align:middle;"></span>${escapeHtml(ind.name)}</button>`
+    ).join("")}</div>`;
+  bar.querySelector(".kpi-filter-all").onclick = () => {
+    state.ui.kpiFilter = [];
+    save();
+    renderIndicatorConfig();
+  };
+  bar.querySelectorAll(".kpi-filter-chip").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.iid;
+      const f = new Set(state.ui.kpiFilter || []);
+      if (f.has(id)) f.delete(id);
+      else f.add(id);
+      state.ui.kpiFilter = [...f];
+      save();
+      renderIndicatorConfig();
+    };
+  });
+}
+function kpiFilteredIndicators() {
+  const filter = state.ui.kpiFilter || [];
+  const inds = orderedIndicators();
+  if (!filter.length) return inds;
+  const set = new Set(filter);
+  return inds.filter(ind => set.has(ind.id));
+}
 function renderIndicatorConfig() {
+  renderKpiToolbar();
   const fields = allFields(); const list = document.getElementById("indicatorList");
-  list.innerHTML = orderedIndicators().map(ind => {
+  const visible = kpiFilteredIndicators();
+  list.innerHTML = visible.map(ind => {
     const lbMode = indHasLowerBetterMode(ind);
     let html = `<div class="ind-card${lbMode ? " lower-better-mode" : ""}" data-ind="${ind.id}" style="border-color:${ind.color}; box-shadow:0 0 0 1px color-mix(in srgb, ${ind.color} 50%, transparent), 0 0 18px color-mix(in srgb, ${ind.color} 24%, transparent);"><div class="head">
       <span class="kpi-draghandle" draggable="true" data-drag-kpi-ind="${ind.id}" title="Arrastar para reordenar">⋮⋮</span>
@@ -6490,7 +6624,7 @@ function renderIndicatorConfig() {
     (ind.rates||[]).forEach(r => { html += rateConfigRowHtml(r, ind, opts); });
     html += `</div></div>`;
     return html;
-  }).join("") || '<div class="empty">Nenhum indicador.</div>';
+  }).join("") || (orderedIndicators().length ? '<div class="empty">Nenhum indicador selecionado — use <b>Todos</b> ou escolha um ou mais indicadores acima.</div>' : '<div class="empty">Nenhum indicador.</div>');
   list.querySelectorAll('[data-rate]').forEach(row => { const ind = findIndByRate(row.dataset.rate); const r = ind && ind.rates.find(x=>x.id===row.dataset.rate); if(r && !r.manual){ const num=row.querySelector('[data-rk="numId"]'); const den=row.querySelector('[data-rk="denId"]'); if(num)num.value=r.numId||''; if(den)den.value=r.denId||''; } });
   bindIndicatorEvents();
 }
@@ -7332,7 +7466,7 @@ function exportCsv() {
 }
 function exportJson() { download("backup_gestao_"+todayISO()+".json", JSON.stringify(state, null, 2), "application/json"); toast("Backup exportado"); }
 function download(name, content, type) { const blob = new Blob([content], { type }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url); }
-function importJson(file) { const r = new FileReader(); r.onload = () => { try { state = migrate(JSON.parse(r.result)); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; lancamentoExpanded = state.ui.lancamentoExpanded || {}; renderActive(); toast("Backup importado"); } catch(e){ toast("Arquivo inválido", true); } }; r.readAsText(file); }
+function importJson(file) { const r = new FileReader(); r.onload = () => { try { state = migrate(JSON.parse(r.result)); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; arvExpandedBlocks = state.ui.arvExpanded || {}; lancamentoExpanded = state.ui.lancamentoExpanded || {}; renderActive(); toast("Backup importado"); } catch(e){ toast("Arquivo inválido", true); } }; r.readAsText(file); }
 
 /* ============================================================ TEMA/LOJA/TOAST */
 function applyTheme() { document.documentElement.setAttribute("data-theme", state.theme); document.getElementById("themeToggle").textContent = state.theme === "dark" ? "🌙" : "☀️"; }
@@ -7660,19 +7794,21 @@ function renderArvore() {
     const periodo = "mes";
     const days = monthDays();
     renderArvoreToolbar();
-    const _heads = matrizBuildHeaders(localInds, { periodo, moveOn: false, nameLabel: "Loja / Vendedor" });
-    let head1 = _heads.head1, head2 = _heads.head2;
-    const filterLbl = hasSellerFilter ? "(vendedor)" : hasLojaFilter ? "(loja)" : "";
-    let body = `<tr class="total"><td class="name">⌂ Total RSCEN${filterLbl ? ' <span class="muted" style="font-weight:600">' + filterLbl + "</span>" : ""}</td>${localInds.map(li => arvTotalBlockCells(lojas, li, days, periodo)).join("")}</tr>`;
-    lojas.forEach(L => {
-      const open = !!arvOpenLojas[L.id];
-      const ids = arvTeamSellerIds(L);
-      body += `<tr class="tree-row" data-loja="${L.id}"><td class="name"><span class="tw">${open ? "－" : "＋"}</span> <b>${escapeHtml(L.name)}</b>${L.self ? ' <span class="tag" style="background:color-mix(in srgb,var(--accent-2) 18%,transparent);color:var(--accent-2)">você</span>' : ""}</td>${localInds.map(li => arvBlockCells(L, li, ids, true)).join("")}</tr>`;
-      arvSortedSellers(L).forEach(s => {
-        body += `<tr class="vend arv-v arv-${L.id}" style="display:${open ? "table-row" : "none"}"><td class="name">↳ ${escapeHtml(s.name)}</td>${localInds.map(li => arvBlockCells(L, li, [s.id], false)).join("")}</tr>`;
+    const arvHtml = withExpandedMap(arvExpandedBlocks, () => {
+      const _heads = matrizBuildHeaders(localInds, { periodo, moveOn: false, nameLabel: "Loja / Vendedor" });
+      const filterLbl = hasSellerFilter ? "(vendedor)" : hasLojaFilter ? "(loja)" : "";
+      let body = `<tr class="total"><td class="name">⌂ Total RSCEN${filterLbl ? ' <span class="muted" style="font-weight:600">' + filterLbl + "</span>" : ""}</td>${localInds.map(li => arvTotalBlockCells(lojas, li, days, periodo)).join("")}</tr>`;
+      lojas.forEach(L => {
+        const open = !!arvOpenLojas[L.id];
+        const ids = arvTeamSellerIds(L);
+        body += `<tr class="tree-row" data-loja="${L.id}"><td class="name"><span class="tw">${open ? "－" : "＋"}</span> <b>${escapeHtml(L.name)}</b>${L.self ? ' <span class="tag" style="background:color-mix(in srgb,var(--accent-2) 18%,transparent);color:var(--accent-2)">você</span>' : ""}</td>${localInds.map(li => arvBlockCells(L, li, ids, true)).join("")}</tr>`;
+        arvSortedSellers(L).forEach(s => {
+          body += `<tr class="vend arv-v arv-${L.id}" style="display:${open ? "table-row" : "none"}"><td class="name">↳ ${escapeHtml(s.name)}</td>${localInds.map(li => arvBlockCells(L, li, [s.id], false)).join("")}</tr>`;
+        });
       });
+      return { head1: _heads.head1, head2: _heads.head2, body };
     });
-    tbl.innerHTML = "<thead>" + head1 + head2 + "</thead><tbody>" + body + "</tbody>";
+    tbl.innerHTML = "<thead>" + arvHtml.head1 + arvHtml.head2 + "</thead><tbody>" + arvHtml.body + "</tbody>";
     bindMatrizTips(tbl);
     renderMatrizLegend("arvoreLegend", "arvoreLegendHint");
     bindMatrizSort(tbl, false);
@@ -7682,9 +7818,10 @@ function renderArvore() {
         const ind = state.indicators.find(i => i.id === el.dataset.block);
         if (ind && ind.pctOnly) return;
         const id = el.dataset.block;
-        expandedBlocks[id] = expandedBlocks[id] === false ? true : false;
+        arvExpandedBlocks[id] = arvExpandedBlocks[id] === false ? true : false;
+        state.ui.arvExpanded = arvExpandedBlocks;
         save();
-        matrizUiRerender();
+        renderArvore();
       };
     });
     tbl.querySelectorAll("tr.tree-row[data-loja]").forEach(tr => {
@@ -8440,7 +8577,7 @@ function pullLoja(){
   fbDb.ref("lojas/"+lojaCode).once("value").then(snap => {
     const v = snap.val();
     const finish = () => {
-      applyTheme(); applyTabOrder(); syncStore(); expandedBlocks = state.ui.expanded;
+      applyTheme(); applyTabOrder(); syncStore(); expandedBlocks = state.ui.expanded; arvExpandedBlocks = state.ui.arvExpanded || {};
       updateDivisionalNav();
       watchDivisionalMetas();
       renderActive(); startLojaDataListener();
@@ -8696,7 +8833,7 @@ function init() {
   document.getElementById("exportJson").onclick = exportJson;
   document.getElementById("importJsonBtn").onclick = () => document.getElementById("importJson").click();
   document.getElementById("importJson").addEventListener("change", e => { if(e.target.files[0]) importJson(e.target.files[0]); });
-  document.getElementById("resetAll").onclick = () => { if(confirm("Apagar TODOS os dados deste navegador?")){ localStorage.removeItem(LS_KEY); state = defaultState(); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; renderActive(); toast("Tudo apagado"); } };
+  document.getElementById("resetAll").onclick = () => { if(confirm("Apagar TODOS os dados deste navegador?")){ localStorage.removeItem(LS_KEY); state = defaultState(); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; arvExpandedBlocks = state.ui.arvExpanded || {}; renderActive(); toast("Tudo apagado"); } };
   document.getElementById("fechPull").onclick = fechPull;
   bindAuthEvents();
   if (!window._diarioFlushBound) {
