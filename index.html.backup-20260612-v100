@@ -2969,33 +2969,18 @@ function isAuxDiarioSub(sub) {
   if (metaSat > 0 && !sub.checkin && sub.checkout && metaDay <= 1 && metaSun === 0) return true;
   return false;
 }
-/** Sub correlato ao principal para soma de check-out na matriz (prefere “hoje”, senão o mais parecido). */
+/** Sub “de HOJE” do principal: precisa ter “hoje” no nome, check-out e correlação com o bloco (ex.: Agendamentos de HOJE). */
+function isHojeCheckoutSub(parentInd, sub) {
+  if (!parentInd || !sub || !sub.checkout) return false;
+  if (!nameHasHoje(sub.name)) return false;
+  return subCorrelacaoScore(parentInd, sub) >= 8;
+}
 function parentRollupHojeSub(parentInd) {
   if (!parentInd || parentInd.pctOnly) return null;
-  const allDiario = (parentInd.subs || []).filter(cfgHasDiario);
-  if (!allDiario.length) return null;
-  const checkoutSubs = allDiario.filter(s => s.checkout);
-  let pool = checkoutSubs.length ? checkoutSubs : allDiario;
-  const dailyPool = pool.filter(s => !isAuxDiarioSub(s));
-  if (dailyPool.length) pool = dailyPool;
-  const hojeSubs = pool.filter(s => nameHasHoje(s.name));
-  const searchPool = hojeSubs.length ? hojeSubs : pool;
-  if (searchPool.length === 1) return searchPool[0];
-  let best = null, bestScore = -1;
-  searchPool.forEach(s => {
-    let sc = subCorrelacaoScore(parentInd, s);
-    if (nameHasHoje(s.name)) sc += 25;
-    if (sc > bestScore) { bestScore = sc; best = s; }
-  });
-  if (best && bestScore >= 8) return best;
-  if (checkoutSubs.length === 1 && !isAuxDiarioSub(checkoutSubs[0])) return checkoutSubs[0];
-  const pStems = parentCorrelStems(parentInd);
-  const stemHit = searchPool.find(s => {
-    const sStems = new Set(kpiNameTokens(s.name).map(kpiStem));
-    for (const p of pStems) if (sStems.has(p)) return true;
-    return false;
-  });
-  return stemHit || searchPool[0];
+  const hojeSubs = (parentInd.subs || []).filter(s => isHojeCheckoutSub(parentInd, s));
+  if (!hojeSubs.length) return null;
+  if (hojeSubs.length === 1) return hojeSubs[0];
+  return hojeSubs.sort((a, b) => subCorrelacaoScore(parentInd, b) - subCorrelacaoScore(parentInd, a))[0];
 }
 function mainIndicatorById(fieldId) {
   return state.indicators.find(i => i.id === fieldId) || null;
@@ -3654,10 +3639,16 @@ let matrizPeriodo = state.ui.period || "mes";
 let matrizWeekIdx = state.ui.weekIdx || 0;
 let expandedBlocks = state.ui.expanded;
 let arvExpandedBlocks = state.ui.arvExpanded || {};
-function withExpandedMap(map, fn) {
+let expandCollapsedDefault = false;
+function isIndExpanded(indId) {
+  return expandCollapsedDefault ? expandedBlocks[indId] === true : expandedBlocks[indId] !== false;
+}
+function withExpandedMap(map, collapsedByDefault, fn) {
   const prev = expandedBlocks;
+  const prevDef = expandCollapsedDefault;
   expandedBlocks = map;
-  try { return fn(); } finally { expandedBlocks = prev; }
+  expandCollapsedDefault = !!collapsedByDefault;
+  try { return fn(); } finally { expandedBlocks = prev; expandCollapsedDefault = prevDef; }
 }
 function daysForPeriod() { if (matrizPeriodo === "semana") { const w = weeksOf(currentMonth); return w[Math.min(matrizWeekIdx, w.length - 1)] || monthDays(); } return monthDays(); }
 function cfgHasDiario(cfg) { return !!(cfg && (cfg.checkin || cfg.checkout)); }
@@ -4097,7 +4088,7 @@ function bindMatrizSort(tbl, moveOn) {
 function matrizColCount(ind, periodo) {
   const subs = visibleSubs(ind), rates = visibleRates(ind);
   if (ind.pctOnly) return rates.reduce((s, r) => s + matrizRateColCount(r), 0);
-  const exp = expandedBlocks[ind.id] !== false;
+  const exp = isIndExpanded(ind.id);
   let c = cfgShowInMatriz(ind) ? matrizItemColCount(ind, periodo) : 0;
   if (exp) c += subs.reduce((s, sub) => s + matrizItemColCount(sub, periodo), 0) + rates.reduce((s, r) => s + matrizRateColCount(r), 0);
   return c;
@@ -4152,7 +4143,7 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
       html += `<td style="color:${projColor}; font-weight:${proj != null ? 700 : 400};"${matrizTipData(projTip, ind.color)}>${proj == null ? "—" : fmt(proj)}</td>`;
     }
   }
-  if (expandedBlocks[ind.id] !== false) {
+  if (isIndExpanded(ind.id)) {
     subs.forEach((s, si) => {
       const { real: sr, has: h, fromSystem: fs } = matrizRealForSellers(ids, s.id, days, periodo);
       const subMeta = metaForMatriz(s, ids, days, periodo, isTeam);
@@ -4186,7 +4177,7 @@ function matrizBuildHeaders(inds, opts) {
   let head1 = `<tr><th class="name matriz-sort${nameSortActive}" rowspan="2" data-sort="name" title="Ordenar por nome">${nameLabel}${matrizSortMark("name")}</th>`, head2 = "<tr>";
   inds.forEach(ind => {
     const subs = visibleSubs(ind), rates = visibleRates(ind);
-    const exp = expandedBlocks[ind.id] !== false;
+    const exp = isIndExpanded(ind.id);
     const lbHead = cfgLowerBetter(ind) || (ind.subs || []).some(s => cfgLowerBetter(s)) || (ind.rates || []).some(r => rateLowerBetter(r, ind));
     const indTitle = matrizBlockTitle(ind.name, lbHead ? "↓ Menor melhor: verde abaixo · amarelo alerta · vermelho estourou" : "");
     head1 += `<th colspan="${matrizColCount(ind, periodo)}" style="background:color-mix(in srgb, ${ind.color} 22%, var(--panel-2)); color:${ind.color}; border-left:3px solid ${ind.color};" class="block-head${lbHead ? " block-head-lower" : ""}" ${blockAttr}="${ind.id}"${indTitle.title}>${moveOn ? '<span class="draghandle" draggable="true" data-dragind="' + ind.id + '">⋮⋮</span>' : ""}<span class="block-toggle">${ind.pctOnly ? "" : (exp ? "▾" : "▸")}</span>${indTitle.short}${lbHead ? " ↓" : ""}</th>`;
@@ -4325,7 +4316,7 @@ function arvTotalBlockCells(lojas, localInd, days, periodo) {
     const projColor = lbProj && metaProj && proj != null ? heatMatrizLowerBetterColor(proj, metaProj, false) : (pp != null ? heatMatrizText(pp) : "var(--text-dim)");
     html += `<td style="color:${projColor}; font-weight:${proj != null ? 700 : 400};"${matrizTipData(projTip, localInd.color)}>${proj == null ? "—" : fmt(proj)}</td>`;
   }
-  if (expandedBlocks[localInd.id] !== false) html += arvExpandedTotalCells(lojas, localInd, days, periodo);
+  if (isIndExpanded(localInd.id)) html += arvExpandedTotalCells(lojas, localInd, days, periodo);
   return html;
 }
 
@@ -7706,8 +7697,14 @@ function fbPush(){
   fbPushTimer = setTimeout(()=>{ try{ fbDb.ref("lojas/"+myLojaId).set({ name: state.storeName || "Loja", updatedAt: Date.now(), data: JSON.parse(JSON.stringify(state)) }); }catch(e){ console.warn("push falhou", e); } }, 1200);
 }
 function allLojas(){
-  const arr = [{ id: myLojaId, name: state.storeName || "Minha loja", data: state, self: true }];
-  Object.keys(remoteLojas).forEach(id => { if(id===myLojaId) return; const r = remoteLojas[id]; if(r && r.data) arr.push({ id, name: r.name || "Loja", data: r.data, self: false }); });
+  const selfCode = String(lojaCode || myLojaId || "").trim().toUpperCase();
+  const selfName = state.storeName && state.storeName !== "Minha loja" ? state.storeName : (selfCode || state.storeName || "Minha loja");
+  const arr = [{ id: myLojaId, name: selfName, data: state, self: true }];
+  Object.keys(remoteLojas).forEach(id => {
+    if (id === myLojaId) return;
+    const r = remoteLojas[id];
+    if (r && r.data) arr.push({ id, name: lojaRemoteDisplayName(id, r), data: r.data, self: false });
+  });
   return arr;
 }
 function withState(s, fn){ const o = state; state = s; try { return fn(); } finally { state = o; } }
@@ -7794,7 +7791,7 @@ function renderArvore() {
     const periodo = "mes";
     const days = monthDays();
     renderArvoreToolbar();
-    const arvHtml = withExpandedMap(arvExpandedBlocks, () => {
+    const arvHtml = withExpandedMap(arvExpandedBlocks, true, () => {
       const _heads = matrizBuildHeaders(localInds, { periodo, moveOn: false, nameLabel: "Loja / Vendedor" });
       const filterLbl = hasSellerFilter ? "(vendedor)" : hasLojaFilter ? "(loja)" : "";
       let body = `<tr class="total"><td class="name">⌂ Total RSCEN${filterLbl ? ' <span class="muted" style="font-weight:600">' + filterLbl + "</span>" : ""}</td>${localInds.map(li => arvTotalBlockCells(lojas, li, days, periodo)).join("")}</tr>`;
@@ -7818,7 +7815,7 @@ function renderArvore() {
         const ind = state.indicators.find(i => i.id === el.dataset.block);
         if (ind && ind.pctOnly) return;
         const id = el.dataset.block;
-        arvExpandedBlocks[id] = arvExpandedBlocks[id] === false ? true : false;
+        arvExpandedBlocks[id] = arvExpandedBlocks[id] === true ? false : true;
         state.ui.arvExpanded = arvExpandedBlocks;
         save();
         renderArvore();
@@ -8031,6 +8028,7 @@ async function saveLojaPassword(code, password) {
   rec.createdAt = Date.now();
   rec.by = getDeviceId();
   rec.kind = "loja";
+  rec.label = String(code || "").trim().toUpperCase();
   await fbDb.ref("auth/lojas/" + code).set(rec);
   return rec;
 }
@@ -8152,19 +8150,18 @@ function finishAuthEnterDivisional(code) {
     showView(DIVISIONAL_VIEWS.includes(activeView) ? activeView : "rscen");
   }
 }
-function finishAuthEnterLoja(code) {
+async function finishAuthEnterLoja(code) {
   applyAuthContext("loja", code);
   saveAuthSession({ type: "loja", code });
   unlockAuth();
+  const displayName = await fetchLojaDisplayName(code);
+  applyLojaDisplayName(displayName);
   if (fbReady) { pullLoja(); startLojaDataListener(); }
   else {
-    state.storeName = code;
     save(); syncStore();
     updateDivisionalNav();
     renderActive();
   }
-  const hdr = document.getElementById("storeName");
-  if (hdr) hdr.value = code;
 }
 function finishAuthEnter(code) {
   if (isDivisionalCode(code)) finishAuthEnterDivisional(code);
@@ -8308,6 +8305,37 @@ function lojaCodeFromRemote(id, r) {
   if (/^VC[A-Z0-9]+$/.test(n)) return n;
   return idU || c;
 }
+function lojaRemoteDisplayName(id, r, fallbackCode) {
+  const code = lojaCodeFromRemote(id, r) || String(fallbackCode || id || "").trim().toUpperCase();
+  const n = String(r?.name || "").trim();
+  if (n && n !== "Loja" && n !== "Minha loja") return n;
+  return code || n || "Loja";
+}
+async function fetchLojaDisplayName(code) {
+  const c = String(code || "").trim().toUpperCase();
+  if (!c || isDivisionalCode(c)) return c || "RSCEN";
+  if (!fbReady || !fbDb) return c;
+  try {
+    const [lojaSnap, authSnap] = await Promise.all([
+      fbDb.ref("lojas/" + c).once("value"),
+      fbDb.ref("auth/lojas/" + c).once("value")
+    ]);
+    const v = lojaSnap.val();
+    const a = authSnap.val();
+    const remoteName = lojaRemoteDisplayName(c, v, c);
+    const authLabel = String(a?.label || a?.displayName || "").trim();
+    if (remoteName && remoteName !== c) return remoteName;
+    if (authLabel) return authLabel;
+    return c;
+  } catch (e) { return c; }
+}
+function applyLojaDisplayName(name) {
+  const n = String(name || "").trim();
+  if (!n) return;
+  state.storeName = n;
+  const hdr = document.getElementById("storeName");
+  if (hdr) hdr.value = n;
+}
 function adminLojaOptions() {
   const list = [], seen = new Set();
   const add = (code, label, opts) => {
@@ -8389,17 +8417,17 @@ function switchToLoja(code) {
   applyAuthContext("loja", c);
   if (authUnlocked) saveAuthSession({ type: "loja", code: c });
   resetLojaDataListener();
-  if (fbReady) pullLoja();
-  else {
-    state.storeName = c;
-    save();
-    syncStore();
-    updateDivisionalNav();
-    renderActive();
-  }
-  const hdr = document.getElementById("storeName");
-  if (hdr) hdr.value = c;
-  toast("Loja: " + c);
+  fetchLojaDisplayName(c).then(displayName => {
+    applyLojaDisplayName(displayName);
+    if (fbReady) pullLoja();
+    else {
+      save();
+      syncStore();
+      updateDivisionalNav();
+      renderActive();
+    }
+    toast("Loja: " + displayName);
+  });
   return true;
 }
 function askLoja() {
@@ -8595,7 +8623,7 @@ function pullLoja(){
       if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
       if (localVis) state.ui.matrizShow = { ...(state.ui.matrizShow || {}), ...localVis };
       applyMatrizShowUi(state);
-      state.storeName = v.name || lojaCode;
+      applyLojaDisplayName(lojaRemoteDisplayName(lojaCode, v, lojaCode));
       applyTemplateFromCloud().then(() => {
         mergeKpiMetasFromLocalState(state, localSnap);
         if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
@@ -8608,12 +8636,14 @@ function pullLoja(){
         toast("Loja "+lojaCode+" carregada da nuvem");
       });
     } else {
-      state.storeName = lojaCode;
-      applyTemplateFromCloud().then(() => {
-        save({ skipConfigPush: !isAdmin });
-        fbPush();
-        finish();
-        toast("Nova loja "+lojaCode+" criada");
+      fetchLojaDisplayName(lojaCode).then(displayName => {
+        applyLojaDisplayName(displayName);
+        applyTemplateFromCloud().then(() => {
+          save({ skipConfigPush: !isAdmin });
+          fbPush();
+          finish();
+          toast("Nova loja "+lojaCode+" criada");
+        });
       });
     }
   }).catch(e => console.warn("pull falhou", e));
