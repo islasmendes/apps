@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v110";
+  var BUILD = "v109";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2043,14 +2043,12 @@ function applyTemplateFromCloud() {
     const changed = applyOperationalConfig(state, tpl);
     mergeKpiMetasFromLocalState(state, localSnap);
     if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
-    mergeDiarioDaysFromLocalState(state, localSnap);
-    if (diskSnap) mergeDiarioDaysFromLocalState(state, diskSnap);
     mergeUiPrefsFromLocalState(state, localSnap);
     if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
     configApplying = false;
-    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
     if (changed) {
       lastPushedConfigHash = configHash(tpl);
+      try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
       expandedBlocks = state.ui.expanded;
     } else {
       autoRecoverOrphanKpiData(state);
@@ -2074,17 +2072,14 @@ function startConfigListener() {
       const changed = applyOperationalConfig(state, tpl);
       mergeKpiMetasFromLocalState(state, localSnap);
       if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
-      mergeDiarioDaysFromLocalState(state, localSnap);
-      if (diskSnap) mergeDiarioDaysFromLocalState(state, diskSnap);
       mergeUiPrefsFromLocalState(state, localSnap);
       if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
       configApplying = false;
-      try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
-      if (["matriz", "rscen", "kpis", "gestao", "config", "diario"].includes(activeView)) renderActive();
       if (!changed) return;
       lastPushedConfigHash = configHash(tpl);
       save({ skipPush: divisionalMode(), skipConfigPush: true, immediatePush: true });
       expandedBlocks = state.ui.expanded;
+      if (["matriz", "rscen", "kpis", "gestao", "config", "diario"].includes(activeView)) renderActive();
     }, 300);
   });
 }
@@ -2941,7 +2936,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v110"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v109"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3162,27 +3157,9 @@ function normalizeDiarioDays(cfg) {
   return cfg.diarioDays;
 }
 function mergeDiarioDays(local, tpl) {
-  const l = Array.isArray(local?.diarioDays) && local.diarioDays.length === 7 ? local.diarioDays.map(v => v !== false) : null;
-  const t = Array.isArray(tpl?.diarioDays) && tpl.diarioDays.length === 7 ? tpl.diarioDays.map(v => v !== false) : null;
-  if (l && (!t || l.some((v, i) => v !== t[i]))) return l;
-  if (t) return t;
-  if (l) return l;
+  if (Array.isArray(local?.diarioDays) && local.diarioDays.length === 7) return local.diarioDays.map(v => v !== false);
+  if (Array.isArray(tpl?.diarioDays) && tpl.diarioDays.length === 7) return tpl.diarioDays.map(v => v !== false);
   return DEFAULT_DIARIO_DAYS.slice();
-}
-function copyDiarioDaysFields(tgt, src) {
-  if (!tgt || !src) return;
-  if (!Array.isArray(src.diarioDays) || src.diarioDays.length !== 7) return;
-  tgt.diarioDays = src.diarioDays.map(v => v !== false);
-}
-/** Preserva flags de dias do diário após sync do template operacional. */
-function mergeDiarioDaysFromLocalState(target, local) {
-  if (!target || !local) return target;
-  const lmap = buildKpiFieldMap(local);
-  (target.indicators || []).forEach(ind => {
-    copyDiarioDaysFields(ind, findKpiCfgInMap(lmap, ind));
-    (ind.subs || []).forEach(sub => copyDiarioDaysFields(sub, findKpiCfgInMap(lmap, sub)));
-  });
-  return target;
 }
 function cfgActiveOnWeekday(cfg, day, m = currentMonth) {
   return !!normalizeDiarioDays(cfg)[weekday(m, day)];
@@ -7258,13 +7235,13 @@ function renderIndicatorConfig() {
       <label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="ind-field" data-k="openQuestion" ${ind.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label>`}
       <span class="spacer" style="flex:1"></span>
       ${ind.pctOnly ? "" : `<button class="iconbtn" data-demote-ind="${ind.id}" title="Descer para subindicador (pode trocar lugar com um sub)">↳</button>`}
-      <button class="iconbtn" data-del-ind="${ind.id}" title="Excluir">✕</button></div>${!ind.pctOnly && (ind.checkin || ind.checkout) ? diarioDaysPickerHtml(ind, { indId: ind.id }) : ""}${cvHintRowHtml(ind, "ind-field", "data-k")}${ind.openQuestion && !ind.pctOnly ? openCrossPickerHtml(ind) : ""}${lowerBetterPanelHtml(ind)}`;
+      <button class="iconbtn" data-del-ind="${ind.id}" title="Excluir">✕</button></div>${!ind.pctOnly && (ind.checkin || ind.checkout) ? diarioDaysPickerHtml(ind) : ""}${cvHintRowHtml(ind, "ind-field", "data-k")}${ind.openQuestion && !ind.pctOnly ? openCrossPickerHtml(ind) : ""}${lowerBetterPanelHtml(ind)}`;
     if (!ind.pctOnly) html += metaGoalsQtyHtml(ind, ind.id);
     if (!ind.pctOnly) {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
       (ind.subs||[]).forEach(s => {
         const subLb = cfgLowerBetter(s) || cfgLowerBetter(ind);
-        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><label class="switch" title="Exibir na Matriz"><input type="checkbox" class="sub-field" data-sk="showInMatriz" ${s.showInMatriz!==false?'checked':''}><span class="track"></span>Matriz</label><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-promote-sub="${s.id}" title="Subir para principal (pode trocar lugar com um principal)">↑</button><button class="iconbtn" data-del-sub="${s.id}">✕</button>${s.openQuestion ? openCrossPickerHtml(s) : ""}</div>${(s.checkin || s.checkout) ? diarioDaysPickerHtml(s, { subId: s.id }) : ""}<div class="sub-cv-hint-row" data-sub-hint="${s.id}"><input type="text" class="sub-cv-hint-field" data-sk="cvHint" value="${escapeHtml(s.cvHint || "")}" placeholder="Descrição para o consultor (só no app CV)"></div>`;
+        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><label class="switch" title="Exibir na Matriz"><input type="checkbox" class="sub-field" data-sk="showInMatriz" ${s.showInMatriz!==false?'checked':''}><span class="track"></span>Matriz</label><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-promote-sub="${s.id}" title="Subir para principal (pode trocar lugar com um principal)">↑</button><button class="iconbtn" data-del-sub="${s.id}">✕</button>${s.openQuestion ? openCrossPickerHtml(s) : ""}</div>${(s.checkin || s.checkout) ? diarioDaysPickerHtml(s) : ""}<div class="sub-cv-hint-row" data-sub-hint="${s.id}"><input type="text" class="sub-cv-hint-field" data-sk="cvHint" value="${escapeHtml(s.cvHint || "")}" placeholder="Descrição para o consultor (só no app CV)"></div>`;
       });
       html += `</div>`;
     }
@@ -7888,21 +7865,20 @@ function bindDiarioDaysPickers(root) {
     if (cb.dataset.wdBound) return;
     cb.dataset.wdBound = "1";
     cb.addEventListener("change", () => {
-      const subFor = cb.closest("[data-sub-for]")?.dataset.subFor;
-      const indFor = cb.closest("[data-ind-for]")?.dataset.indFor;
+      const row = cb.closest("[data-sub]");
+      const card = cb.closest("[data-ind]");
       let cfg = null;
-      if (subFor) {
-        const ind = findIndBySub(subFor);
-        cfg = ind?.subs.find(x => x.id === subFor);
-      } else if (indFor) {
-        cfg = state.indicators.find(i => i.id === indFor);
+      if (row) {
+        const ind = findIndBySub(row.dataset.sub);
+        cfg = ind?.subs.find(x => x.id === row.dataset.sub);
+      } else if (card) {
+        cfg = state.indicators.find(i => i.id === card.dataset.ind);
       }
       if (!cfg) return;
       normalizeDiarioDays(cfg);
       cfg.diarioDays[+cb.dataset.wd] = cb.checked;
-      save({ immediatePush: true });
+      save();
       if (activeView === "diario") renderDiario();
-      if (activeView === "kpis") renderIndicatorConfig();
     });
   });
 }
@@ -9453,24 +9429,18 @@ function pullLoja(opts) {
       if (!cloudOnly) {
         mergeKpiMetasFromLocalState(state, localSnap);
         if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
-        mergeDiarioDaysFromLocalState(state, localSnap);
-        if (diskSnap) mergeDiarioDaysFromLocalState(state, diskSnap);
         mergeUiPrefsFromLocalState(state, localSnap);
         if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
       } else if (uiPrefs) {
         mergeUiPrefsFromLocalState(state, uiPrefs);
       }
-      const cloudSnap = JSON.parse(JSON.stringify(state));
       if (localVis) state.ui.matrizShow = { ...(state.ui.matrizShow || {}), ...localVis };
       applyMatrizShowUi(state);
       applyLojaDisplayName(lojaRemoteDisplayName(lojaCode, v, lojaCode));
       return applyTemplateFromCloud().then(() => {
-        mergeDiarioDaysFromLocalState(state, cloudSnap);
         if (!cloudOnly) {
           mergeKpiMetasFromLocalState(state, localSnap);
           if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
-          mergeDiarioDaysFromLocalState(state, localSnap);
-          if (diskSnap) mergeDiarioDaysFromLocalState(state, diskSnap);
           mergeUiPrefsFromLocalState(state, localSnap);
           if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
         }
