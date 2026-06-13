@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v120";
+  var BUILD = "v119";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -1350,7 +1350,6 @@ function migrate(s) {
   clearTemplateSubMetasInState(s);
   mergeKpiIdHistory(s);
   applyMatrizShowUi(s);
-  applyKpiTogglesUi(s);
   autoRecoverOrphanKpiData(s);
   return s;
 }
@@ -1877,12 +1876,12 @@ function applyOperationalConfig(st, tpl, opts) {
       name: tInd.name,
       abbr: tInd.abbr || local?.abbr || "",
       color: tInd.color || local?.color,
-      checkin: pickLocalToggle(local, tInd, "checkin"),
-      checkout: pickLocalToggle(local, tInd, "checkout"),
+      checkin: tInd.checkin,
+      checkout: tInd.checkout,
       role: tInd.role || local?.role || "",
-      pctOnly: pickLocalToggle(local, tInd, "pctOnly"),
-      lowerBetter: local?.lowerBetter != null ? !!local.lowerBetter : (tInd.lowerBetter != null ? !!tInd.lowerBetter : !!local?.lowerBetter),
-      openQuestion: pickLocalToggle(local, tInd, "openQuestion"),
+      pctOnly: tInd.pctOnly,
+      lowerBetter: tInd.lowerBetter != null ? tInd.lowerBetter : !!local?.lowerBetter,
+      openQuestion: !!tInd.openQuestion,
       showInMatriz: showInMatrizFromTpl(tInd),
       planCrossId: local?.planCrossId || "",
       planCrossIds: Array.isArray(local?.planCrossIds) ? local.planCrossIds.slice() : (local?.planCrossId ? [local.planCrossId] : []),
@@ -1902,11 +1901,11 @@ function applyOperationalConfig(st, tpl, opts) {
       return {
         id: subHit.id || reg[tInd.name + "::" + ts.name]?.id || reg[ts.name]?.id || uid(),
         name: ts.name,
-        checkin: pickLocalToggle(ls, ts, "checkin"),
-        checkout: pickLocalToggle(ls, ts, "checkout"),
-        lowerBetter: ls?.lowerBetter != null ? !!ls.lowerBetter : (ts.lowerBetter != null ? !!ts.lowerBetter : false),
-        sundayOnly: ls?.sundayOnly != null ? !!ls.sundayOnly : !!ts.sundayOnly,
-        openQuestion: pickLocalToggle(ls, ts, "openQuestion"),
+        checkin: ts.checkin,
+        checkout: ts.checkout,
+        lowerBetter: ts.lowerBetter != null ? ts.lowerBetter : !!ls?.lowerBetter,
+        sundayOnly: !!ts.sundayOnly,
+        openQuestion: !!ts.openQuestion,
         showInMatriz: showInMatrizFromTpl(ts),
         planCrossId: ls?.planCrossId || "",
         planCrossIds: Array.isArray(ls?.planCrossIds) ? ls.planCrossIds.slice() : (ls?.planCrossId ? [ls.planCrossId] : []),
@@ -1948,10 +1947,10 @@ function applyOperationalConfig(st, tpl, opts) {
         name: tr.name,
         numId: "",
         denId: "",
-        invert: lr?.invert != null ? !!lr.invert : !!tr.invert,
-        manual: lr?.manual != null ? !!lr.manual : !!tr.manual,
-        lowerBetter: lr?.lowerBetter != null ? !!lr.lowerBetter : !!tr.lowerBetter,
-        absolute: lr?.absolute != null ? !!lr.absolute : !!tr.absolute,
+        invert: tr.invert,
+        manual: tr.manual,
+        lowerBetter: tr.lowerBetter,
+        absolute: lr?.absolute ?? !!tr.absolute,
         showInMatriz: showInMatrizFromTpl(tr),
         target: lr?.target ?? 0,
         cvHint: lr?.cvHint || ""
@@ -1988,7 +1987,6 @@ function applyOperationalConfig(st, tpl, opts) {
   const nameToId = Object.fromEntries(newIndicators.map(i => [i.name, i.id]));
   const newOrder = (tpl.orderNames || newIndicators.map(i => i.name)).map(n => nameToId[n]).filter(Boolean);
   const matrizShowSnap = st?.ui?.matrizShow ? { ...st.ui.matrizShow } : null;
-  const kpiTogglesSnap = st?.ui?.kpiToggles ? JSON.parse(JSON.stringify(st.ui.kpiToggles)) : null;
   const before = configHash(extractOperationalConfig(st));
   const preview = { ...st, indicators: newIndicators, order: { ...(st.order || {}), indicators: newOrder } };
   const after = configHash(extractOperationalConfig(preview));
@@ -2002,13 +2000,6 @@ function applyOperationalConfig(st, tpl, opts) {
     applyMatrizShowUi(st);
   } else {
     persistMatrizShowUi(st);
-  }
-  if (kpiTogglesSnap && Object.keys(kpiTogglesSnap).length) {
-    st.ui = st.ui || {};
-    st.ui.kpiToggles = kpiTogglesSnap;
-    applyKpiTogglesUi(st);
-  } else {
-    persistKpiTogglesUi(st);
   }
   autoRecoverOrphanKpiData(st);
   repairBlockMetasFromSubsInState(st);
@@ -2072,10 +2063,6 @@ function mergeMatrizShowFromSnapshots(target, ...snaps) {
   target.ui = target.ui || {};
   target.ui.matrizShow = { ...merged, ...(target.ui.matrizShow || {}) };
 }
-function mergeKpiPrefsFromSnapshots(target, ...snaps) {
-  mergeMatrizShowFromSnapshots(target, ...snaps);
-  mergeKpiTogglesFromSnapshots(target, ...snaps);
-}
 function applyTemplateFromCloud() {
   if (!fbReady || !fbDb) return Promise.resolve(false);
   return fbDb.ref(CONFIG_OP_PATH).once("value").then(snap => {
@@ -2083,19 +2070,16 @@ function applyTemplateFromCloud() {
     if (!tpl) return false;
     const localSnap = JSON.parse(JSON.stringify(state));
     const diskSnap = loadLocalStateSnapshot();
-    mergeKpiPrefsFromSnapshots(state, diskSnap, localSnap);
+    mergeMatrizShowFromSnapshots(state, diskSnap, localSnap);
     configApplying = true;
     const changed = applyOperationalConfig(state, tpl);
     mergeKpiMetasFromLocalState(state, localSnap);
     if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
     mergeDiarioDaysFromLocalState(state, localSnap);
     if (diskSnap) mergeDiarioDaysFromLocalState(state, diskSnap);
-    mergeKpiTogglesFromLocalState(state, localSnap);
-    if (diskSnap) mergeKpiTogglesFromLocalState(state, diskSnap);
     mergeUiPrefsFromLocalState(state, localSnap);
     if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
     applyMatrizShowUi(state);
-    applyKpiTogglesUi(state);
     configApplying = false;
     try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
     if (changed) {
@@ -2119,19 +2103,16 @@ function startConfigListener() {
     configApplyTimer = setTimeout(() => {
       const localSnap = JSON.parse(JSON.stringify(state));
       const diskSnap = loadLocalStateSnapshot();
-      mergeKpiPrefsFromSnapshots(state, diskSnap, localSnap);
+      mergeMatrizShowFromSnapshots(state, diskSnap, localSnap);
       configApplying = true;
       const changed = applyOperationalConfig(state, tpl);
       mergeKpiMetasFromLocalState(state, localSnap);
       if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
       mergeDiarioDaysFromLocalState(state, localSnap);
       if (diskSnap) mergeDiarioDaysFromLocalState(state, diskSnap);
-      mergeKpiTogglesFromLocalState(state, localSnap);
-      if (diskSnap) mergeKpiTogglesFromLocalState(state, diskSnap);
       mergeUiPrefsFromLocalState(state, localSnap);
       if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
       applyMatrizShowUi(state);
-      applyKpiTogglesUi(state);
       configApplying = false;
       try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
       if (["matriz", "rscen", "kpis", "gestao", "config", "diario"].includes(activeView)) renderActive();
@@ -2145,7 +2126,6 @@ function startConfigListener() {
 
 function save(opts) {
   persistMatrizShowUi(state);
-  persistKpiTogglesUi(state);
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); }
   if (lojaCode && !divisionalMode()) markLocalStateLoja(lojaCode);
   if (!opts?.skipPush && typeof fbPush === "function") {
@@ -2996,7 +2976,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v120"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v119"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3255,84 +3235,6 @@ function mergeDiarioDaysFromLocalState(target, local) {
     (ind.subs || []).forEach(sub => copyDiarioDaysFields(sub, findKpiCfgInMap(lmap, sub)));
   });
   return target;
-}
-const KPI_TOGGLE_KEYS_IND = ["checkin", "checkout", "openQuestion", "pctOnly", "lowerBetter"];
-const KPI_TOGGLE_KEYS_SUB = ["checkin", "checkout", "openQuestion", "lowerBetter", "sundayOnly"];
-const KPI_TOGGLE_KEYS_RATE = ["invert", "manual", "lowerBetter", "absolute"];
-function copyKpiToggleFields(tgt, src, keys) {
-  if (!tgt || !src || !keys?.length) return;
-  keys.forEach(k => {
-    if (src[k] !== undefined && src[k] !== null) tgt[k] = src[k];
-  });
-}
-function pickLocalToggle(local, tpl, key) {
-  if (local != null && local[key] != null) return !!local[key];
-  if (tpl != null && tpl[key] != null) return !!tpl[key];
-  return false;
-}
-function persistKpiTogglesUi(st) {
-  st.ui = st.ui || {};
-  const bag = st.ui.kpiToggles = st.ui.kpiToggles || {};
-  const store = (cfg, keys) => {
-    if (!cfg?.id) return;
-    const entry = {};
-    keys.forEach(k => {
-      if (cfg[k] !== undefined && cfg[k] !== null) entry[k] = cfg[k];
-    });
-    if (Object.keys(entry).length) bag[cfg.id] = { ...(bag[cfg.id] || {}), ...entry };
-  };
-  (st.indicators || []).forEach(ind => {
-    store(ind, KPI_TOGGLE_KEYS_IND);
-    (ind.subs || []).forEach(s => store(s, KPI_TOGGLE_KEYS_SUB));
-    (ind.rates || []).forEach(r => store(r, KPI_TOGGLE_KEYS_RATE));
-  });
-}
-function applyKpiTogglesUi(st) {
-  const bag = st?.ui?.kpiToggles;
-  if (!bag) return;
-  const apply = (cfg, keys) => {
-    const entry = bag[cfg.id];
-    if (!entry) return;
-    keys.forEach(k => {
-      if (entry[k] !== undefined && entry[k] !== null) cfg[k] = entry[k];
-    });
-  };
-  (st.indicators || []).forEach(ind => {
-    apply(ind, KPI_TOGGLE_KEYS_IND);
-    (ind.subs || []).forEach(s => apply(s, KPI_TOGGLE_KEYS_SUB));
-    (ind.rates || []).forEach(r => apply(r, KPI_TOGGLE_KEYS_RATE));
-  });
-}
-function mergeKpiTogglesFromLocalState(target, local) {
-  if (!target || !local) return target;
-  const lmap = buildKpiFieldMap(local);
-  (target.indicators || []).forEach(ind => {
-    const localInd = findKpiCfgInMap(lmap, ind);
-    copyKpiToggleFields(ind, localInd, KPI_TOGGLE_KEYS_IND);
-    (ind.subs || []).forEach(sub => {
-      copyKpiToggleFields(sub, findKpiCfgInMap(lmap, sub), KPI_TOGGLE_KEYS_SUB);
-    });
-    const localRates = Object.fromEntries((localInd?.rates || []).map(r => [r.id, r]));
-    (ind.rates || []).forEach(rate => {
-      const lr = localRates[rate.id] || (localInd?.rates || []).find(r => r.name === rate.name);
-      copyKpiToggleFields(rate, lr, KPI_TOGGLE_KEYS_RATE);
-    });
-  });
-  return target;
-}
-function mergeKpiTogglesFromSnapshots(target, ...snaps) {
-  if (!target) return;
-  const merged = {};
-  snaps.forEach(snap => {
-    const bag = snap?.ui?.kpiToggles;
-    if (!bag) return;
-    Object.keys(bag).forEach(id => {
-      merged[id] = { ...(merged[id] || {}), ...bag[id] };
-    });
-  });
-  if (!Object.keys(merged).length) return;
-  target.ui = target.ui || {};
-  target.ui.kpiToggles = { ...merged, ...(target.ui.kpiToggles || {}) };
 }
 function cfgActiveOnWeekday(cfg, day, m = currentMonth) {
   return !!normalizeDiarioDays(cfg)[weekday(m, day)];
@@ -9717,7 +9619,6 @@ function pullLoja(opts) {
     };
     if (v && v.data) {
       const localVis = !cloudOnly && state?.ui?.matrizShow ? { ...state.ui.matrizShow } : null;
-      const localToggles = !cloudOnly && state?.ui?.kpiToggles ? JSON.parse(JSON.stringify(state.ui.kpiToggles)) : null;
       const localSnap = cloudOnly ? null : JSON.parse(JSON.stringify(state));
       const diskSnap = cloudOnly ? null : loadLocalStateSnapshot();
       const uiPrefs = cloudOnly ? { theme: state.theme, ui: { tabOrder: state.ui?.tabOrder, tabOrderAt: state.ui?.tabOrderAt } } : null;
@@ -9727,8 +9628,6 @@ function pullLoja(opts) {
         if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
         mergeDiarioDaysFromLocalState(state, localSnap);
         if (diskSnap) mergeDiarioDaysFromLocalState(state, diskSnap);
-        mergeKpiTogglesFromLocalState(state, localSnap);
-        if (diskSnap) mergeKpiTogglesFromLocalState(state, diskSnap);
         mergeUiPrefsFromLocalState(state, localSnap);
         if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
       } else if (uiPrefs) {
@@ -9736,9 +9635,7 @@ function pullLoja(opts) {
       }
       const cloudSnap = JSON.parse(JSON.stringify(state));
       if (localVis) state.ui.matrizShow = { ...(state.ui.matrizShow || {}), ...localVis };
-      if (localToggles) state.ui.kpiToggles = { ...(state.ui.kpiToggles || {}), ...localToggles };
       applyMatrizShowUi(state);
-      applyKpiTogglesUi(state);
       applyLojaDisplayName(lojaRemoteDisplayName(lojaCode, v, lojaCode));
       return applyTemplateFromCloud().then(() => {
         mergeDiarioDaysFromLocalState(state, cloudSnap);
@@ -9747,13 +9644,10 @@ function pullLoja(opts) {
           if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
           mergeDiarioDaysFromLocalState(state, localSnap);
           if (diskSnap) mergeDiarioDaysFromLocalState(state, diskSnap);
-          mergeKpiTogglesFromLocalState(state, localSnap);
-          if (diskSnap) mergeKpiTogglesFromLocalState(state, diskSnap);
           mergeUiPrefsFromLocalState(state, localSnap);
           if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
         }
         applyMatrizShowUi(state);
-        applyKpiTogglesUi(state);
         if (!cloudOnly) autoRecoverOrphanKpiData(state);
         save({ skipConfigPush: !isAdmin, skipPush: cloudOnly, immediatePush: !cloudOnly });
         finish();
