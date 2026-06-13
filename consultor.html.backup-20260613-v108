@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v109";
+  var BUILD = "v108";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -582,7 +582,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "943349612077",
   appId: "1:943349612077:web:2bc8cafbb06046df5ec2a4"
 };
-const APP_BUILD = "v109"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
+const APP_BUILD = "v108"; // manter igual ao BUILD do <head> e ao APP_BUILD em index.html
 document.getElementById("appVerLbl").textContent = APP_BUILD;
 const SESSION_KEY = "gc_consultor_session";
 const PBKDF2_ITER = 310000;
@@ -1613,31 +1613,15 @@ function normalizeLojaIndicators() {
     if (ind.planCrossId == null) ind.planCrossId = "";
     if (!Array.isArray(ind.planCrossIds)) ind.planCrossIds = ind.planCrossId ? [ind.planCrossId] : [];
     normalizePlanCrossIds(ind);
-    normalizeDiarioDays(ind);
     (ind.subs || []).forEach(sub => {
       normalizeCfgMeta(sub);
       if (sub.openQuestion == null) sub.openQuestion = false;
       if (sub.planCrossId == null) sub.planCrossId = "";
       if (!Array.isArray(sub.planCrossIds)) sub.planCrossIds = sub.planCrossId ? [sub.planCrossId] : [];
       normalizePlanCrossIds(sub);
-      normalizeDiarioDays(sub);
     });
     (ind.rates || []).forEach(r => { if (r.absolute == null) r.absolute = false; });
   });
-}
-const DIARIO_WD_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-const DEFAULT_DIARIO_DAYS = [true, true, true, true, true, true, true];
-function normalizeDiarioDays(cfg) {
-  if (!cfg) return DEFAULT_DIARIO_DAYS.slice();
-  if (!Array.isArray(cfg.diarioDays) || cfg.diarioDays.length !== 7) {
-    cfg.diarioDays = DEFAULT_DIARIO_DAYS.slice();
-  } else {
-    cfg.diarioDays = cfg.diarioDays.map(v => v !== false);
-  }
-  return cfg.diarioDays;
-}
-function cfgActiveOnWeekday(cfg, day, m = todayISO()) {
-  return !!normalizeDiarioDays(cfg)[weekday(m, day)];
 }
 function metaForDay(cfg, month, day) {
   const wd = weekday(month, day);
@@ -1734,7 +1718,6 @@ function consultorMetaSummary(cfg, sellerId, m = todayISO()) {
 }
 function consultorFieldNeeds(sellerId, cfg, day, m = todayISO()) {
   if (!sellerWorks(sellerId, day, m)) return { checkin: false, checkout: false };
-  if (!cfgActiveOnWeekday(cfg, day, m)) return { checkin: false, checkout: false };
   if (cfg.sundayOnly) {
     if (!consultorSundaySubActive(sellerId, day, m)) return { checkin: false, checkout: false };
     return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };

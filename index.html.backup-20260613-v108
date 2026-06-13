@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v109";
+  var BUILD = "v108";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -535,11 +535,6 @@
   .ind-card .swatch { width: 14px; height: 14px; border-radius: 4px; flex: none; }
   .sub-list, .rate-list { margin: 10px 0 0; padding: 10px 0 0; border-top: 1px dashed var(--border); }
   .sub-row, .rate-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 0; }
-  .dio-wd-flags { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; width: 100%; margin: 4px 0 2px 28px; padding: 6px 8px; border-radius: 8px; background: color-mix(in srgb, var(--panel) 70%, transparent); border: 1px solid var(--border-soft); }
-  .dio-wd-flags .hint { margin-right: 2px; }
-  .dio-wd-flag { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700; color: var(--text-dim); cursor: pointer; user-select: none; }
-  .dio-wd-flag input { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); }
-  .ind-card > .dio-wd-flags { margin-left: 0; }
   .open-cross-pick-wrap { flex-basis: 100%; width: 100%; margin: 4px 0 8px; }
   .open-cross-pick { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--bg) 50%, var(--panel-2)); font-size: 11px; max-height: 140px; overflow-y: auto; }
   .open-cross-pick .cross-pick-item { display: block; margin: 3px 0; cursor: pointer; line-height: 1.35; }
@@ -1305,14 +1300,12 @@ function migrate(s) {
       if (sub.cvHint == null) sub.cvHint = "";
       if (sub.planCrossId == null) sub.planCrossId = "";
       if (!Array.isArray(sub.planCrossIds)) sub.planCrossIds = sub.planCrossId ? [sub.planCrossId] : [];
-      normalizeDiarioDays(sub);
     });
     if (i.cvHint == null) i.cvHint = "";
     if (i.openQuestion == null) i.openQuestion = false;
     if (i.showInMatriz == null) i.showInMatriz = true;
     if (i.planCrossId == null) i.planCrossId = "";
     if (!Array.isArray(i.planCrossIds)) i.planCrossIds = i.planCrossId ? [i.planCrossId] : [];
-    normalizeDiarioDays(i);
     (i.rates || []).forEach(r => {
       if (r.lowerBetter == null) r.lowerBetter = false;
       if (r.absolute == null) r.absolute = false;
@@ -1785,7 +1778,6 @@ function extractOperationalConfig(st) {
     openQuestion: !!ind.openQuestion,
     showInMatriz: ind.showInMatriz !== false,
     planCrossNames: normalizePlanCrossIds(ind).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean),
-    diarioDays: normalizeDiarioDays(ind).slice(),
     subs: (ind.subs || []).map(s => ({
       name: s.name,
       checkin: !!s.checkin,
@@ -1794,8 +1786,7 @@ function extractOperationalConfig(st) {
       sundayOnly: !!s.sundayOnly,
       openQuestion: !!s.openQuestion,
       showInMatriz: s.showInMatriz !== false,
-      planCrossNames: normalizePlanCrossIds(s).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean),
-      diarioDays: normalizeDiarioDays(s).slice()
+      planCrossNames: normalizePlanCrossIds(s).planCrossIds.map(id => fieldNameById(id, st)).filter(Boolean)
     })),
     rates: (ind.rates || []).map(r => ({
       name: r.name,
@@ -1878,7 +1869,6 @@ function applyOperationalConfig(st, tpl, opts) {
       metaSun: pickGestorKpiMetaField(local, "metaSun"),
       metaMonth: pickGestorKpiMetaField(local, "metaMonth"),
       cvHint: local?.cvHint || "",
-      diarioDays: mergeDiarioDays(local, tInd),
       subs: [],
       rates: []
     };
@@ -1901,8 +1891,7 @@ function applyOperationalConfig(st, tpl, opts) {
         metaSat: pickGestorKpiMetaField(ls, "metaSat"),
         metaSun: pickGestorKpiMetaField(ls, "metaSun"),
         metaMonth: pickGestorKpiMetaField(ls, "metaMonth"),
-        cvHint: ls?.cvHint || "",
-        diarioDays: mergeDiarioDays(ls, ts)
+        cvHint: ls?.cvHint || ""
       };
     });
     const localBlock = localBlockForFieldName(st, tInd.name);
@@ -1923,8 +1912,7 @@ function applyOperationalConfig(st, tpl, opts) {
         metaSat: ls.metaSat ?? 0,
         metaSun: ls.metaSun ?? 0,
         metaMonth: ls.metaMonth ?? 0,
-        cvHint: ls.cvHint || "",
-        diarioDays: mergeDiarioDays(ls, null)
+        cvHint: ls.cvHint || ""
       });
     });
     const localRateByName = Object.fromEntries((local?.rates || []).map(r => [r.name, r]));
@@ -2936,7 +2924,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v109"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v108"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3144,32 +3132,6 @@ function checkoutDeltaAfterSystem(sellerId, fieldId, days, m = currentMonth) {
 }
 function normKpiName(s) {
   return String(s || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-}
-const DIARIO_WD_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-const DEFAULT_DIARIO_DAYS = [true, true, true, true, true, true, true];
-function normalizeDiarioDays(cfg) {
-  if (!cfg) return DEFAULT_DIARIO_DAYS.slice();
-  if (!Array.isArray(cfg.diarioDays) || cfg.diarioDays.length !== 7) {
-    cfg.diarioDays = DEFAULT_DIARIO_DAYS.slice();
-  } else {
-    cfg.diarioDays = cfg.diarioDays.map(v => v !== false);
-  }
-  return cfg.diarioDays;
-}
-function mergeDiarioDays(local, tpl) {
-  if (Array.isArray(local?.diarioDays) && local.diarioDays.length === 7) return local.diarioDays.map(v => v !== false);
-  if (Array.isArray(tpl?.diarioDays) && tpl.diarioDays.length === 7) return tpl.diarioDays.map(v => v !== false);
-  return DEFAULT_DIARIO_DAYS.slice();
-}
-function cfgActiveOnWeekday(cfg, day, m = currentMonth) {
-  return !!normalizeDiarioDays(cfg)[weekday(m, day)];
-}
-function diarioDaysPickerHtml(cfg) {
-  normalizeDiarioDays(cfg);
-  const flags = DIARIO_WD_LABELS.map((lbl, i) =>
-    `<label class="dio-wd-flag" title="Exibir no diário às ${lbl}"><input type="checkbox" class="dio-wd-cb" data-wd="${i}" ${cfg.diarioDays[i] ? "checked" : ""}>${lbl}</label>`
-  ).join("");
-  return `<div class="dio-wd-flags"><span class="hint">Dias no diário:</span>${flags}</div>`;
 }
 function nameHasHoje(name) {
   return /hoje/.test(normKpiName(name));
@@ -4614,16 +4576,13 @@ function findVisaoDiaDiarioCfg(testFn) {
   const subHit = hits.find(x => x.cfg.id !== x.parent.id);
   return subHit || hits[0];
 }
-/** Referência diário: Agendamentos p/ próx Dia — check-out de ontem = plano de hoje */
-function matchVisaoDiaAgendamentoProxDia(n) {
-  return n.includes("agendament") && /prox|proxim|prrox|amanh|seguinte/.test(n);
+/** Referência diário: Agendamentos p/ HOJE! ou Agendamentos de HOJE? (check-in) */
+function matchVisaoDiaAgendamentoPlan(n) {
+  return n.includes("agendament") && n.includes("hoje") && !visaoDiaIsAuxHojeName(n) && visaoDiaIsHojePlanName(n);
 }
-/** Referência diário: Agendamentos p/ HOJE? ou de HOJE! (check-out de hoje) */
+/** Referência diário: Agendamentos de HOJE! (check-out) */
 function matchVisaoDiaAgendamentoReal(n) {
-  if (!n.includes("agendament") || !n.includes("hoje") || visaoDiaIsAuxHojeName(n)) return false;
-  if (/\bp\//.test(n) && n.includes("?")) return true;
-  if (visaoDiaIsHojeRealName(n)) return true;
-  return false;
+  return n.includes("agendament") && n.includes("hoje") && !visaoDiaIsAuxHojeName(n) && visaoDiaIsHojeRealName(n);
 }
 /** Referência print diário: Fez a confirmação de visitas pra hoje? (check-in) */
 function matchVisaoDiaConfirmacao(n) {
@@ -4657,23 +4616,6 @@ function visaoDiaParentByStem(stemTest) {
   return (state.indicators || []).find(ind => !ind.pctOnly && stemTest(normKpiName(ind.name))) || null;
 }
 function resolveVisaoDiaCard(spec) {
-  if (spec.kind === "agendamentoProx") {
-    const parent = visaoDiaParentByStem(n => n.includes("agendament"));
-    const proxHit = findVisaoDiaDiarioCfg(matchVisaoDiaAgendamentoProxDia);
-    const realHit = findVisaoDiaDiarioCfg(matchVisaoDiaAgendamentoReal);
-    if (!parent && !proxHit && !realHit) return null;
-    const anchor = proxHit || realHit;
-    return {
-      label: spec.label,
-      color: anchor?.color || parent?.color || spec.color,
-      kind: "agendamentoProx",
-      proxId: proxHit ? proxHit.cfg.id : null,
-      realId: realHit ? realHit.cfg.id : null,
-      parent: parent || anchor?.parent,
-      refPlan: proxHit ? ("Check-out ontem · " + proxHit.cfg.name) : "Agendamentos p/ próx Dia",
-      refReal: realHit ? realHit.cfg.name : "Agendamentos p/ HOJE?"
-    };
-  }
   if (spec.kind === "single") {
     const hit = findVisaoDiaDiarioCfg(spec.match);
     if (!hit) return null;
@@ -4719,7 +4661,7 @@ function resolveVisaoDiaCard(spec) {
   };
 }
 const VISAO_DIA_CARDS = [
-  { label: "Agendamentos", color: "#4f8cff", kind: "agendamentoProx" },
+  { label: "Agendamentos", color: "#4f8cff", kind: "pair", matchPlan: matchVisaoDiaAgendamentoPlan, matchReal: matchVisaoDiaAgendamentoReal },
   { label: "Comparecimento", color: "#22d3aa", kind: "pair", matchPlan: matchVisaoDiaConfirmacao, matchReal: matchVisaoDiaComparecimentoReal },
   { label: "Fichas", color: "#fbbf24", kind: "pair", matchPlan: matchVisaoDiaFichaPlan, matchReal: matchVisaoDiaFichaReal },
   { label: "Carro troca", color: "#a78bfa", kind: "pair", matchPlan: matchVisaoDiaTrocaPlan, matchReal: matchVisaoDiaTrocaReal },
@@ -4778,30 +4720,6 @@ function visaoDiaDayRealValue(sellerId, fieldId, day) {
   const c = getCell(sellerId, fieldId, day);
   if (c.real != null && c.real !== "" && !isNaN(Number(c.real))) return Number(c.real);
   return null;
-}
-function visaoDiaAgendamentoTeamToday(card) {
-  const day = diarioTodayDay();
-  if (day == null) return { plan: null, real: null };
-  const sellers = visaoDiaSellersToday();
-  let plan = 0, planHas = false, real = 0, realHas = false;
-  sellers.forEach(s => {
-    if (card.proxId) {
-      const prev = prevWorkedDay(s.id, day);
-      if (prev != null) {
-        const v = visaoDiaDayRealValue(s.id, card.proxId, prev);
-        if (v != null) { plan += v; planHas = true; }
-      }
-    }
-    if (card.realId) {
-      const r = visaoDiaDayRealValue(s.id, card.realId, day);
-      if (r != null) { real += r; realHas = true; }
-    }
-  });
-  return { plan: planHas ? plan : null, real: realHas ? real : null };
-}
-function visaoDiaCardTodayValues(spec, card) {
-  if (spec.kind === "agendamentoProx" || card.kind === "agendamentoProx") return visaoDiaAgendamentoTeamToday(card);
-  return visaoDiaTeamTodayFields(card.planId, card.realId);
 }
 function visaoDiaTeamTodayFields(planId, realId) {
   const day = diarioTodayDay();
@@ -4876,7 +4794,7 @@ function renderVisaoDiaCards() {
   root.innerHTML = VISAO_DIA_CARDS.map(spec => {
     const card = resolveVisaoDiaCard(spec);
     if (!card) return "";
-    const { plan, real } = visaoDiaCardTodayValues(spec, card);
+    const { plan, real } = visaoDiaTeamTodayFields(card.planId, card.realId);
     const planDisp = plan != null ? fmt(plan) : "0";
     const realDisp = real != null ? fmt(real) : "0";
     const proj = visaoDiaTeamProjPct(card.parent);
@@ -5410,7 +5328,6 @@ function diarioSundaySubActive(sellerId, day, m = currentMonth) {
 }
 function diarioFieldNeeds(sellerId, cfg, day, m = currentMonth) {
   if (!sellerWorks(sellerId, day, m)) return { checkin: false, checkout: false };
-  if (!cfgActiveOnWeekday(cfg, day, m)) return { checkin: false, checkout: false };
   if (cfg.sundayOnly) {
     if (!diarioSundaySubActive(sellerId, day, m)) return { checkin: false, checkout: false };
     return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
@@ -7234,13 +7151,13 @@ function renderIndicatorConfig() {
       <label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="ind-field" data-k="openQuestion" ${ind.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label>`}
       <span class="spacer" style="flex:1"></span>
       ${ind.pctOnly ? "" : `<button class="iconbtn" data-demote-ind="${ind.id}" title="Descer para subindicador (pode trocar lugar com um sub)">↳</button>`}
-      <button class="iconbtn" data-del-ind="${ind.id}" title="Excluir">✕</button></div>${!ind.pctOnly && (ind.checkin || ind.checkout) ? diarioDaysPickerHtml(ind) : ""}${cvHintRowHtml(ind, "ind-field", "data-k")}${ind.openQuestion && !ind.pctOnly ? openCrossPickerHtml(ind) : ""}${lowerBetterPanelHtml(ind)}`;
+      <button class="iconbtn" data-del-ind="${ind.id}" title="Excluir">✕</button></div>${cvHintRowHtml(ind, "ind-field", "data-k")}${ind.openQuestion && !ind.pctOnly ? openCrossPickerHtml(ind) : ""}${lowerBetterPanelHtml(ind)}`;
     if (!ind.pctOnly) html += metaGoalsQtyHtml(ind, ind.id);
     if (!ind.pctOnly) {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
       (ind.subs||[]).forEach(s => {
         const subLb = cfgLowerBetter(s) || cfgLowerBetter(ind);
-        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><label class="switch" title="Exibir na Matriz"><input type="checkbox" class="sub-field" data-sk="showInMatriz" ${s.showInMatriz!==false?'checked':''}><span class="track"></span>Matriz</label><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-promote-sub="${s.id}" title="Subir para principal (pode trocar lugar com um principal)">↑</button><button class="iconbtn" data-del-sub="${s.id}">✕</button>${s.openQuestion ? openCrossPickerHtml(s) : ""}</div>${(s.checkin || s.checkout) ? diarioDaysPickerHtml(s) : ""}<div class="sub-cv-hint-row" data-sub-hint="${s.id}"><input type="text" class="sub-cv-hint-field" data-sk="cvHint" value="${escapeHtml(s.cvHint || "")}" placeholder="Descrição para o consultor (só no app CV)"></div>`;
+        html += `<div class="sub-row${subLb ? " lower-better-row" : ""}" data-sub="${s.id}" style="flex-wrap:wrap;"><span class="kpi-draghandle" draggable="true" data-drag-kpi-sub="${s.id}" title="Arrastar sub-indicador">⋮⋮</span><label class="switch" title="Exibir na Matriz"><input type="checkbox" class="sub-field" data-sk="showInMatriz" ${s.showInMatriz!==false?'checked':''}><span class="track"></span>Matriz</label><span class="tag sub">sub</span><input type="text" value="${escapeHtml(s.name)}" data-sk="name" class="sub-field" style="min-width:120px;"><label class="switch switch-lower"><input type="checkbox" class="sub-field" data-sk="lowerBetter" ${s.lowerBetter?'checked':''}><span class="track"></span>↓ menor</label><span class="hint">d</span><input type="number" value="${s.metaDay}" data-sk="metaDay" class="sub-field" style="width:52px;"><span class="hint">sáb</span><input type="number" value="${s.metaSat}" data-sk="metaSat" class="sub-field" style="width:52px;"><span class="hint">dom</span><input type="number" value="${s.metaSun??0}" data-sk="metaSun" class="sub-field" style="width:52px;"><span class="hint">cons</span><input type="number" value="${s.metaMonth}" data-sk="metaMonth" class="sub-field" style="width:52px;" title="Meta do consultor"><span class="hint">loja</span><input type="number" class="sub-field metaloja-inp" data-field="${s.id}" value="${getMetaLoja(s.id) ?? ''}" placeholder="—" style="width:64px;"><label class="switch"><input type="checkbox" class="sub-field" data-sk="sundayOnly" ${s.sundayOnly?'checked':''}><span class="track"></span>só dom</label><label class="switch" title="Check-in Sim/Não + justificativa"><input type="checkbox" class="sub-field" data-sk="openQuestion" ${s.openQuestion?'checked':''}><span class="track"></span>perg. abertas</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkin" ${s.checkin?'checked':''}><span class="track"></span>in</label><label class="switch"><input type="checkbox" class="sub-field" data-sk="checkout" ${s.checkout?'checked':''}><span class="track"></span>out</label><button class="iconbtn" data-promote-sub="${s.id}" title="Subir para principal (pode trocar lugar com um principal)">↑</button><button class="iconbtn" data-del-sub="${s.id}">✕</button>${s.openQuestion ? openCrossPickerHtml(s) : ""}</div><div class="sub-cv-hint-row" data-sub-hint="${s.id}"><input type="text" class="sub-cv-hint-field" data-sk="cvHint" value="${escapeHtml(s.cvHint || "")}" placeholder="Descrição para o consultor (só no app CV)"></div>`;
       });
       html += `</div>`;
     }
@@ -7859,28 +7776,6 @@ function bindKpiMetaField(inp, cfg, key, fieldId) {
   inp.addEventListener("change", persist);
   inp.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(persist, 400); });
 }
-function bindDiarioDaysPickers(root) {
-  root.querySelectorAll(".dio-wd-cb").forEach(cb => {
-    if (cb.dataset.wdBound) return;
-    cb.dataset.wdBound = "1";
-    cb.addEventListener("change", () => {
-      const row = cb.closest("[data-sub]");
-      const card = cb.closest("[data-ind]");
-      let cfg = null;
-      if (row) {
-        const ind = findIndBySub(row.dataset.sub);
-        cfg = ind?.subs.find(x => x.id === row.dataset.sub);
-      } else if (card) {
-        cfg = state.indicators.find(i => i.id === card.dataset.ind);
-      }
-      if (!cfg) return;
-      normalizeDiarioDays(cfg);
-      cfg.diarioDays[+cb.dataset.wd] = cb.checked;
-      save();
-      if (activeView === "diario") renderDiario();
-    });
-  });
-}
 function bindIndicatorEvents() {
   const list = document.getElementById("indicatorList");
   list.querySelectorAll(".ind-card").forEach(card => { const ind = state.indicators.find(i=>i.id===card.dataset.ind); if(!ind) return;
@@ -7913,7 +7808,7 @@ function bindIndicatorEvents() {
   list.querySelectorAll("[data-demote-ind]").forEach(b => b.addEventListener("click", () => openDemoteModal(b.dataset.demoteInd)));
   list.querySelectorAll("[data-promote-sub]").forEach(b => b.addEventListener("click", () => openPromoteModal(b.dataset.promoteSub)));
   list.querySelectorAll("[data-del-ind]").forEach(b => b.addEventListener("click", () => { if(confirm("Excluir este indicador?")){ const id = b.dataset.delInd; state.indicators = state.indicators.filter(i=>i.id!==id); if (state.order.indicators) state.order.indicators = state.order.indicators.filter(x => x !== id); save(); renderIndicatorConfig(); } }));
-  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false, openQuestion:false, showInMatriz:true, planCrossId:"", planCrossIds:[], diarioDays: DEFAULT_DIARIO_DAYS.slice() }); save(); renderIndicatorConfig(); }));
+  list.querySelectorAll("[data-add-sub]").forEach(b => b.addEventListener("click", () => { const ind = state.indicators.find(i=>i.id===b.dataset.addSub); ind.subs = ind.subs||[]; ind.subs.push({ id:uid(), name:"Novo sub", checkin:false, checkout:true, metaDay:0, metaSat:0, metaSun:0, metaMonth:0, lowerBetter:false, openQuestion:false, showInMatriz:true, planCrossId:"", planCrossIds:[] }); save(); renderIndicatorConfig(); }));
   list.querySelectorAll(".sub-row").forEach(row => { const ind = findIndBySub(row.dataset.sub); const s = ind && ind.subs.find(x=>x.id===row.dataset.sub); if(!s) return;
     const flushSubMeta = () => {
       ["metaDay", "metaSat", "metaSun", "metaMonth"].forEach(k => {
@@ -7988,7 +7883,6 @@ function bindIndicatorEvents() {
       });
     });
   });
-  bindDiarioDaysPickers(list);
   setupKpiDnD();
 }
 function reorderArrayById(arr, fromId, toId) {
