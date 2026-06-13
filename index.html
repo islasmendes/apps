@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v117";
+  var BUILD = "v118";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -1986,6 +1986,7 @@ function applyOperationalConfig(st, tpl, opts) {
   });
   const nameToId = Object.fromEntries(newIndicators.map(i => [i.name, i.id]));
   const newOrder = (tpl.orderNames || newIndicators.map(i => i.name)).map(n => nameToId[n]).filter(Boolean);
+  const matrizShowSnap = st?.ui?.matrizShow ? { ...st.ui.matrizShow } : null;
   const before = configHash(extractOperationalConfig(st));
   const preview = { ...st, indicators: newIndicators, order: { ...(st.order || {}), indicators: newOrder } };
   const after = configHash(extractOperationalConfig(preview));
@@ -1993,7 +1994,13 @@ function applyOperationalConfig(st, tpl, opts) {
   st.indicators = newIndicators;
   st.order = st.order || {};
   st.order.indicators = newOrder;
-  persistMatrizShowUi(st);
+  if (matrizShowSnap && Object.keys(matrizShowSnap).length) {
+    st.ui = st.ui || {};
+    st.ui.matrizShow = matrizShowSnap;
+    applyMatrizShowUi(st);
+  } else {
+    persistMatrizShowUi(st);
+  }
   autoRecoverOrphanKpiData(st);
   repairBlockMetasFromSubsInState(st);
   if (!opts?.ignoreVersion) lastAppliedConfigVersion = tpl.updatedAt;
@@ -2044,6 +2051,18 @@ function queueConfigPush() {
   clearTimeout(configPushTimer);
   configPushTimer = setTimeout(pushConfigTemplate, 800);
 }
+function mergeMatrizShowFromSnapshots(target, ...snaps) {
+  if (!target) return;
+  const merged = {};
+  snaps.forEach(snap => {
+    const vis = snap?.ui?.matrizShow;
+    if (!vis) return;
+    Object.assign(merged, vis);
+  });
+  if (!Object.keys(merged).length) return;
+  target.ui = target.ui || {};
+  target.ui.matrizShow = { ...merged, ...(target.ui.matrizShow || {}) };
+}
 function applyTemplateFromCloud() {
   if (!fbReady || !fbDb) return Promise.resolve(false);
   return fbDb.ref(CONFIG_OP_PATH).once("value").then(snap => {
@@ -2051,6 +2070,7 @@ function applyTemplateFromCloud() {
     if (!tpl) return false;
     const localSnap = JSON.parse(JSON.stringify(state));
     const diskSnap = loadLocalStateSnapshot();
+    mergeMatrizShowFromSnapshots(state, diskSnap, localSnap);
     configApplying = true;
     const changed = applyOperationalConfig(state, tpl);
     mergeKpiMetasFromLocalState(state, localSnap);
@@ -2059,6 +2079,7 @@ function applyTemplateFromCloud() {
     if (diskSnap) mergeDiarioDaysFromLocalState(state, diskSnap);
     mergeUiPrefsFromLocalState(state, localSnap);
     if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
+    applyMatrizShowUi(state);
     configApplying = false;
     try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
     if (changed) {
@@ -2082,6 +2103,7 @@ function startConfigListener() {
     configApplyTimer = setTimeout(() => {
       const localSnap = JSON.parse(JSON.stringify(state));
       const diskSnap = loadLocalStateSnapshot();
+      mergeMatrizShowFromSnapshots(state, diskSnap, localSnap);
       configApplying = true;
       const changed = applyOperationalConfig(state, tpl);
       mergeKpiMetasFromLocalState(state, localSnap);
@@ -2090,6 +2112,7 @@ function startConfigListener() {
       if (diskSnap) mergeDiarioDaysFromLocalState(state, diskSnap);
       mergeUiPrefsFromLocalState(state, localSnap);
       if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
+      applyMatrizShowUi(state);
       configApplying = false;
       try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
       if (["matriz", "rscen", "kpis", "gestao", "config", "diario"].includes(activeView)) renderActive();
@@ -2953,7 +2976,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v117"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v118"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
