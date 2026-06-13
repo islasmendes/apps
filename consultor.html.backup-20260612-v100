@@ -608,10 +608,10 @@ const CONSULTOR_SCHEDULE_DEFAULTS = {
   checkinGraceEnd: "12:30",
   checkoutOpen: "16:00",
   checkoutClose: "20:00",
-  checkoutGraceEnd: "20:30",
-  checkinOverride: null,
-  checkoutOverride: null
+  checkoutGraceEnd: "20:30"
 };
+const SCHEDULE_PROFILE_KEYS = ["weekday", "saturday", "sunday", "holiday"];
+const SCHEDULE_TIME_KEYS = ["checkinOpen", "checkinClose", "checkinGraceEnd", "checkoutOpen", "checkoutClose", "checkoutGraceEnd"];
 function normScheduleOverride(v) {
   return v === "open" || v === "closed" ? v : null;
 }
@@ -627,7 +627,7 @@ function fmtScheduleHM(mins) {
   const m = Math.round(mins % 60);
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
-function normalizeConsultorSchedule(raw) {
+function normalizeScheduleSlot(raw) {
   const s = { ...CONSULTOR_SCHEDULE_DEFAULTS, ...(raw || {}) };
   if (!parseScheduleHM(s.checkoutGraceEnd)) {
     const cc = parseScheduleHM(s.checkoutClose);
@@ -636,28 +636,127 @@ function normalizeConsultorSchedule(raw) {
     if (cc != null && ic != null && ig != null && ig >= ic) s.checkoutGraceEnd = fmtScheduleHM(cc + (ig - ic));
     else if (cc != null) s.checkoutGraceEnd = fmtScheduleHM(cc + 30);
   }
-  ["checkinOpen", "checkinClose", "checkinGraceEnd", "checkoutOpen", "checkoutClose", "checkoutGraceEnd"].forEach(k => {
+  SCHEDULE_TIME_KEYS.forEach(k => {
     const p = parseScheduleHM(s[k]);
     s[k] = p != null ? fmtScheduleHM(p) : CONSULTOR_SCHEDULE_DEFAULTS[k];
   });
-  if (raw && raw.override != null && raw.checkinOverride == null && raw.checkoutOverride == null) {
-    const leg = normScheduleOverride(raw.override);
-    s.checkinOverride = leg;
-    s.checkoutOverride = leg;
-  }
-  s.checkinOverride = normScheduleOverride(s.checkinOverride);
-  s.checkoutOverride = normScheduleOverride(s.checkoutOverride);
-  delete s.override;
-  delete s.checkoutVisible;
   return s;
 }
-function consultorSchedule() { return normalizeConsultorSchedule(lojaData?.consultorSchedule); }
+function legacyScheduleSlotFromRoot(raw) {
+  const slot = {};
+  SCHEDULE_TIME_KEYS.forEach(k => { if (raw?.[k] != null) slot[k] = raw[k]; });
+  return normalizeScheduleSlot(slot);
+}
+function normalizeConsultorSchedule(raw) {
+  const base = raw || {};
+  let profiles = base.profiles;
+  if (!profiles || typeof profiles !== "object") {
+    profiles = { weekday: legacyScheduleSlotFromRoot(base) };
+  }
+  const out = {
+    profiles: {},
+    checkinOverride: normScheduleOverride(base.checkinOverride),
+    checkoutOverride: normScheduleOverride(base.checkoutOverride)
+  };
+  if (base.override != null && base.checkinOverride == null && base.checkoutOverride == null) {
+    const leg = normScheduleOverride(base.override);
+    out.checkinOverride = leg;
+    out.checkoutOverride = leg;
+  }
+  SCHEDULE_PROFILE_KEYS.forEach(k => {
+    out.profiles[k] = profiles[k] ? normalizeScheduleSlot(profiles[k]) : null;
+  });
+  if (!out.profiles.weekday) out.profiles.weekday = normalizeScheduleSlot(null);
+  return out;
+}
+function resolveScheduleSlot(root, profileKey) {
+  const p = root?.profiles?.[profileKey];
+  if (p) return p;
+  return root?.profiles?.weekday || normalizeScheduleSlot(null);
+}
+function easterSunday(year) {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const mo = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * mo + 114) / 31);
+  const day = ((h + l - 7 * mo + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+function dateKeyYMD(y, mo, d) { return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`; }
+function monthDayKey(m, day) { const { y, mo } = parseMonth(m); return dateKeyYMD(y, mo, day); }
+let _brHolidayCache = {};
+function brazilianNationalHolidaySet(year) {
+  if (_brHolidayCache[year]) return _brHolidayCache[year];
+  const easter = easterSunday(year);
+  const add = n => { const d = new Date(easter); d.setDate(d.getDate() + n); return dateKeyYMD(d.getFullYear(), d.getMonth() + 1, d.getDate()); };
+  const set = new Set([
+    dateKeyYMD(year, 1, 1), dateKeyYMD(year, 4, 21), dateKeyYMD(year, 5, 1), dateKeyYMD(year, 9, 7),
+    dateKeyYMD(year, 10, 12), dateKeyYMD(year, 11, 2), dateKeyYMD(year, 11, 15), dateKeyYMD(year, 11, 20),
+    dateKeyYMD(year, 12, 25), add(-47), add(-2), add(60)
+  ]);
+  _brHolidayCache[year] = set;
+  return set;
+}
+function isBrazilianNationalHoliday(m, day) {
+  const { y } = parseMonth(m);
+  return brazilianNationalHolidaySet(y).has(monthDayKey(m, day));
+}
+function scheduleProfileForDay(m, day) {
+  if (isBrazilianNationalHoliday(m, day)) return "holiday";
+  const w = weekday(m, day);
+  if (w === 0) return "sunday";
+  if (w === 6) return "saturday";
+  return "weekday";
+}
+function consultorScheduleRoot() { return normalizeConsultorSchedule(lojaData?.consultorSchedule); }
+function consultorSchedule() {
+  const root = consultorScheduleRoot();
+  const m = todayISO();
+  const d = todayDay();
+  const slot = resolveScheduleSlot(root, scheduleProfileForDay(m, d));
+  return { ...slot, checkinOverride: root.checkinOverride, checkoutOverride: root.checkoutOverride };
+}
 function scheduleMins(key) {
   return parseScheduleHM(consultorSchedule()[key]) ?? parseScheduleHM(CONSULTOR_SCHEDULE_DEFAULTS[key]);
 }
-function scheduleCheckinOverride() { return consultorSchedule().checkinOverride; }
-function scheduleCheckoutOverride() { return consultorSchedule().checkoutOverride; }
+function scheduleCheckinOverride() { return consultorScheduleRoot().checkinOverride; }
+function scheduleCheckoutOverride() { return consultorScheduleRoot().checkoutOverride; }
 function scheduleTimeLabel(key) { return consultorSchedule()[key] || CONSULTOR_SCHEDULE_DEFAULTS[key]; }
+const SCHED_NOTIFY_WARN_MIN = 15;
+const schedNotified = {};
+function tryBrowserNotify(body) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  try { new Notification("Gestão Comercial", { body, tag: "gc-schedule-warn" }); } catch (e) {}
+}
+function requestNotifyPermissionOnce() {
+  if (!("Notification" in window) || Notification.permission !== "default") return;
+  if (localStorage.getItem("gc_notify_asked")) return;
+  localStorage.setItem("gc_notify_asked", "1");
+  Notification.requestPermission().catch(() => {});
+}
+function checkScheduleNotifications(phase) {
+  const m = todayISO();
+  const checks = [];
+  if (phase === "checkin") checks.push({ end: scheduleMins("checkinClose"), label: "Check-in oficial" });
+  if (phase === "checkin-grace") checks.push({ end: scheduleMins("checkinGraceEnd"), label: "Prorrogação do check-in" });
+  if (phase === "checkout") checks.push({ end: scheduleMins("checkoutClose"), label: "Check-out oficial" });
+  if (phase === "checkout-grace") checks.push({ end: scheduleMins("checkoutGraceEnd"), label: "Prorrogação do check-out" });
+  const nm = nowMins();
+  checks.forEach(({ end, label }) => {
+    const key = `${m}-${phase}-${label}`;
+    const diff = end - nm;
+    if (diff > 0 && diff <= SCHED_NOTIFY_WARN_MIN && !schedNotified[key]) {
+      schedNotified[key] = true;
+      const mins = Math.ceil(diff);
+      const msg = `${label} encerra em ${mins} min`;
+      toast("⏰ " + msg, false);
+      tryBrowserNotify(msg);
+      if (navigator.vibrate) try { navigator.vibrate(120); } catch (e) {}
+    }
+  });
+}
 function nowMins() {
   const n = new Date();
   return n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60;
@@ -1652,7 +1751,9 @@ function sched(sellerId, m = todayISO()) { return monthData(m).sched?.[sellerId]
 function sellerWorks(sellerId, day, m = todayISO()) {
   const s = sched(sellerId, m);
   if (s) return !!s[day];
-  return !isSunday(m, day);
+  if (isSunday(m, day)) return false;
+  if (isBrazilianNationalHoliday(m, day)) return false;
+  return true;
 }
 function sellerWorkedCount(sellerId, m = todayISO()) {
   let c = 0; const n = daysInMonth(m);
@@ -2857,6 +2958,7 @@ function tickUrgencyAndDay() {
     toast("Novo dia — ontem bloqueado");
   }
   lastRenderDay = d;
+  checkScheduleNotifications(phase);
 }
 function startTickLoop() {
   lastRenderDay = todayDay();
@@ -3361,6 +3463,7 @@ async function doLogin(loja, mat, pin) {
     showScreen("screenMain");
     startTickLoop();
     renderFields();
+    requestNotifyPermissionOnce();
     err.textContent = "";
   } catch (e) {
     console.warn(e);
@@ -3385,6 +3488,7 @@ async function tryRestore() {
     showScreen("screenMain");
     startTickLoop();
     renderFields();
+    requestNotifyPermissionOnce();
     return true;
   } catch (e) { return false; }
 }
