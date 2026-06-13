@@ -733,8 +733,9 @@
   body.auth-locked > nav.tabs,
   body.auth-locked > main { filter: blur(14px) saturate(.65); pointer-events: none; user-select: none; opacity: .45; }
   body.auth-locked > .modal-bg:not(#authGate) { filter: blur(8px); pointer-events: none; }
-  .auth-gate { position: fixed; inset: 0; z-index: 500; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.78); backdrop-filter: blur(6px); }
+  .auth-gate { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.78); backdrop-filter: blur(6px); }
   .auth-gate.show { display: flex; }
+  body.auth-locked .matriz-visao-overlay { display: none !important; }
   .auth-card { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 22px; max-width: 440px; width: 100%; box-shadow: 0 24px 80px rgba(0,0,0,.55); }
   .auth-card h3 { margin: 0 0 6px; font-size: 17px; }
   .auth-card .sub { color: var(--text-dim); font-size: 12.5px; line-height: 1.55; margin-bottom: 12px; }
@@ -4504,6 +4505,7 @@ function findVisaoDiaIndicator(matcher) {
   return null;
 }
 function visaoDiaShouldShow() {
+  if (!authUnlocked) return false;
   if (divisionalMode()) return false;
   if (activeView !== "matriz") return false;
   if (todayISO() !== currentMonth) return false;
@@ -8161,6 +8163,7 @@ let pendingRevealLoja = "";
 let pendingRevealPassword = "";
 let authFailCount = 0;
 let authReady = false;
+let authFlowStep = "senha";
 
 function getDeviceId() {
   let id = localStorage.getItem("gc_device_id");
@@ -8203,11 +8206,14 @@ async function authDelayFail() {
   await new Promise(r => setTimeout(r, Math.min(4000, 350 * authFailCount)));
 }
 function showAuthStep(step) {
+  authFlowStep = step;
   document.querySelectorAll(".auth-step").forEach(el => el.classList.remove("active"));
   const map = { senha: "authStepSenha", setup: "authStepSetupMaster", loja: "authStepLoja", reveal: "authStepReveal" };
   const el = document.getElementById(map[step] || map.senha);
   if (el) el.classList.add("active");
   document.getElementById("authGate").classList.add("show");
+  const visao = document.getElementById("matrizVisaoDia");
+  if (visao) visao.hidden = true;
 }
 function unlockAuth() {
   authUnlocked = true;
@@ -8340,6 +8346,15 @@ async function savePasswordForCode(code, password) {
 async function startAuthFlow() {
   document.body.classList.add("auth-locked");
   await loadAuthConfig();
+  if (pendingRevealLoja) {
+    showAuthStep("reveal");
+    return;
+  }
+  if (pendingAuthPassword || authFlowStep === "loja" || authFlowStep === "reveal" || authFlowStep === "setup") {
+    if (pendingAuthPassword) showAuthStep("loja");
+    else showAuthStep(authFlowStep);
+    return;
+  }
   if (!authMasterCache && isDeviceAdmin()) {
     showAuthStep("setup");
     return;
@@ -8355,13 +8370,16 @@ async function startAuthFlow() {
 async function submitAuthPassword() {
   const inp = document.getElementById("authPassInput");
   const err = document.getElementById("authPassErr");
+  const btn = document.getElementById("authPassSubmit");
   const pass = (inp.value || "").trim();
   if (pass.length < 6) { err.textContent = "Digite a senha (mínimo 6 caracteres)."; return; }
   err.textContent = "";
   pendingAuthPassword = pass;
+  if (btn) { btn.disabled = true; btn.textContent = "Avançando…"; }
   showAuthStep("loja");
   const li = document.getElementById("authLojaInput");
-  if (li) { li.value = ""; setTimeout(() => li.focus(), 80); }
+  if (li) { li.value = lojaCode || divisionalCode || ""; setTimeout(() => li.focus(), 80); }
+  if (btn) { btn.disabled = false; btn.textContent = "Continuar"; }
 }
 async function submitAuthSetupMaster() {
   const err = document.getElementById("authMasterErr");
@@ -8381,6 +8399,7 @@ async function submitAuthSetupMaster() {
 async function submitAuthLoja() {
   const inp = document.getElementById("authLojaInput");
   const err = document.getElementById("authLojaErr");
+  const btn = document.getElementById("authLojaSubmit");
   let code = (inp.value || "").trim().toUpperCase().replace(/\s+/g, "");
   const okLoja = /^VC[A-Z0-9]+$/.test(code) && code.length >= 3;
   const okDiv = /^RSCEN[A-Z0-9]*$/.test(code);
@@ -8388,45 +8407,54 @@ async function submitAuthLoja() {
   if (!okCode) { err.textContent = "Use VC… (ex.: VCANT) ou RSCEN (Divisional)."; return; }
   const pass = pendingAuthPassword;
   if (!pass) { showAuthStep("senha"); return; }
-  err.textContent = "Verificando…";
-  const entryAuth = await fetchAuthForCode(code);
-  const masterOk = authMasterCache ? await verifyPass(pass, authMasterCache) : false;
-  const entryOk = entryAuth ? await verifyPass(pass, entryAuth) : false;
-  err.textContent = "";
-  if (entryAuth) {
-    if (!entryOk) {
-      await authDelayFail();
-      err.textContent = masterOk
-        ? (okDiv
-          ? "O Divisional já tem senha individual. Use a senha do RSCEN — a mestra só serve na 1ª configuração."
-          : "Esta loja já tem senha individual. Use a senha da loja — a mestra só serve na 1ª configuração.")
-        : (okDiv ? "Senha individual incorreta para o Divisional (" + code + ")." : "Senha individual incorreta para " + code + ".");
+  if (!window.crypto || !crypto.subtle) {
+    err.textContent = "Este navegador não suporta verificação segura. Use Chrome ou Safari atualizado.";
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    err.textContent = "Verificando…";
+    const entryAuth = await fetchAuthForCode(code);
+    const masterOk = authMasterCache ? await verifyPass(pass, authMasterCache) : false;
+    const entryOk = entryAuth ? await verifyPass(pass, entryAuth) : false;
+    err.textContent = "";
+    if (entryAuth) {
+      if (!entryOk) {
+        await authDelayFail();
+        err.textContent = masterOk
+          ? (okDiv
+            ? "O Divisional já tem senha individual. Use a senha do RSCEN — a mestra só serve na 1ª configuração."
+            : "Esta loja já tem senha individual. Use a senha da loja — a mestra só serve na 1ª configuração.")
+          : (okDiv ? "Senha individual incorreta para o Divisional (" + code + ")." : "Senha individual incorreta para " + code + ".");
+        return;
+      }
+      finishAuthEnter(code);
       return;
     }
-    finishAuthEnter(code);
-    return;
+    if (!masterOk) {
+      await authDelayFail();
+      err.textContent = okDiv
+        ? "Divisional ainda não configurado. Use a senha mestra para criar o acesso regional."
+        : "Loja ainda não configurada. Use a senha mestra para criar o acesso.";
+      return;
+    }
+    if (masterOk && !entryAuth && okCode) {
+      if (!fbReady || !fbDb) { err.textContent = "Sem nuvem para registrar a senha."; return; }
+      const newPass = generateSecurePassword(24);
+      try {
+        await savePasswordForCode(code, newPass);
+        pendingRevealLoja = code;
+        pendingRevealPassword = newPass;
+        document.getElementById("authRevealLojaName").textContent = okDiv ? (code + " (Divisional)") : code;
+        document.getElementById("authRevealPass").textContent = newPass;
+        showAuthStep("reveal");
+      } catch (e) { err.textContent = "Erro ao gerar senha. Verifique permissões."; }
+      return;
+    }
+    err.textContent = "Não foi possível autenticar.";
+  } finally {
+    if (btn && !authUnlocked) btn.disabled = false;
   }
-  if (!masterOk) {
-    await authDelayFail();
-    err.textContent = okDiv
-      ? "Divisional ainda não configurado. Use a senha mestra para criar o acesso regional."
-      : "Loja ainda não configurada. Use a senha mestra para criar o acesso.";
-    return;
-  }
-  if (masterOk && !entryAuth && okCode) {
-    if (!fbReady || !fbDb) { err.textContent = "Sem nuvem para registrar a senha."; return; }
-    const newPass = generateSecurePassword(24);
-    try {
-      await savePasswordForCode(code, newPass);
-      pendingRevealLoja = code;
-      pendingRevealPassword = newPass;
-      document.getElementById("authRevealLojaName").textContent = okDiv ? (code + " (Divisional)") : code;
-      document.getElementById("authRevealPass").textContent = newPass;
-      showAuthStep("reveal");
-    } catch (e) { err.textContent = "Erro ao gerar senha. Verifique permissões."; }
-    return;
-  }
-  err.textContent = "Não foi possível autenticar.";
 }
 function finishAuthEnterDivisional(code) {
   applyAuthContext("divisional", code);
