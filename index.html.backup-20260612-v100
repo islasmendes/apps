@@ -6697,7 +6697,6 @@ function renderConsultorSchedulePanel() {
   const hint = document.getElementById("consultorScheduleHint");
   const phase = gestorTimePhase(s);
   const ovParts = scheduleOverrideSummary();
-  const root = consultorScheduleRoot();
   const hasOpen = root.checkinOverride === "open" || root.checkoutOverride === "open";
   const hasClosed = root.checkinOverride === "closed" || root.checkoutOverride === "closed";
   const todayProf = SCHEDULE_PROFILE_LABELS[s._profileKey || "weekday"];
