@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v106";
+  var BUILD = "v105";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -438,7 +438,6 @@
   .visao-dia-card .vd-tag { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; padding: 2px 6px; border-radius: 4px; }
   .visao-dia-card .vd-tag.in { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
   .visao-dia-card .vd-tag.out { background: color-mix(in srgb, var(--accent-2) 18%, transparent); color: var(--accent-2); }
-  .visao-dia-card .vd-proj { font-size: 12px; font-weight: 800; margin-top: 8px; font-variant-numeric: tabular-nums; }
   .matriz-visao-actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   @media (max-width: 640px) {
     .matriz-visao-overlay { padding: 0; align-items: stretch; }
@@ -2924,7 +2923,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v106"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v105"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4542,88 +4541,22 @@ function arvTotalBlockCells(lojas, localInd, days, periodo) {
   return html;
 }
 
-/** Linhas do diário (principal + subs) — mesma fonte do check-in/check-out. */
-function visaoDiaDiarioCfgs() {
-  const out = [];
-  (state.indicators || []).forEach(parent => {
-    if (parent.pctOnly) return;
-    if (cfgHasDiario(parent)) out.push({ cfg: parent, parent, color: parent.color });
-    (parent.subs || []).forEach(sub => {
-      if (cfgHasDiario(sub)) out.push({ cfg: sub, parent, color: parent.color });
-    });
-  });
-  return out;
-}
-function visaoDiaIsAuxHojeName(n) {
-  return /prox|sabado|domingo/.test(n);
-}
-function visaoDiaIsHojePlanName(n) {
-  return nameHasHoje(n) && (/\bp\//.test(n) || /\bp\s/.test(n));
-}
-function visaoDiaIsHojeRealName(n) {
-  return nameHasHoje(n) && /\bde\b/.test(n) && !/\bp\//.test(n);
-}
-function findVisaoDiaDiarioCfg(testFn) {
-  const hits = visaoDiaDiarioCfgs().filter(x => testFn(normKpiName(x.cfg.name), x));
-  return hits.length ? hits[0] : null;
-}
-/** Referência print diário: Agendamentos de HOJE? */
-function matchVisaoDiaAgendamento(n) {
-  return n.includes("agendament") && n.includes("hoje") && !visaoDiaIsAuxHojeName(n);
-}
-/** Referência print diário: Fez a confirmação de visitas pra hoje? */
-function matchVisaoDiaConfirmacao(n) {
-  return n.includes("confirm") && n.includes("visita") && n.includes("hoje");
-}
-function matchVisaoDiaFichaPlan(n) {
-  return (/fich|financ/.test(n)) && n.includes("hoje") && visaoDiaIsHojePlanName(n);
-}
-function matchVisaoDiaFichaReal(n) {
-  return (/fich|financ/.test(n)) && n.includes("hoje") && visaoDiaIsHojeRealName(n);
-}
-function matchVisaoDiaTrocaPlan(n) {
-  return (/troca|carro/.test(n)) && n.includes("hoje") && visaoDiaIsHojePlanName(n);
-}
-function matchVisaoDiaTrocaReal(n) {
-  return (/troca|carro/.test(n)) && n.includes("hoje") && visaoDiaIsHojeRealName(n);
-}
-function resolveVisaoDiaCard(spec) {
-  if (spec.kind === "single") {
-    const hit = findVisaoDiaDiarioCfg(spec.match);
-    if (!hit) return null;
-    const id = hit.cfg.id;
-    const realId = hit.cfg.checkout ? id : checkoutFieldId(id);
-    const realCfg = cfgById(realId);
-    return {
-      label: spec.label,
-      color: hit.color || spec.color,
-      planId: id,
-      realId,
-      parent: hit.parent,
-      refPlan: hit.cfg.name,
-      refReal: realCfg ? realCfg.name : hit.cfg.name
-    };
-  }
-  const planHit = findVisaoDiaDiarioCfg(spec.matchPlan);
-  const realHit = findVisaoDiaDiarioCfg(spec.matchReal);
-  if (!planHit && !realHit) return null;
-  const anchor = planHit || realHit;
-  return {
-    label: spec.label,
-    color: anchor.color || spec.color,
-    planId: planHit ? planHit.cfg.id : null,
-    realId: realHit ? realHit.cfg.id : null,
-    parent: anchor.parent,
-    refPlan: planHit ? planHit.cfg.name : "—",
-    refReal: realHit ? realHit.cfg.name : "—"
-  };
-}
-const VISAO_DIA_CARDS = [
-  { label: "Agendamentos", color: "#4f8cff", kind: "single", match: matchVisaoDiaAgendamento },
-  { label: "Comparecimento", color: "#22d3aa", kind: "single", match: matchVisaoDiaConfirmacao },
-  { label: "Fichas", color: "#fbbf24", kind: "pair", matchPlan: matchVisaoDiaFichaPlan, matchReal: matchVisaoDiaFichaReal },
-  { label: "Carro troca", color: "#a78bfa", kind: "pair", matchPlan: matchVisaoDiaTrocaPlan, matchReal: matchVisaoDiaTrocaReal }
+const VISAO_DIA_MATCHERS = [
+  { label: "Agendamentos", test: n => n.includes("agendament") && !n.includes("hoje"), color: "#4f8cff" },
+  { label: "Agend. hoje", test: n => n.includes("agendament") && n.includes("hoje"), color: "#4f8cff" },
+  { label: "Comparecimento", test: n => n.includes("comparec"), color: "#22d3aa" },
+  { label: "Fichas", test: n => n.includes("ficha"), color: "#fbbf24" },
+  { label: "Carro troca", test: n => n.includes("troca") || (n.includes("carro") && n.includes("troca")), color: "#a78bfa" },
+  { label: "Vendas", test: n => n.includes("venda"), color: "#46d39a" }
 ];
+function findVisaoDiaIndicator(matcher) {
+  for (const ind of state.indicators || []) {
+    if (ind.pctOnly) continue;
+    const n = normKpiName(ind.name);
+    if (matcher.test(n)) return ind;
+  }
+  return null;
+}
 function visaoDiaShouldShow() {
   if (!authUnlocked) return false;
   if (divisionalMode()) return false;
@@ -4660,39 +4593,20 @@ function visaoDiaTeamStats() {
   });
   return { active: sellers.length, ci, co, both };
 }
-function visaoDiaTeamTodayFields(planId, realId) {
+function visaoDiaTeamToday(ind) {
   const day = diarioTodayDay();
-  if (day == null) return { plan: null, real: null };
+  if (day == null || !ind) return { plan: null, real: null };
   const sellers = visaoDiaSellersToday();
+  const fidPlan = ind.id;
+  const fidReal = checkoutFieldId(ind.id);
   let plan = 0, planHas = false, real = 0, realHas = false;
   sellers.forEach(s => {
-    if (planId) {
-      const p = accum(s.id, planId, "plan", [day]);
-      if (p != null) { plan += p; planHas = true; }
-    }
-    if (realId) {
-      const r = accum(s.id, realId, "real", [day]);
-      if (r != null) { real += r; realHas = true; }
-    }
+    const p = accum(s.id, fidPlan, "plan", [day]);
+    if (p != null) { plan += p; planHas = true; }
+    const r = accum(s.id, fidReal, "real", [day]);
+    if (r != null) { real += r; realHas = true; }
   });
   return { plan: planHas ? plan : null, real: realHas ? real : null };
-}
-/** Projeção do mês (equipe) — mesma lógica da coluna Proj. da matriz. */
-function visaoDiaTeamProjPct(parentInd) {
-  if (!parentInd) return null;
-  const ids = orderedSellers().map(s => s.id);
-  if (!ids.length) return null;
-  const days = monthDays();
-  const { real, has } = matrizRealForSellers(ids, parentInd.id, days, "mes");
-  if (!has || real == null) return null;
-  const proj = matrizProjEquipe(real);
-  const metaProj = matrizMetaForProj(parentInd, ids, true);
-  if (proj == null || !metaProj) return null;
-  const lb = cfgLowerBetter(parentInd);
-  const pp = matrizProjPerfRatio(proj, metaProj, lb);
-  if (pp == null) return null;
-  const color = lb ? heatMatrizLowerBetterColor(proj, metaProj, false) : heatMatrizText(pp);
-  return { pct: pp, text: pctTxt(pp) + " proj. mês", color };
 }
 function refreshVisaoDiaIfNeeded() {
   const el = document.getElementById("matrizVisaoDia");
@@ -4730,17 +4644,14 @@ function renderVisaoDiaCards() {
     root.innerHTML = '<div class="empty">Visão Dia só para o mês atual.</div>';
     return;
   }
-  root.innerHTML = VISAO_DIA_CARDS.map(spec => {
-    const card = resolveVisaoDiaCard(spec);
-    if (!card) return "";
-    const { plan, real } = visaoDiaTeamTodayFields(card.planId, card.realId);
+  root.innerHTML = VISAO_DIA_MATCHERS.map(m => {
+    const ind = findVisaoDiaIndicator(m);
+    if (!ind) return "";
+    const { plan, real } = visaoDiaTeamToday(ind);
     const planDisp = plan != null ? fmt(plan) : "0";
     const realDisp = real != null ? fmt(real) : "0";
-    const proj = visaoDiaTeamProjPct(card.parent);
-    const refTip = "Check-in: " + card.refPlan + " · Check-out: " + card.refReal;
-    const projHtml = proj ? `<div class="vd-proj" style="color:${proj.color}">${escapeHtml(proj.text)}</div>` : "";
-    return `<div class="visao-dia-card" style="--vc:${card.color || spec.color}"><div class="vd-label">${escapeHtml(card.label)}</div><div class="vd-pr" title="Planejado (check-in) / Realizado (check-out)"><span class="vd-plan">${planDisp}</span><span class="vd-slash">/</span><span class="vd-real">${realDisp}</span></div><div class="vd-meta" title="${escapeHtml(refTip)}"><span class="vd-tag in">Planejado</span> <span class="vd-tag out">Realizado</span></div>${projHtml}</div>`;
-  }).filter(Boolean).join("") || '<div class="empty">Cadastre indicadores com check-in/check-out de HOJE no diário para ver os cards.</div>';
+    return `<div class="visao-dia-card" style="--vc:${ind.color || m.color}"><div class="vd-label">${escapeHtml(m.label)}</div><div class="vd-pr" title="Planejado (check-in) / Realizado (check-out)"><span class="vd-plan">${planDisp}</span><span class="vd-slash">/</span><span class="vd-real">${realDisp}</span></div><div class="vd-meta"><span class="vd-tag in">Planejado</span> <span class="vd-tag out">Realizado</span></div></div>`;
+  }).filter(Boolean).join("") || '<div class="empty">Cadastre indicadores em KPIs para ver os cards.</div>';
 }
 function updateVisaoDiaOverlay() {
   const el = document.getElementById("matrizVisaoDia");
@@ -5471,7 +5382,6 @@ function renderDiario() {
       updateDiarioSummary(inp.dataset.field);
       refreshProgramacaoDiarioRowHints(inp.dataset.field);
       renderDiarioSellerBar(sellers);
-      refreshVisaoDiaIfNeeded();
     });
   });
   attachGridNav(table);
