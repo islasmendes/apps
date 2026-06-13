@@ -5,7 +5,7 @@ const page = await browser.newPage();
 const pageErrors = [];
 page.on("pageerror", e => pageErrors.push(e.message));
 
-await page.goto("http://127.0.0.1:8765/index.html?v=v135", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/index.html?v=v136", { waitUntil: "networkidle", timeout: 60000 });
 
 const setup = await page.evaluate(() => {
   unlockAuth();
