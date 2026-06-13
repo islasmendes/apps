@@ -28,8 +28,10 @@ const result = await page.evaluate(() => {
   if (comp) {
     comp.subs = comp.subs || [];
     if (!comp.subs.some(s => matchVisaoDiaConfirmacao(normKpiName(s.name)))) {
-      const subId = uid();
-      comp.subs.push({ id: subId, name: "Fez a confirmação de visitas pra hoje?", checkin: true, checkout: true, metaDay: 2, metaSat: 0, metaSun: 0, metaMonth: 0 });
+      comp.subs.push({ id: uid(), name: "Fez a confirmação de visitas pra hoje?", checkin: true, checkout: false, metaDay: 2, metaSat: 0, metaSun: 0, metaMonth: 0 });
+    }
+    if (!comp.subs.some(s => matchVisaoDiaComparecimentoReal(normKpiName(s.name)))) {
+      comp.subs.push({ id: uid(), name: "Comparecimento de HOJE?", checkin: false, checkout: true, metaDay: 0, metaSat: 0, metaSun: 0, metaMonth: 0 });
     }
   }
   if (fich) {
@@ -63,8 +65,12 @@ const result = await page.evaluate(() => {
     return c ? { label: c.label, refPlan: c.refPlan, refReal: c.refReal } : null;
   }).filter(Boolean);
 
+  const compCard = refs.find(r => r.label === "Comparecimento");
+  const compOk = compCard?.refPlan?.includes("confirma") && compCard?.refReal?.includes("Comparecimento");
+
   return {
     refs,
+    compOk,
     planText: document.querySelector(".vd-plan")?.textContent,
     hasProj: cardsHtml.includes("vd-proj"),
     hasCards: cardsHtml.includes("vd-plan"),
@@ -74,7 +80,7 @@ const result = await page.evaluate(() => {
 });
 
 console.log("visao dia test:", JSON.stringify(result, null, 2));
-const ok = result.hasCards && result.planText === "4" && result.refs.length === 4 && !result.hidden;
+const ok = result.hasCards && result.planText === "4" && result.refs.length === 4 && result.compOk && !result.hidden;
 console.log(ok ? "PASS" : "FAIL");
 await browser.close();
 process.exit(ok ? 0 : 1);

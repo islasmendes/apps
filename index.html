@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v106";
+  var BUILD = "v107";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2924,7 +2924,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v106"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v107"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4571,9 +4571,13 @@ function findVisaoDiaDiarioCfg(testFn) {
 function matchVisaoDiaAgendamento(n) {
   return n.includes("agendament") && n.includes("hoje") && !visaoDiaIsAuxHojeName(n);
 }
-/** Referência print diário: Fez a confirmação de visitas pra hoje? */
+/** Referência print diário: Fez a confirmação de visitas pra hoje? (check-in) */
 function matchVisaoDiaConfirmacao(n) {
   return n.includes("confirm") && n.includes("visita") && n.includes("hoje");
+}
+/** Referência print diário: Comparecimento de HOJE? (check-out) */
+function matchVisaoDiaComparecimentoReal(n) {
+  return n.includes("comparec") && n.includes("hoje") && !n.includes("confirm") && !visaoDiaIsAuxHojeName(n);
 }
 function matchVisaoDiaFichaPlan(n) {
   return (/fich|financ/.test(n)) && n.includes("hoje") && visaoDiaIsHojePlanName(n);
@@ -4620,7 +4624,7 @@ function resolveVisaoDiaCard(spec) {
 }
 const VISAO_DIA_CARDS = [
   { label: "Agendamentos", color: "#4f8cff", kind: "single", match: matchVisaoDiaAgendamento },
-  { label: "Comparecimento", color: "#22d3aa", kind: "single", match: matchVisaoDiaConfirmacao },
+  { label: "Comparecimento", color: "#22d3aa", kind: "pair", matchPlan: matchVisaoDiaConfirmacao, matchReal: matchVisaoDiaComparecimentoReal },
   { label: "Fichas", color: "#fbbf24", kind: "pair", matchPlan: matchVisaoDiaFichaPlan, matchReal: matchVisaoDiaFichaReal },
   { label: "Carro troca", color: "#a78bfa", kind: "pair", matchPlan: matchVisaoDiaTrocaPlan, matchReal: matchVisaoDiaTrocaReal }
 ];
