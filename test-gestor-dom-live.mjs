@@ -5,7 +5,7 @@ const page = await browser.newPage();
 const errors = [];
 page.on("pageerror", e => errors.push(e.message));
 
-await page.goto("http://127.0.0.1:8765/index.html?v=v130", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/index.html?v=v131", { waitUntil: "networkidle", timeout: 60000 });
 
 const result = await page.evaluate(async () => {
   const log = [];
