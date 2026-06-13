@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v121";
+  var BUILD = "v120";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -2996,7 +2996,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v121"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v120"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -5015,23 +5015,19 @@ function visaoDiaDayRealValue(sellerId, fieldId, day) {
   if (c.real != null && c.real !== "" && !isNaN(Number(c.real))) return Number(c.real);
   return null;
 }
-/** CVs com dia trabalhado antes de hoje — inclui folga hoje (checkout prox dia = plano de hoje na Visão Dia). */
-function visaoDiaAgendamentoPlanSellers(day) {
-  return orderedSellers().filter(s => prevWorkedDay(s.id, day) != null);
-}
 function visaoDiaAgendamentoTeamToday(card) {
   const day = diarioTodayDay();
   if (day == null) return { plan: null, real: null };
-  const sellersToday = visaoDiaSellersToday();
+  const sellers = visaoDiaSellersToday();
   let plan = 0, planHas = false, real = 0, realHas = false;
-  if (card.proxId) {
-    visaoDiaAgendamentoPlanSellers(day).forEach(s => {
+  sellers.forEach(s => {
+    if (card.proxId) {
       const prev = prevWorkedDay(s.id, day);
-      const v = visaoDiaDayRealValue(s.id, card.proxId, prev);
-      if (v != null) { plan += v; planHas = true; }
-    });
-  }
-  sellersToday.forEach(s => {
+      if (prev != null) {
+        const v = visaoDiaDayRealValue(s.id, card.proxId, prev);
+        if (v != null) { plan += v; planHas = true; }
+      }
+    }
     if (card.realId) {
       const r = visaoDiaDayRealValue(s.id, card.realId, day);
       if (r != null) { real += r; realHas = true; }

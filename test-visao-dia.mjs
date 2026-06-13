@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto("http://127.0.0.1:8765/index.html?v=v113", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/index.html?v=v121", { waitUntil: "networkidle", timeout: 60000 });
 
 const result = await page.evaluate(() => {
   authUnlocked = true;
@@ -31,11 +31,21 @@ const result = await page.evaluate(() => {
   if (prox && prev != null) setCell(sid, prox.cfg.id, prev, "real", 5);
   if (real && day != null) setCell(sid, real.cfg.id, day, "real", 2);
 
+  // Folga hoje: plano deve vir do checkout prox dia do último dia trabalhado
+  const folgaSid = state.sellers[1]?.id || sid;
+  const sc = ensureSched(folgaSid);
+  if (day != null) sc[day] = 0;
+  const folgaPrev = prevWorkedDay(folgaSid, day);
+  const folgaProxVal = 7;
+  if (prox && folgaPrev != null) setCell(folgaSid, prox.cfg.id, folgaPrev, "real", folgaProxVal);
+
   updateVisaoDiaOverlay();
 
   const agCard = resolveVisaoDiaCard({ label: "Agendamentos", kind: "agendamentoProx", color: "#4f8cff" });
   const vals = visaoDiaAgendamentoTeamToday(agCard);
   const agNums = document.querySelector(".visao-dia-card .vd-pr")?.textContent;
+  const folgaOnScaleToday = sellerWorks(folgaSid, day);
+  const folgaInPlanPool = visaoDiaAgendamentoPlanSellers(day).some(s => s.id === folgaSid);
 
   const satSub = { id: uid(), name: "Agendamento p/ sábado", checkin: true, checkout: false, diarioDays: [false, false, false, false, false, false, true] };
   normalizeDiarioDays(satSub);
@@ -52,16 +62,22 @@ const result = await page.evaluate(() => {
     satActiveFri,
     friWd,
     cardCount: VISAO_DIA_CARDS.length,
+    folgaOnScaleToday,
+    folgaInPlanPool,
+    folgaPrev,
+    expectedPlan: 5 + (folgaPrev != null && folgaSid !== sid ? folgaProxVal : 0),
   };
 });
 
 console.log("visao dia test:", JSON.stringify(result, null, 2));
 const ok = result.cardCount === 5
-  && result.vals.plan === 5
+  && result.vals.plan === result.expectedPlan
   && result.vals.real === 2
   && result.agCard?.refPlan?.includes("próx")
   && result.agCard?.refReal?.includes("HOJE")
-  && result.satActiveFri === false;
+  && result.satActiveFri === false
+  && result.folgaOnScaleToday === false
+  && result.folgaInPlanPool === true;
 console.log(ok ? "PASS" : "FAIL");
 await browser.close();
 process.exit(ok ? 0 : 1);
