@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v122";
+  var BUILD = "v121";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -2996,7 +2996,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v122"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v121"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3294,9 +3294,7 @@ function applyKpiTogglesUi(st) {
     const entry = bag[cfg.id];
     if (!entry) return;
     keys.forEach(k => {
-      if (entry[k] === undefined || entry[k] === null) return;
-      if ((k === "checkin" || k === "checkout") && entry[k] === false && cfg[k] && fieldHasTodayDailyData(cfg.id)) return;
-      cfg[k] = entry[k];
+      if (entry[k] !== undefined && entry[k] !== null) cfg[k] = entry[k];
     });
   };
   (st.indicators || []).forEach(ind => {
@@ -4882,15 +4880,6 @@ function matchVisaoDiaVendaPlan(n) {
 function matchVisaoDiaVendaReal(n) {
   return n.includes("vend") && n.includes("hoje") && visaoDiaIsHojeRealName(n);
 }
-function visaoDiaResolveCheckoutFieldId(fieldId) {
-  if (!fieldId) return null;
-  const cfg = cfgById(fieldId);
-  if (cfg?.checkout) return fieldId;
-  return checkoutFieldId(fieldId);
-}
-function visaoDiaResolveRealFieldId(cfg) {
-  return cfg ? visaoDiaResolveCheckoutFieldId(cfg.id) : null;
-}
 function visaoDiaParentByStem(stemTest) {
   return (state.indicators || []).find(ind => !ind.pctOnly && stemTest(normKpiName(ind.name))) || null;
 }
@@ -4906,7 +4895,7 @@ function resolveVisaoDiaCard(spec) {
       color: anchor?.color || parent?.color || spec.color,
       kind: "agendamentoProx",
       proxId: proxHit ? proxHit.cfg.id : null,
-      realId: visaoDiaResolveRealFieldId(realHit?.cfg),
+      realId: realHit ? realHit.cfg.id : null,
       parent: parent || anchor?.parent,
       refPlan: proxHit ? ("Check-out ontem · " + proxHit.cfg.name) : "Agendamentos p/ próx Dia",
       refReal: realHit ? realHit.cfg.name : "Agendamentos p/ HOJE?"
@@ -4950,7 +4939,7 @@ function resolveVisaoDiaCard(spec) {
     label: spec.label,
     color: anchor.color || spec.color,
     planId: planHit ? planHit.cfg.id : null,
-    realId: visaoDiaResolveRealFieldId(realHit?.cfg),
+    realId: realHit ? realHit.cfg.id : null,
     parent: anchor.parent,
     refPlan: planHit ? planHit.cfg.name : "—",
     refReal: realHit ? realHit.cfg.name : "—"
@@ -5013,12 +5002,10 @@ function visaoDiaDayPlanValue(sellerId, fieldId, day) {
   return null;
 }
 function visaoDiaDayRealValue(sellerId, fieldId, day) {
-  const coId = visaoDiaResolveCheckoutFieldId(fieldId);
-  const cfg = cfgById(coId);
-  if (!cfg || day == null) return null;
-  const c = getCell(sellerId, coId, day);
-  if (cfgOpenQuestion(cfg)) {
-    const needs = { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
+  const cfg = cfgById(fieldId);
+  const c = getCell(sellerId, fieldId, day);
+  if (cfg) {
+    const needs = diarioFieldNeeds(sellerId, cfg, day);
     if (openQuestionCheckoutOnly(cfg, needs)) {
       if (!hasPlanValue(c, cfg)) return null;
       if (c.planYes === true && c.plan != null && c.plan !== "" && !isNaN(Number(c.plan))) return Number(c.plan);
@@ -7621,17 +7608,6 @@ function cellHasAnyFill(c) {
     || c.planYes === true || c.planYes === false
     || (c.planJustif != null && String(c.planJustif).trim() !== "");
 }
-/** Evita desligar check-in/out de KPI com lançamentos de hoje (preserva chips verdes e dados). */
-function fieldHasTodayDailyData(fieldId) {
-  if (!fieldId || todayISO() !== currentMonth) return false;
-  const day = new Date().getDate();
-  const bySeller = state.months?.[currentMonth]?.daily || {};
-  for (const sid of Object.keys(bySeller)) {
-    const cell = bySeller[sid]?.[fieldId]?.[day] ?? bySeller[sid]?.[fieldId]?.[String(day)];
-    if (cellHasAnyFill(cell)) return true;
-  }
-  return false;
-}
 function countFieldDataEntries(fieldId) {
   let cells = 0;
   const days = new Set(), sellers = new Set();
@@ -9272,13 +9248,14 @@ async function finishAuthEnterLoja(code) {
   saveAuthSession({ type: "loja", code });
   unlockAuth();
   resetLojaDataListener();
-  const sameLoja = localStateLojaTag() === String(code || "").trim().toUpperCase();
-  if (!sameLoja) resetLocalStateForLoja(code);
+  if (localStateLojaTag() !== String(code || "").trim().toUpperCase()) {
+    resetLocalStateForLoja(code);
+  }
   const displayName = await fetchLojaDisplayName(code);
   applyLojaDisplayName(displayName);
   if (!fbReady) await ensureAuthCloudReady(20000);
   if (fbReady) {
-    const ok = await pullLoja({ cloudOnly: !sameLoja });
+    const ok = await pullLoja({ cloudOnly: true });
     startLojaDataListener();
     syncStore();
     updateDivisionalNav();
@@ -9744,26 +9721,12 @@ function pullLoja(opts) {
     };
     if (v && v.data) {
       const localVis = !cloudOnly && state?.ui?.matrizShow ? { ...state.ui.matrizShow } : null;
-      const diskSnap = loadLocalStateSnapshot();
-      const localToggles = !cloudOnly && state?.ui?.kpiToggles
-        ? JSON.parse(JSON.stringify(state.ui.kpiToggles))
-        : (diskSnap?.ui?.kpiToggles ? JSON.parse(JSON.stringify(diskSnap.ui.kpiToggles)) : null);
+      const localToggles = !cloudOnly && state?.ui?.kpiToggles ? JSON.parse(JSON.stringify(state.ui.kpiToggles)) : null;
       const localSnap = cloudOnly ? null : JSON.parse(JSON.stringify(state));
-      const prePullSnap = cloudOnly ? JSON.parse(JSON.stringify(state)) : null;
+      const diskSnap = cloudOnly ? null : loadLocalStateSnapshot();
       const uiPrefs = cloudOnly ? { theme: state.theme, ui: { tabOrder: state.ui?.tabOrder, tabOrderAt: state.ui?.tabOrderAt } } : null;
       state = migrate(v.data);
-      if (cloudOnly) {
-        if (diskSnap?.months) mergeDailyFromRemote(diskSnap.months);
-        else if (prePullSnap?.months && localStateLojaTag() === String(lojaCode || "").trim().toUpperCase()) {
-          mergeDailyFromRemote(prePullSnap.months);
-        }
-        [diskSnap, prePullSnap].forEach(s => {
-          if (!s) return;
-          mergeKpiMetasFromLocalState(state, s);
-          mergeDiarioDaysFromLocalState(state, s);
-          mergeKpiTogglesFromLocalState(state, s);
-        });
-      } else {
+      if (!cloudOnly) {
         mergeKpiMetasFromLocalState(state, localSnap);
         if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
         mergeDiarioDaysFromLocalState(state, localSnap);
@@ -9772,8 +9735,9 @@ function pullLoja(opts) {
         if (diskSnap) mergeKpiTogglesFromLocalState(state, diskSnap);
         mergeUiPrefsFromLocalState(state, localSnap);
         if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
+      } else if (uiPrefs) {
+        mergeUiPrefsFromLocalState(state, uiPrefs);
       }
-      if (cloudOnly && uiPrefs) mergeUiPrefsFromLocalState(state, uiPrefs);
       const cloudSnap = JSON.parse(JSON.stringify(state));
       if (localVis) state.ui.matrizShow = { ...(state.ui.matrizShow || {}), ...localVis };
       if (localToggles) state.ui.kpiToggles = { ...(state.ui.kpiToggles || {}), ...localToggles };
@@ -9794,7 +9758,7 @@ function pullLoja(opts) {
         }
         applyMatrizShowUi(state);
         applyKpiTogglesUi(state);
-        autoRecoverOrphanKpiData(state);
+        if (!cloudOnly) autoRecoverOrphanKpiData(state);
         save({ skipConfigPush: !isAdmin, skipPush: cloudOnly, immediatePush: !cloudOnly });
         finish();
         if (!cloudOnly) toast("Loja " + lojaCode + " carregada da nuvem");

@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto("http://127.0.0.1:8765/index.html?v=v121", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/index.html?v=v122", { waitUntil: "networkidle", timeout: 60000 });
 
 const result = await page.evaluate(() => {
   authUnlocked = true;
@@ -47,6 +47,16 @@ const result = await page.evaluate(() => {
   const folgaOnScaleToday = sellerWorks(folgaSid, day);
   const folgaInPlanPool = visaoDiaAgendamentoPlanSellers(day).some(s => s.id === folgaSid);
 
+  // Realizado: checkout no sub "de HOJE!" quando realId aponta para o pai
+  let parentRealTest = null;
+  if (agto && real) {
+    const coSub = agto.subs?.find(s => /de hoje/i.test(s.name) && s.name.includes("!"));
+    if (coSub) {
+      setCell(sid, coSub.id, day, "real", 9);
+      parentRealTest = visaoDiaDayRealValue(sid, agto.id, day);
+    }
+  }
+
   const satSub = { id: uid(), name: "Agendamento p/ sábado", checkin: true, checkout: false, diarioDays: [false, false, false, false, false, false, true] };
   normalizeDiarioDays(satSub);
   const fri = day > 1 ? day - 1 : null;
@@ -66,6 +76,7 @@ const result = await page.evaluate(() => {
     folgaInPlanPool,
     folgaPrev,
     expectedPlan: 5 + (folgaPrev != null && folgaSid !== sid ? folgaProxVal : 0),
+    parentRealTest,
   };
 });
 
@@ -73,6 +84,7 @@ console.log("visao dia test:", JSON.stringify(result, null, 2));
 const ok = result.cardCount === 5
   && result.vals.plan === result.expectedPlan
   && result.vals.real === 2
+  && (result.parentRealTest == null || result.parentRealTest === 9)
   && result.agCard?.refPlan?.includes("próx")
   && result.agCard?.refReal?.includes("HOJE")
   && result.satActiveFri === false
