@@ -2,13 +2,14 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto("http://127.0.0.1:8765/index.html?v=v111", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/index.html?v=v113", { waitUntil: "networkidle", timeout: 60000 });
 
 const result = await page.evaluate(() => {
+  const sid = state.sellers[0]?.id;
   const ind = state.indicators.find(i => !i.pctOnly && (i.checkin || i.checkout));
   const sub = (state.indicators.find(i => (i.subs || []).some(s => s.checkin || s.checkout))?.subs || []).find(s => s.checkin || s.checkout);
   const cfg = sub || ind;
-  if (!cfg) return { ok: false, reason: "no cfg" };
+  if (!cfg || !sid) return { ok: false, reason: "no cfg" };
 
   normalizeDiarioDays(cfg);
   cfg.diarioDays = [true, true, true, true, true, false, true];
@@ -24,23 +25,36 @@ const result = await page.evaluate(() => {
   mergeDiarioDaysFromLocalState(state, snap);
 
   const cfgAfter = cfgById(cfg.id);
-  let friday = null;
+  let friday = null, saturday = null;
   for (let d = 1; d <= daysInMonth(currentMonth); d++) {
-    if (weekday(currentMonth, d) === 5) { friday = d; break; }
+    const wd = weekday(currentMonth, d);
+    if (wd === 5 && friday == null) friday = d;
+    if (wd === 6 && saturday == null) saturday = d;
   }
-  const friActive = friday != null ? cfgActiveOnWeekday(cfgAfter, friday) : null;
-  const needsFriday = friday != null ? diarioFieldNeeds(state.sellers[0]?.id || "", cfgAfter, friday) : null;
+
+  const satSub = { id: uid(), name: "Agendamentos p/ sábado", checkin: false, checkout: true, metaDay: 0, metaSat: 5, metaSun: 0, metaMonth: 0 };
+  normalizeDiarioDays(satSub);
+  satSub.diarioDays = [false, false, false, false, false, false, true];
+  const needsFriSatSub = friday != null ? diarioFieldNeeds(sid, satSub, friday) : null;
+  const needsSatSatSub = saturday != null ? diarioFieldNeeds(sid, satSub, saturday) : null;
 
   return {
-    ok: cfgAfter?.diarioDays?.[5] === false && friActive === false,
+    ok: cfgAfter?.diarioDays?.[5] === false,
     friday,
-    needsFriday,
+    saturday,
+    needsFriday: friday != null ? diarioFieldNeeds(sid, cfgAfter, friday) : null,
+    satSubFriInactive: needsFriSatSub?.checkin === false && needsFriSatSub?.checkout === false,
+    satSubSatActive: needsSatSatSub?.checkout === true,
     days: cfgAfter?.diarioDays,
   };
 });
 
 console.log("diario days test:", result);
-const pass = result.ok && result.needsFriday?.checkin === false && result.needsFriday?.checkout === false;
+const pass = result.ok
+  && result.needsFriday?.checkin === false
+  && result.needsFriday?.checkout === false
+  && result.satSubFriInactive
+  && result.satSubSatActive;
 console.log(pass ? "PASS" : "FAIL");
 await browser.close();
 process.exit(pass ? 0 : 1);

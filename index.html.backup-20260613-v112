@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v113";
+  var BUILD = "v112";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -1306,7 +1306,6 @@ function migrate(s) {
       if (sub.planCrossId == null) sub.planCrossId = "";
       if (!Array.isArray(sub.planCrossIds)) sub.planCrossIds = sub.planCrossId ? [sub.planCrossId] : [];
       normalizeDiarioDays(sub);
-      migrateDiarioDaysLegacy(sub);
     });
     if (i.cvHint == null) i.cvHint = "";
     if (i.openQuestion == null) i.openQuestion = false;
@@ -1314,7 +1313,6 @@ function migrate(s) {
     if (i.planCrossId == null) i.planCrossId = "";
     if (!Array.isArray(i.planCrossIds)) i.planCrossIds = i.planCrossId ? [i.planCrossId] : [];
     normalizeDiarioDays(i);
-    migrateDiarioDaysLegacy(i);
     (i.rates || []).forEach(r => {
       if (r.lowerBetter == null) r.lowerBetter = false;
       if (r.absolute == null) r.absolute = false;
@@ -2943,7 +2941,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v113"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v112"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3205,34 +3203,6 @@ function mergeDiarioDaysFromLocalState(target, local) {
 }
 function cfgActiveOnWeekday(cfg, day, m = currentMonth) {
   return !!normalizeDiarioDays(cfg)[weekday(m, day)];
-}
-function diarioDaysIsAllTrue(cfg) {
-  normalizeDiarioDays(cfg);
-  return cfg.diarioDays.every(v => v === true);
-}
-/** Preserva comportamento legado (seg–sex / seg–sáb) só quando o gestor ainda não personalizou os dias. */
-function migrateDiarioDaysLegacy(cfg) {
-  if (!cfg || !diarioDaysIsAllTrue(cfg)) return;
-  if (cfg.sundayOnly) {
-    cfg.diarioDays = [false, true, true, true, true, true, true];
-    return;
-  }
-  const n = normKpiName(cfg.name || "");
-  if (diarioIsSaturdaySub(cfg) || /sabado|\bsab\b/.test(n)) {
-    cfg.diarioDays = [false, true, true, true, true, true, false];
-    return;
-  }
-  if (/domingo|\bdom\b/.test(n)) {
-    cfg.diarioDays = [false, true, true, true, true, true, true];
-  }
-}
-function diarioRowHintTag(cfg) {
-  if (cfgOpenQuestion(cfg)) return ` <span class="hint" style="font-size:9px; color:var(--accent-2)">perg. aberta</span>`;
-  normalizeDiarioDays(cfg);
-  const on = DIARIO_WD_LABELS.filter((_, i) => cfg.diarioDays[i]);
-  if (!on.length) return ` <span class="hint" style="font-size:9px; color:var(--danger)">sem dia no diário</span>`;
-  if (on.length === 7) return "";
-  return ` <span class="hint" style="font-size:9px; color:var(--accent-2)">${on.join("·")}</span>`;
 }
 function diarioDaysPickerHtml(cfg, opts) {
   normalizeDiarioDays(cfg);
@@ -5499,6 +5469,14 @@ function diarioSundaySubActive(sellerId, day, m = currentMonth) {
 function diarioFieldNeeds(sellerId, cfg, day, m = currentMonth) {
   if (!sellerWorks(sellerId, day, m)) return { checkin: false, checkout: false };
   if (!cfgActiveOnWeekday(cfg, day, m)) return { checkin: false, checkout: false };
+  if (cfg.sundayOnly) {
+    if (!diarioSundaySubActive(sellerId, day, m)) return { checkin: false, checkout: false };
+    return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
+  }
+  if (diarioIsSaturdaySub(cfg)) {
+    if (!diarioSaturdaySubActive(sellerId, day, m)) return { checkin: false, checkout: false };
+    return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
+  }
   return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
 }
 function diarioRowNeedsAnyDay(sellerId, cfg, days) {
@@ -5794,7 +5772,7 @@ function attachOpenPlanScrollHandles(root) {
 }
 function diarioRow(cfg, color, isSub) {
   const days = (weeksOf(currentMonth)[diarioWeekIdx] || []);
-  const domTag = diarioRowHintTag(cfg);
+  const domTag = cfg.sundayOnly ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">dom · seg–sáb</span>` : (diarioIsSaturdaySub(cfg) ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">sáb · seg–sex</span>` : (cfgOpenQuestion(cfg) ? ` <span class="hint" style="font-size:9px; color:var(--accent-2)">perg. aberta</span>` : ""));
   const label = (isSub ? `<span class="tag sub">↳</span> ${cfg.name}` : `<b style="color:${color}">${cfg.name}</b>`) + domTag;
   let row = `<tr class="${isSub?'dsub':'dgroup'}" data-dio-field="${cfg.id}" style="--gc:${color}"><td class="name" style="border-left:3px solid ${color};">${label}</td>`;
   row += `<td class="dio-meta-col"><span class="neon">${fmt(cfg.metaDay)}</span>${Number(cfg.metaSat)?`<br><span class="muted" style="font-size:10px">sáb ${fmt(cfg.metaSat)}</span>`:''}${Number(cfg.metaSun)?`<br><span class="muted" style="font-size:10px">dom ${fmt(cfg.metaSun)}</span>`:''}</td>`;
