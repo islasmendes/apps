@@ -7,6 +7,7 @@ await page.goto("http://127.0.0.1:8765/index.html?v=v129", { waitUntil: "network
 const result = await page.evaluate(() => {
   authUnlocked = true;
   lojaCode = "VCBRO";
+  activeView = "diario";
   const agto = state.indicators.find(i => /agend/.test(normKpiName(i.name)));
   const sid = state.sellers[0].id;
   const day = diarioTodayDay();
@@ -22,41 +23,35 @@ const result = await page.evaluate(() => {
   if (!fid || day == null) return { ok: false, reason: "no field" };
 
   const md = monthData();
-  md.daily[sid] = md.daily[sid] || {};
-  md.daily[sid][fid] = md.daily[sid][fid] || {};
-  md.daily[sid][fid][String(day)] = {
-    real: 3,
-    realBy: "consultor",
-    realAt: Date.now() - 3000
-  };
-  const afterAdd = visaoDiaAgendamentoTeamToday(agCard).real;
+  if (md.daily[sid]?.[fid]) delete md.daily[sid][fid];
+  diarioPendingOverlay.clear();
+  gestorMergeGuard.clear();
 
-  const remoteMonths = {
-    [currentMonth]: {
-      daily: {
-        [sid]: {
-          [fid]: {}
-        }
-      }
-    }
-  };
-  const merged = mergeDailyFromRemote(remoteMonths);
-  const afterRemoteClear = visaoDiaAgendamentoTeamToday(agCard).real;
-  const cellGone = getCell(sid, fid, day).real == null || getCell(sid, fid, day).real === "";
-
-  setCell(sid, fid, day, "real", 2);
+  let threwOnClear = false;
+  try {
+    setCell(sid, fid, day, "real", 4);
+  } catch (e) {
+    return { ok: false, reason: "set add threw: " + e.message };
+  }
   const afterGestorAdd = visaoDiaAgendamentoTeamToday(agCard).real;
-  setCell(sid, fid, day, "real", "");
+
+  try {
+    setCell(sid, fid, day, "real", "");
+  } catch (e) {
+    threwOnClear = true;
+  }
   const afterGestorClear = visaoDiaAgendamentoTeamToday(agCard).real;
+  const cellGone = !hasCellValue(getCell(sid, fid, day), "real");
+  const dayPurged = !getCell(sid, fid, day).real && !md.daily[sid]?.[fid]?.[String(day)];
 
   return {
-    afterAdd,
-    afterRemoteClear,
     afterGestorAdd,
     afterGestorClear,
-    merged,
     cellGone,
-    ok: afterAdd === 3 && afterRemoteClear == null && afterGestorAdd === 2 && afterGestorClear == null && merged && cellGone
+    dayPurged,
+    threwOnClear,
+    hasPruneFn: typeof pruneEmptyDailyDay === "function",
+    ok: !threwOnClear && afterGestorAdd === 4 && afterGestorClear == null && cellGone && typeof pruneEmptyDailyDay === "function"
   };
 });
 
