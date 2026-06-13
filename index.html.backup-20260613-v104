@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v105";
+  var BUILD = "v104";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -1168,7 +1168,6 @@
    Gestão Comercial — app de arquivo único, sem dependências.
    ============================================================ */
 const LS_KEY = "gestao_comercial_v1";
-const LS_STATE_LOJA_KEY = "gc_state_loja";
 const uid = () => Math.random().toString(36).slice(2, 9);
 const todayISO = () => new Date().toISOString().slice(0,7);
 
@@ -1220,21 +1219,6 @@ function load() {
   try { const raw = localStorage.getItem(LS_KEY); if (raw) return migrate(JSON.parse(raw)); }
   catch (e) { console.warn("load falhou", e); }
   return defaultState();
-}
-function localStateLojaTag() {
-  return String(localStorage.getItem(LS_STATE_LOJA_KEY) || "").trim().toUpperCase();
-}
-function markLocalStateLoja(code) {
-  const c = String(code || lojaCode || "").trim().toUpperCase();
-  if (c) localStorage.setItem(LS_STATE_LOJA_KEY, c);
-}
-function resetLocalStateForLoja(code) {
-  const keepTheme = state?.theme;
-  state = defaultState();
-  if (keepTheme) state.theme = keepTheme;
-  state.storeName = String(code || "").trim().toUpperCase();
-  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
-  markLocalStateLoja(code);
 }
 function migrate(s) {
   if (!s.order) s.order = { sellers: null, indicators: null };
@@ -2074,7 +2058,6 @@ function startConfigListener() {
 function save(opts) {
   persistMatrizShowUi(state);
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); }
-  if (lojaCode && !divisionalMode()) markLocalStateLoja(lojaCode);
   if (!opts?.skipPush && typeof fbPush === "function") {
     fbPush(opts?.immediatePush ? { skipMerge: true, immediate: true } : undefined);
   }
@@ -2923,7 +2906,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v105"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v104"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4595,18 +4578,19 @@ function visaoDiaTeamStats() {
 }
 function visaoDiaTeamToday(ind) {
   const day = diarioTodayDay();
-  if (day == null || !ind) return { plan: null, real: null };
+  if (day == null || !ind) return { plan: null, real: null, meta: 0 };
   const sellers = visaoDiaSellersToday();
   const fidPlan = ind.id;
   const fidReal = checkoutFieldId(ind.id);
-  let plan = 0, planHas = false, real = 0, realHas = false;
+  let plan = 0, planHas = false, real = 0, realHas = false, meta = 0;
   sellers.forEach(s => {
     const p = accum(s.id, fidPlan, "plan", [day]);
     if (p != null) { plan += p; planHas = true; }
     const r = accum(s.id, fidReal, "real", [day]);
     if (r != null) { real += r; realHas = true; }
+    meta += metaForDay(ind, currentMonth, day);
   });
-  return { plan: planHas ? plan : null, real: realHas ? real : null };
+  return { plan: planHas ? plan : null, real: realHas ? real : null, meta };
 }
 function refreshVisaoDiaIfNeeded() {
   const el = document.getElementById("matrizVisaoDia");
@@ -4647,10 +4631,11 @@ function renderVisaoDiaCards() {
   root.innerHTML = VISAO_DIA_MATCHERS.map(m => {
     const ind = findVisaoDiaIndicator(m);
     if (!ind) return "";
-    const { plan, real } = visaoDiaTeamToday(ind);
+    const { plan, real, meta } = visaoDiaTeamToday(ind);
     const planDisp = plan != null ? fmt(plan) : "0";
     const realDisp = real != null ? fmt(real) : "0";
-    return `<div class="visao-dia-card" style="--vc:${ind.color || m.color}"><div class="vd-label">${escapeHtml(m.label)}</div><div class="vd-pr" title="Planejado (check-in) / Realizado (check-out)"><span class="vd-plan">${planDisp}</span><span class="vd-slash">/</span><span class="vd-real">${realDisp}</span></div><div class="vd-meta"><span class="vd-tag in">Planejado</span> <span class="vd-tag out">Realizado</span></div></div>`;
+    const pctMeta = meta > 0 && real != null ? Math.round((real / meta) * 100) : null;
+    return `<div class="visao-dia-card" style="--vc:${ind.color || m.color}"><div class="vd-label">${escapeHtml(m.label)}</div><div class="vd-pr" title="Planejado (check-in) / Realizado (check-out)"><span class="vd-plan">${planDisp}</span><span class="vd-slash">/</span><span class="vd-real">${realDisp}</span></div><div class="vd-meta"><span class="vd-tag in">Plano</span> <span class="vd-tag out">Real</span> · Meta dia ${meta > 0 ? fmt(meta) : "—"}${pctMeta != null ? " · " + pctMeta + "%" : ""}</div></div>`;
   }).filter(Boolean).join("") || '<div class="empty">Cadastre indicadores em KPIs para ver os cards.</div>';
 }
 function updateVisaoDiaOverlay() {
@@ -8674,27 +8659,13 @@ async function finishAuthEnterLoja(code) {
   applyAuthContext("loja", code);
   saveAuthSession({ type: "loja", code });
   unlockAuth();
-  resetLojaDataListener();
-  if (localStateLojaTag() !== String(code || "").trim().toUpperCase()) {
-    resetLocalStateForLoja(code);
-  }
   const displayName = await fetchLojaDisplayName(code);
   applyLojaDisplayName(displayName);
-  if (!fbReady) await ensureAuthCloudReady(20000);
-  if (fbReady) {
-    const ok = await pullLoja({ cloudOnly: true });
-    startLojaDataListener();
-    syncStore();
+  if (fbReady) { pullLoja(); startLojaDataListener(); }
+  else {
+    save(); syncStore();
     updateDivisionalNav();
     renderActive();
-    updateVisaoDiaOverlay();
-    toast(ok ? "Loja " + code + " sincronizada da nuvem" : "Loja " + code + " — sem dados na nuvem ainda");
-  } else {
-    save();
-    syncStore();
-    updateDivisionalNav();
-    renderActive();
-    toast("Sem conexão — não foi possível baixar os dados da loja", true);
   }
 }
 function finishAuthEnter(code) {
@@ -8827,7 +8798,7 @@ function fbInit(){
       startConfigListener();
       loadAuthConfig().then(() => {
         if (authUnlocked && divisionalCode) pullDivisional();
-        else if (authUnlocked && lojaCode) pullLoja({ cloudOnly: localStateLojaTag() !== String(lojaCode || "").trim().toUpperCase() });
+        else if (authUnlocked && lojaCode) pullLoja();
         else if (!authUnlocked && !authBusy && authFlowStep === "senha" && !pendingAuthPassword) startAuthFlow();
       });
     });
@@ -8961,11 +8932,9 @@ function switchToLoja(code) {
   applyAuthContext("loja", c);
   if (authUnlocked) saveAuthSession({ type: "loja", code: c });
   resetLojaDataListener();
-  const cloudOnly = localStateLojaTag() !== c;
-  if (cloudOnly) resetLocalStateForLoja(c);
   fetchLojaDisplayName(c).then(displayName => {
     applyLojaDisplayName(displayName);
-    if (fbReady) pullLoja({ cloudOnly });
+    if (fbReady) pullLoja();
     else {
       save();
       syncStore();
@@ -9008,7 +8977,6 @@ function trocarLoja() {
   if (!confirm("Trocar de loja? Será necessário autenticar novamente.")) return;
   localStorage.removeItem("gc_loja_code");
   localStorage.removeItem("gc_divisional_code");
-  localStorage.removeItem(LS_STATE_LOJA_KEY);
   clearAuthSession();
   lojaCode = null;
   divisionalCode = null;
@@ -9145,13 +9113,11 @@ function pullDivisional() {
     toast("Modo Divisional: vendo todas as lojas");
   });
 }
-function pullLoja(opts) {
-  opts = opts || {};
-  const cloudOnly = !!opts.cloudOnly;
-  if (!fbReady || !fbDb) return Promise.resolve(false);
-  if (divisionalMode()) { pullDivisional(); return Promise.resolve(true); }
-  if (!lojaCode) return Promise.resolve(false);
-  return fbDb.ref("lojas/" + lojaCode).once("value").then(snap => {
+function pullLoja(){
+  if (!fbReady || !fbDb) return;
+  if (divisionalMode()) { pullDivisional(); return; }
+  if (!lojaCode) return;
+  fbDb.ref("lojas/"+lojaCode).once("value").then(snap => {
     const v = snap.val();
     const finish = () => {
       applyTheme(); applyTabOrder(); syncStore(); expandedBlocks = state.ui.expanded; arvExpandedBlocks = state.ui.arvExpanded || {};
@@ -9159,52 +9125,43 @@ function pullLoja(opts) {
       watchDivisionalMetas();
       renderActive(); startLojaDataListener();
       tryPromptOrphanRecovery();
-      markLocalStateLoja(lojaCode);
       try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
     };
     if (v && v.data) {
-      const localVis = !cloudOnly && state?.ui?.matrizShow ? { ...state.ui.matrizShow } : null;
-      const localSnap = cloudOnly ? null : JSON.parse(JSON.stringify(state));
-      const diskSnap = cloudOnly ? null : loadLocalStateSnapshot();
-      const uiPrefs = cloudOnly ? { theme: state.theme, ui: { tabOrder: state.ui?.tabOrder, tabOrderAt: state.ui?.tabOrderAt } } : null;
+      const localVis = state?.ui?.matrizShow ? { ...state.ui.matrizShow } : null;
+      const localSnap = JSON.parse(JSON.stringify(state));
+      const diskSnap = loadLocalStateSnapshot();
       state = migrate(v.data);
-      if (!cloudOnly) {
+      mergeKpiMetasFromLocalState(state, localSnap);
+      if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
+      mergeUiPrefsFromLocalState(state, localSnap);
+      if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
+      if (localVis) state.ui.matrizShow = { ...(state.ui.matrizShow || {}), ...localVis };
+      applyMatrizShowUi(state);
+      applyLojaDisplayName(lojaRemoteDisplayName(lojaCode, v, lojaCode));
+      applyTemplateFromCloud().then(() => {
         mergeKpiMetasFromLocalState(state, localSnap);
         if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
         mergeUiPrefsFromLocalState(state, localSnap);
         if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
-      } else if (uiPrefs) {
-        mergeUiPrefsFromLocalState(state, uiPrefs);
-      }
-      if (localVis) state.ui.matrizShow = { ...(state.ui.matrizShow || {}), ...localVis };
-      applyMatrizShowUi(state);
-      applyLojaDisplayName(lojaRemoteDisplayName(lojaCode, v, lojaCode));
-      return applyTemplateFromCloud().then(() => {
-        if (!cloudOnly) {
-          mergeKpiMetasFromLocalState(state, localSnap);
-          if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
-          mergeUiPrefsFromLocalState(state, localSnap);
-          if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
-        }
         applyMatrizShowUi(state);
-        if (!cloudOnly) autoRecoverOrphanKpiData(state);
-        save({ skipConfigPush: !isAdmin, skipPush: cloudOnly, immediatePush: !cloudOnly });
+        autoRecoverOrphanKpiData(state);
+        save({ skipConfigPush: !isAdmin, immediatePush: true });
         finish();
-        if (!cloudOnly) toast("Loja " + lojaCode + " carregada da nuvem");
-        return true;
+        toast("Loja "+lojaCode+" carregada da nuvem");
+      });
+    } else {
+      fetchLojaDisplayName(lojaCode).then(displayName => {
+        applyLojaDisplayName(displayName);
+        applyTemplateFromCloud().then(() => {
+          save({ skipConfigPush: !isAdmin });
+          fbPush();
+          finish();
+          toast("Nova loja "+lojaCode+" criada");
+        });
       });
     }
-    return fetchLojaDisplayName(lojaCode).then(displayName => {
-      applyLojaDisplayName(displayName);
-      return applyTemplateFromCloud().then(() => {
-        save({ skipConfigPush: !isAdmin, skipPush: cloudOnly });
-        if (!cloudOnly) fbPush();
-        finish();
-        if (!cloudOnly) toast("Nova loja " + lojaCode + " criada");
-        return true;
-      });
-    });
-  }).catch(e => { console.warn("pull falhou", e); return false; });
+  }).catch(e => console.warn("pull falhou", e));
 }
 function renderSync(){
   const el = document.getElementById("syncPanel"); if(!el) return;
