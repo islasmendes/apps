@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v122";
+  var BUILD = "v123";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -2996,7 +2996,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v122"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v123"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -3294,9 +3294,7 @@ function applyKpiTogglesUi(st) {
     const entry = bag[cfg.id];
     if (!entry) return;
     keys.forEach(k => {
-      if (entry[k] === undefined || entry[k] === null) return;
-      if ((k === "checkin" || k === "checkout") && entry[k] === false && cfg[k] && fieldHasTodayDailyData(cfg.id)) return;
-      cfg[k] = entry[k];
+      if (entry[k] !== undefined && entry[k] !== null) cfg[k] = entry[k];
     });
   };
   (st.indicators || []).forEach(ind => {
@@ -7620,17 +7618,6 @@ function cellHasAnyFill(c) {
   return (c.plan != null && c.plan !== "") || (c.real != null && c.real !== "")
     || c.planYes === true || c.planYes === false
     || (c.planJustif != null && String(c.planJustif).trim() !== "");
-}
-/** Evita desligar check-in/out de KPI com lançamentos de hoje (preserva chips verdes e dados). */
-function fieldHasTodayDailyData(fieldId) {
-  if (!fieldId || todayISO() !== currentMonth) return false;
-  const day = new Date().getDate();
-  const bySeller = state.months?.[currentMonth]?.daily || {};
-  for (const sid of Object.keys(bySeller)) {
-    const cell = bySeller[sid]?.[fieldId]?.[day] ?? bySeller[sid]?.[fieldId]?.[String(day)];
-    if (cellHasAnyFill(cell)) return true;
-  }
-  return false;
 }
 function countFieldDataEntries(fieldId) {
   let cells = 0;
