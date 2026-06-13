@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto("http://127.0.0.1:8765/index.html?v=v134", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/index.html?v=v135", { waitUntil: "networkidle", timeout: 60000 });
 
 const result = await page.evaluate(() => {
   authUnlocked = true;
@@ -53,7 +53,7 @@ const result = await page.evaluate(() => {
   updateVisaoDiaOverlay();
 
   const vals = visaoDiaAgendamentoTeamToday(agCard);
-  const agNums = document.querySelector(".visao-dia-card .vd-pr")?.textContent;
+  const agNums = document.querySelector(".visao-dia-card .vd-trio")?.textContent;
   const folgaOnScaleToday = sellerWorks(folgaSid, day);
   const folgaInPlanPool = visaoDiaAgendamentoPlanSellers(day).some(s => s.id === folgaSid);
 

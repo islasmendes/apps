@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto("http://127.0.0.1:8765/index.html?v=v134", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/index.html?v=v135", { waitUntil: "networkidle", timeout: 60000 });
 
 const result = await page.evaluate(() => {
   unlockAuth();
@@ -36,9 +36,15 @@ const result = await page.evaluate(() => {
   renderVisaoDiaTeamBar();
   renderVisaoDiaCards();
   const bar = document.getElementById("visaoDiaTeamBar")?.textContent || "";
-  const card = document.querySelector(".visao-dia-card .vd-pr")?.textContent || "";
+  const card = document.querySelector(".visao-dia-card .vd-trio")?.textContent || "";
   const hasChecksCompleto = /Check's completo/i.test(bar);
-  const hasTrio = card.includes("/") && document.querySelector(".vd-sys");
+  const hasTrio = card.includes("/") && document.querySelector(".vd-col .vd-sys");
+  const tagsInline = (() => {
+    const tags = [...document.querySelectorAll(".visao-dia-card .vd-col .vd-tag")];
+    if (tags.length < 3) return false;
+    const firstRowTop = tags[0].getBoundingClientRect().top;
+    return tags.every(t => Math.abs(t.getBoundingClientRect().top - firstRowTop) < 4);
+  })();
 
   return {
     activeOk,
@@ -48,7 +54,8 @@ const result = await page.evaluate(() => {
     hasChecksCompleto,
     hasTrio,
     bothTip: st.tips.both,
-    ok: activeOk && folgaExcluded && defaultSchedIncluded && sys === 60 && hasChecksCompleto && hasTrio
+    tagsInline,
+    ok: activeOk && folgaExcluded && defaultSchedIncluded && sys === 60 && hasChecksCompleto && hasTrio && tagsInline
   };
 });
 
