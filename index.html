@@ -1451,14 +1451,6 @@ function scheduleOverrideSummary(s) {
   else if (root.checkoutOverride === "closed") parts.push("check-out travado");
   return parts;
 }
-function ensureSchedProfileSlot(profileKey) {
-  const root = consultorScheduleRoot();
-  state.consultorSchedule = root;
-  if (!root.profiles[profileKey]) {
-    root.profiles[profileKey] = { ...resolveScheduleSlot(root, profileKey) };
-  }
-  return root.profiles[profileKey];
-}
 function gestorNowMins() {
   const n = new Date();
   return n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60;
