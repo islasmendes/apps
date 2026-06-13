@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v102";
+  var BUILD = "v103";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2878,7 +2878,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v102"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v103"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -6705,7 +6705,6 @@ function renderConsultorSchedulePanel() {
   const hint = document.getElementById("consultorScheduleHint");
   const phase = gestorTimePhase(s);
   const ovParts = scheduleOverrideSummary();
-  const root = consultorScheduleRoot();
   const hasOpen = root.checkinOverride === "open" || root.checkoutOverride === "open";
   const hasClosed = root.checkinOverride === "closed" || root.checkoutOverride === "closed";
   const todayProf = SCHEDULE_PROFILE_LABELS[s._profileKey || "weekday"];
@@ -8600,57 +8599,32 @@ function submitAuthReveal() {
 }
 function bindAuthEvents() {
   const gate = document.getElementById("authGate");
-  if (!gate) return;
-  if (!gate.dataset.authBound) {
-    gate.dataset.authBound = "1";
-    gate.addEventListener("click", e => {
-      const t = e.target.closest("button");
-      if (!t) return;
-      if (t.id === "authMasterSubmit") { e.preventDefault(); submitAuthSetupMaster(); }
-      else if (t.id === "authLojaSubmit") { e.preventDefault(); submitAuthLoja(); }
-      else if (t.id === "authLojaBack") { e.preventDefault(); showAuthStep("senha"); }
-      else if (t.id === "authRevealDone") { e.preventDefault(); submitAuthReveal(); }
-      else if (t.id === "authCopyPass") {
-        e.preventDefault();
-        const txt = pendingRevealPassword || document.getElementById("authRevealPass")?.textContent;
-        try { navigator.clipboard && navigator.clipboard.writeText(txt); toast("Senha copiada"); } catch (err) { toast("Copie manualmente", true); }
-      }
-      else if (t.id === "authTogglePass") {
-        e.preventDefault();
-        const inp = document.getElementById("authPassInput");
-        const btn = document.getElementById("authTogglePass");
-        if (!inp || !btn) return;
-        if (inp.type === "password") { inp.type = "text"; btn.textContent = "🙈"; }
-        else { inp.type = "password"; btn.textContent = "👁"; }
-      }
-    });
-  }
+  if (!gate || gate.dataset.authBound) return;
+  gate.dataset.authBound = "1";
+  const passBtn = document.getElementById("authPassSubmit");
+  if (passBtn) passBtn.onclick = () => submitAuthLogin();
   const loginForm = document.getElementById("authLoginForm");
-  if (loginForm && !loginForm.dataset.authBound) {
-    loginForm.dataset.authBound = "1";
-    loginForm.addEventListener("submit", e => { e.preventDefault(); submitAuthLogin(); });
-  }
-  const passInp = document.getElementById("authPassInput");
-  if (passInp && !passInp.dataset.authBound) {
-    passInp.dataset.authBound = "1";
-    passInp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submitAuthLogin(); } });
-  }
+  if (loginForm) loginForm.addEventListener("submit", e => { e.preventDefault(); submitAuthLogin(); });
+  document.getElementById("authMasterSubmit").onclick = submitAuthSetupMaster;
+  document.getElementById("authLojaSubmit").onclick = submitAuthLoja;
+  document.getElementById("authLojaBack").onclick = () => showAuthStep("senha");
+  document.getElementById("authRevealDone").onclick = submitAuthReveal;
+  document.getElementById("authCopyPass").onclick = () => {
+    const t = pendingRevealPassword || document.getElementById("authRevealPass").textContent;
+    try { navigator.clipboard && navigator.clipboard.writeText(t); toast("Senha copiada"); } catch (e) { toast("Copie manualmente", true); }
+  };
+  document.getElementById("authTogglePass").onclick = () => {
+    const inp = document.getElementById("authPassInput");
+    const btn = document.getElementById("authTogglePass");
+    if (inp.type === "password") { inp.type = "text"; btn.textContent = "🙈"; }
+    else { inp.type = "password"; btn.textContent = "👁"; }
+  };
+  document.getElementById("authPassInput").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submitAuthLogin(); } });
   const lojaInline = document.getElementById("authLojaInputInline");
-  if (lojaInline && !lojaInline.dataset.authBound) {
-    lojaInline.dataset.authBound = "1";
-    lojaInline.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submitAuthLogin(); } });
-  }
-  const lojaInp = document.getElementById("authLojaInput");
-  if (lojaInp && !lojaInp.dataset.authBound) {
-    lojaInp.dataset.authBound = "1";
-    lojaInp.addEventListener("keydown", e => { if (e.key === "Enter") submitAuthLoja(); });
-  }
+  if (lojaInline) lojaInline.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submitAuthLogin(); } });
+  document.getElementById("authLojaInput").addEventListener("keydown", e => { if (e.key === "Enter") submitAuthLoja(); });
   ["authMasterNew", "authMasterConfirm"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el && !el.dataset.authBound) {
-      el.dataset.authBound = "1";
-      el.addEventListener("keydown", e => { if (e.key === "Enter") submitAuthSetupMaster(); });
-    }
+    document.getElementById(id).addEventListener("keydown", e => { if (e.key === "Enter") submitAuthSetupMaster(); });
   });
   primeAuthLojaFields();
 }
@@ -9334,7 +9308,6 @@ function init() {
   document.getElementById("importJson").addEventListener("change", e => { if(e.target.files[0]) importJson(e.target.files[0]); });
   document.getElementById("resetAll").onclick = () => { if(confirm("Apagar TODOS os dados deste navegador?")){ localStorage.removeItem(LS_KEY); state = defaultState(); save(); applyTheme(); syncStore(); expandedBlocks = state.ui.expanded; arvExpandedBlocks = state.ui.arvExpanded || {}; renderActive(); toast("Tudo apagado"); } };
   document.getElementById("fechPull").onclick = fechPull;
-  bindAuthEvents();
   if (!window._diarioFlushBound) {
     window._diarioFlushBound = true;
     const flushDiario = () => { flushAllGestorDailyPushes(); if (typeof fbPush === "function") fbPush({ immediate: true }); };
