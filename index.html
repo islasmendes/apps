@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v123";
+  var BUILD = "v124";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -1232,6 +1232,9 @@ function defaultState() {
 
 let state = load();
 function load() {
+  const tag = localStateLojaTag();
+  const cached = tag ? loadLocalStateSnapshot(tag) : null;
+  if (cached) return cached;
   try { const raw = localStorage.getItem(LS_KEY); if (raw) return migrate(JSON.parse(raw)); }
   catch (e) { console.warn("load falhou", e); }
   return defaultState();
@@ -1239,17 +1242,52 @@ function load() {
 function localStateLojaTag() {
   return String(localStorage.getItem(LS_STATE_LOJA_KEY) || "").trim().toUpperCase();
 }
+function lojaLsKey(code) {
+  const c = String(code || lojaCode || state?.storeName || "").trim().toUpperCase();
+  if (/^VC[A-Z0-9]+$/.test(c) || /^RSCEN[A-Z0-9]*$/.test(c)) return `${LS_KEY}_${c}`;
+  return LS_KEY;
+}
+function stampPersistLoja(st, code) {
+  const c = String(code || lojaCode || "").trim().toUpperCase();
+  if (c && st) st._persistLoja = c;
+  return st;
+}
+function snapMatchesLoja(snap, code) {
+  if (!snap) return false;
+  const c = String(code || lojaCode || "").trim().toUpperCase();
+  if (!c) return true;
+  const tag = String(snap._persistLoja || snap.storeName || "").trim().toUpperCase();
+  if (tag && tag === c) return true;
+  return !snap._persistLoja && localStateLojaTag() === c;
+}
+function persistLocalState(st, code) {
+  const bag = stampPersistLoja(st || state, code);
+  const key = lojaLsKey(code);
+  try {
+    localStorage.setItem(key, JSON.stringify(bag));
+    localStorage.setItem(LS_KEY, JSON.stringify(bag));
+  } catch (e) { /* ignore */ }
+  markLocalStateLoja(code || lojaCode);
+}
 function markLocalStateLoja(code) {
   const c = String(code || lojaCode || "").trim().toUpperCase();
   if (c) localStorage.setItem(LS_STATE_LOJA_KEY, c);
 }
 function resetLocalStateForLoja(code) {
+  const c = String(code || "").trim().toUpperCase();
+  const cached = loadLocalStateSnapshot(c);
+  if (cached && snapMatchesLoja(cached, c)) {
+    state = cached;
+    stampPersistLoja(state, c);
+    if (!state.storeName || state.storeName === "Minha loja") state.storeName = c;
+    persistLocalState(state, c);
+    return;
+  }
   const keepTheme = state?.theme;
   state = defaultState();
   if (keepTheme) state.theme = keepTheme;
-  state.storeName = String(code || "").trim().toUpperCase();
-  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
-  markLocalStateLoja(code);
+  state.storeName = c;
+  persistLocalState(state, c);
 }
 function migrate(s) {
   if (!s.order) s.order = { sellers: null, indicators: null };
@@ -1720,9 +1758,41 @@ function mergeKpiMetasFromLocalState(target, local) {
   });
   return target;
 }
-function loadLocalStateSnapshot() {
-  try { const raw = localStorage.getItem(LS_KEY); if (raw) return migrate(JSON.parse(raw)); } catch (e) { /* ignore */ }
+function loadLocalStateSnapshot(code) {
+  const c = String(code || lojaCode || "").trim().toUpperCase();
+  try {
+    if (c) {
+      const raw = localStorage.getItem(lojaLsKey(c));
+      if (raw) {
+        const snap = migrate(JSON.parse(raw));
+        if (snapMatchesLoja(snap, c)) return snap;
+      }
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    if (!c || localStateLojaTag() === c) {
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) return migrate(JSON.parse(raw));
+    }
+  } catch (e) { /* ignore */ }
   return null;
+}
+function mergeDailyFromSnapshots(...snaps) {
+  let changed = false;
+  snaps.forEach(snap => {
+    if (!snap?.months) return;
+    if (mergeDailyFromRemote(snap.months)) changed = true;
+  });
+  return changed;
+}
+function pullDailyMonthsFromCloud(code) {
+  if (!fbReady || !fbDb) return Promise.resolve(null);
+  const c = String(code || lojaCode || "").trim().toUpperCase();
+  if (!c) return Promise.resolve(null);
+  return fbDb.ref(`lojas/${c}/data/months`).once("value").then(snap => snap.val()).catch(e => {
+    console.warn("pullDailyMonths", e);
+    return null;
+  });
 }
 const TAB_VIEW_IDS = ["matriz", "diario", "fechamento", "rscen", "kpis", "gestao", "config"];
 function uiTabOrderAt(st) { return Number(st?.ui?.tabOrderAt) || 0; }
@@ -1852,7 +1922,7 @@ function applyMatrizShowUi(st) {
 }
 function saveMatrizVisibility(opts) {
   persistMatrizShowUi(state);
-  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); }
+  try { persistLocalState(state); } catch (e) { toast("Não foi possível salvar (cheio?)", true); }
   matrizUiRerender();
   if (fbReady && fbDb && lojaCode && !divisionalMode()) {
     fbPush({ skipMerge: true, immediate: true });
@@ -2097,7 +2167,7 @@ function applyTemplateFromCloud() {
     applyMatrizShowUi(state);
     applyKpiTogglesUi(state);
     configApplying = false;
-    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+    try { persistLocalState(state); } catch (e) { /* ignore */ }
     if (changed) {
       lastPushedConfigHash = configHash(tpl);
       expandedBlocks = state.ui.expanded;
@@ -2133,7 +2203,7 @@ function startConfigListener() {
       applyMatrizShowUi(state);
       applyKpiTogglesUi(state);
       configApplying = false;
-      try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+      try { persistLocalState(state); } catch (e) { /* ignore */ }
       if (["matriz", "rscen", "kpis", "gestao", "config", "diario"].includes(activeView)) renderActive();
       if (!changed) return;
       lastPushedConfigHash = configHash(tpl);
@@ -2146,7 +2216,7 @@ function startConfigListener() {
 function save(opts) {
   persistMatrizShowUi(state);
   persistKpiTogglesUi(state);
-  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar (cheio?)", true); }
+  persistLocalState(state);
   if (lojaCode && !divisionalMode()) markLocalStateLoja(lojaCode);
   if (!opts?.skipPush && typeof fbPush === "function") {
     fbPush(opts?.immediatePush ? { skipMerge: true, immediate: true } : undefined);
@@ -2408,7 +2478,7 @@ async function commitDiarioClear(scope, toastMsg) {
   const month = currentMonth;
   clearDiarioScope({ ...scope, month });
   markDailyTombstones(scope.days, scope.sellerIds, scope.fieldIds, month);
-  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+  try { persistLocalState(state); } catch (e) {}
   const synced = await pushDailyClearsToFirebase({ ...scope, month });
   fbPush({ skipMerge: true, immediate: true });
   renderDiario();
@@ -2821,7 +2891,7 @@ function setCell(sellerId, fieldId, day, key, val, m = currentMonth) {
     clearDailyTombstone(sellerId, fieldId, dayKey, m);
     armGestorMergeGuard(sellerId, fieldId, dayKey, m);
   }
-  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+      try { persistLocalState(state); } catch (e) { /* ignore */ }
   scheduleGestorDailyCellPush(sellerId, fieldId, dayKey, key, val, m);
   if (m === currentMonth && +dayKey === diarioTodayDay()) refreshVisaoDiaIfNeeded();
 }
@@ -2943,7 +3013,9 @@ function mergeDailyFromRemote(remoteMonths) {
             return;
           }
           const rc = remoteDays[day] ?? remoteDays[dayKey];
+          const remoteHasDay = Object.prototype.hasOwnProperty.call(remoteDays, day) || Object.prototype.hasOwnProperty.call(remoteDays, dayKey);
           if (rc == null) {
+            if (!remoteHasDay) return;
             if (Object.keys(lc).length) {
               const gestorBlocks = (lc.planBy === "gestor" && hasCellValue(lc, "plan")) || (lc.realBy === "gestor" && hasCellValue(lc, "real"));
               if (!gestorBlocks) {
@@ -2988,7 +3060,7 @@ function startLojaDataListener() {
     lojaMergeTimer = setTimeout(() => {
       const changed = mergeDailyFromRemote(snap.val());
       if (!changed) return;
-      try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+      try { persistLocalState(state); } catch (e) { /* ignore */ }
       if (activeView === "diario" && isDiarioEditing()) return;
       if (activeView === "diario") patchDiarioCells();
       else renderActive();
@@ -2996,7 +3068,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v123"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v124"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -9541,6 +9613,7 @@ function switchToLoja(code) {
     toast("Modo Divisional ativo");
     return true;
   }
+  if (lojaCode && authUnlocked && !divisionalMode()) persistLocalState(state, lojaCode);
   applyAuthContext("loja", c);
   if (authUnlocked) saveAuthSession({ type: "loja", code: c });
   resetLojaDataListener();
@@ -9692,7 +9765,7 @@ function fbPush(opts){
         const remoteMonths = snap.val();
         if (remoteMonths) mergeDailyFromRemote(remoteMonths);
       }
-      try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+      try { persistLocalState(state); } catch (e) { /* ignore */ }
       await fbDb.ref().update(buildLojaPushUpdates(lojaCode, state));
       publishAppBuild();
     } catch (e) { console.warn("push falhou", e); }
@@ -9718,6 +9791,9 @@ function pullLoja(opts) {
   if (!fbReady || !fbDb) return Promise.resolve(false);
   if (divisionalMode()) { pullDivisional(); return Promise.resolve(true); }
   if (!lojaCode) return Promise.resolve(false);
+  const targetCode = String(lojaCode || "").trim().toUpperCase();
+  const prevLoja = localStateLojaTag();
+  if (!cloudOnly && prevLoja && state) persistLocalState(state, prevLoja);
   return fbDb.ref("lojas/" + lojaCode).once("value").then(snap => {
     const v = snap.val();
     const finish = () => {
@@ -9727,11 +9803,32 @@ function pullLoja(opts) {
       renderActive(); startLojaDataListener();
       tryPromptOrphanRecovery();
       markLocalStateLoja(lojaCode);
-      try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+      try { persistLocalState(state, targetCode); } catch (e) { /* ignore */ }
+    };
+    const mergePrefsFromSnaps = snaps => {
+      snaps.filter(Boolean).forEach(s => {
+        if (!snapMatchesLoja(s, targetCode) && !snapMatchesLoja(s, prevLoja)) return;
+        mergeKpiMetasFromLocalState(state, s);
+        mergeDiarioDaysFromLocalState(state, s);
+        mergeKpiTogglesFromLocalState(state, s);
+        mergeUiPrefsFromLocalState(state, s);
+      });
+    };
+    const finalizePull = (toastMsg) => {
+      return pullDailyMonthsFromCloud(targetCode).then(remoteMonths => {
+        if (remoteMonths) mergeDailyFromRemote(remoteMonths);
+        applyMatrizShowUi(state);
+        applyKpiTogglesUi(state);
+        autoRecoverOrphanKpiData(state);
+        save({ skipConfigPush: !isAdmin, skipPush: cloudOnly, immediatePush: !cloudOnly });
+        finish();
+        if (toastMsg) toast(toastMsg);
+        return true;
+      });
     };
     if (v && v.data) {
       const localVis = !cloudOnly && state?.ui?.matrizShow ? { ...state.ui.matrizShow } : null;
-      const diskSnap = loadLocalStateSnapshot();
+      const diskSnap = loadLocalStateSnapshot(targetCode);
       const localToggles = !cloudOnly && state?.ui?.kpiToggles
         ? JSON.parse(JSON.stringify(state.ui.kpiToggles))
         : (diskSnap?.ui?.kpiToggles ? JSON.parse(JSON.stringify(diskSnap.ui.kpiToggles)) : null);
@@ -9739,27 +9836,14 @@ function pullLoja(opts) {
       const prePullSnap = cloudOnly ? JSON.parse(JSON.stringify(state)) : null;
       const uiPrefs = cloudOnly ? { theme: state.theme, ui: { tabOrder: state.ui?.tabOrder, tabOrderAt: state.ui?.tabOrderAt } } : null;
       state = migrate(v.data);
-      if (cloudOnly) {
-        if (diskSnap?.months) mergeDailyFromRemote(diskSnap.months);
-        else if (prePullSnap?.months && localStateLojaTag() === String(lojaCode || "").trim().toUpperCase()) {
-          mergeDailyFromRemote(prePullSnap.months);
-        }
-        [diskSnap, prePullSnap].forEach(s => {
-          if (!s) return;
-          mergeKpiMetasFromLocalState(state, s);
-          mergeDiarioDaysFromLocalState(state, s);
-          mergeKpiTogglesFromLocalState(state, s);
-        });
-      } else {
-        mergeKpiMetasFromLocalState(state, localSnap);
-        if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
-        mergeDiarioDaysFromLocalState(state, localSnap);
-        if (diskSnap) mergeDiarioDaysFromLocalState(state, diskSnap);
-        mergeKpiTogglesFromLocalState(state, localSnap);
-        if (diskSnap) mergeKpiTogglesFromLocalState(state, diskSnap);
-        mergeUiPrefsFromLocalState(state, localSnap);
-        if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
-      }
+      stampPersistLoja(state, targetCode);
+      mergeDailyFromSnapshots(
+        diskSnap?.months && snapMatchesLoja(diskSnap, targetCode) ? diskSnap : null,
+        !cloudOnly && localSnap?.months && snapMatchesLoja(localSnap, prevLoja || targetCode) ? localSnap : null,
+        cloudOnly && prePullSnap?.months && snapMatchesLoja(prePullSnap, targetCode) ? prePullSnap : null
+      );
+      if (cloudOnly) mergePrefsFromSnaps([diskSnap, prePullSnap]);
+      else mergePrefsFromSnaps([localSnap, diskSnap]);
       if (cloudOnly && uiPrefs) mergeUiPrefsFromLocalState(state, uiPrefs);
       const cloudSnap = JSON.parse(JSON.stringify(state));
       if (localVis) state.ui.matrizShow = { ...(state.ui.matrizShow || {}), ...localVis };
@@ -9769,34 +9853,13 @@ function pullLoja(opts) {
       applyLojaDisplayName(lojaRemoteDisplayName(lojaCode, v, lojaCode));
       return applyTemplateFromCloud().then(() => {
         mergeDiarioDaysFromLocalState(state, cloudSnap);
-        if (!cloudOnly) {
-          mergeKpiMetasFromLocalState(state, localSnap);
-          if (diskSnap) mergeKpiMetasFromLocalState(state, diskSnap);
-          mergeDiarioDaysFromLocalState(state, localSnap);
-          if (diskSnap) mergeDiarioDaysFromLocalState(state, diskSnap);
-          mergeKpiTogglesFromLocalState(state, localSnap);
-          if (diskSnap) mergeKpiTogglesFromLocalState(state, diskSnap);
-          mergeUiPrefsFromLocalState(state, localSnap);
-          if (diskSnap) mergeUiPrefsFromLocalState(state, diskSnap);
-        }
-        applyMatrizShowUi(state);
-        applyKpiTogglesUi(state);
-        autoRecoverOrphanKpiData(state);
-        save({ skipConfigPush: !isAdmin, skipPush: cloudOnly, immediatePush: !cloudOnly });
-        finish();
-        if (!cloudOnly) toast("Loja " + lojaCode + " carregada da nuvem");
-        return true;
+        if (!cloudOnly) mergePrefsFromSnaps([localSnap, diskSnap]);
+        return finalizePull(cloudOnly ? null : ("Loja " + lojaCode + " carregada da nuvem"));
       });
     }
     return fetchLojaDisplayName(lojaCode).then(displayName => {
       applyLojaDisplayName(displayName);
-      return applyTemplateFromCloud().then(() => {
-        save({ skipConfigPush: !isAdmin, skipPush: cloudOnly });
-        if (!cloudOnly) fbPush();
-        finish();
-        if (!cloudOnly) toast("Nova loja " + lojaCode + " criada");
-        return true;
-      });
+      return applyTemplateFromCloud().then(() => finalizePull(cloudOnly ? null : ("Nova loja " + lojaCode + " criada")));
     });
   }).catch(e => { console.warn("pull falhou", e); return false; });
 }
