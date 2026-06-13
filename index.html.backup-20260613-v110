@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v111";
+  var BUILD = "v110";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2941,7 +2941,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v111"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v110"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -2990,24 +2990,6 @@ function metaForDay(cfg, m, day) {
 }
 function weekMeta(cfg, days) { let s = 0; days.forEach(d => { s += metaForDay(cfg, currentMonth, d); }); return s; }
 function getMetaLoja(fieldId, m = currentMonth) { const md = monthData(m); return md.metaLoja[fieldId] != null ? Number(md.metaLoja[fieldId]) : null; }
-function parentIndicatorOf(fieldId) {
-  for (const ind of state.indicators || []) {
-    if (ind.id === fieldId) return ind;
-    if ((ind.subs || []).some(s => s.id === fieldId)) return ind;
-  }
-  return null;
-}
-/** Meta loja do campo ou do bloco pai (subs herdam meta cadastrada no principal). */
-function getMetaLojaResolved(fieldId, m = currentMonth) {
-  const direct = getMetaLoja(fieldId, m);
-  if (direct != null && !isNaN(direct) && direct > 0) return direct;
-  const parent = parentIndicatorOf(fieldId);
-  if (parent && parent.id !== fieldId) {
-    const pml = getMetaLoja(parent.id, m);
-    if (pml != null && !isNaN(pml) && pml > 0) return pml;
-  }
-  return null;
-}
 function setMetaLoja(fieldId, val, m = currentMonth) { const md = monthData(m); if (val === "" || val == null || isNaN(val)) delete md.metaLoja[fieldId]; else md.metaLoja[fieldId] = Number(val); save({ immediatePush: true }); }
 const DIV_META_LS = "gc_divisional_metas";
 const DEFAULT_DIVISIONAL_CODE = "RSCEN";
@@ -4070,7 +4052,7 @@ function metaForMatriz(cfg, ids, days, periodo, isTeam) {
   return metaLojaTargetForMatriz(cfg, ids, false);
 }
 function metaLojaTargetForMatriz(cfg, ids, isTeam) {
-  const ml = getMetaLojaResolved(cfg.id);
+  const ml = getMetaLoja(cfg.id);
   if (ml == null || ml <= 0) return null;
   if (isTeam) return ml;
   return ml / Math.max(1, activeSellerCount());
@@ -4099,33 +4081,12 @@ function matrizProjEquipe(realVal, m = currentMonth) {
   if (!elapsed || !total) return null;
   return (realVal / elapsed) * total;
 }
-/** Mesmos vendedores da linha ⌀ Equipe na matriz (com dados + filtro ativo). */
-function matrizEquipeSellerIds() {
-  const withData = sellersWithMatrizData(orderedSellers());
-  return matrizFilteredSellers(withData).map(s => s.id);
-}
-/** Real, projeção e % vs meta loja — mesma regra da coluna Proj. da matriz (valor atual ⚙/check-out). */
-function matrizTeamProjPack(cfg, ids, isTeam) {
-  if (!cfg || !ids?.length) return null;
-  const days = monthDays();
-  const { real, has } = matrizRealForSellers(ids, cfg.id, days, "mes");
-  if (!has || real == null) return null;
-  const proj = isTeam ? matrizProjEquipe(real) : matrizProjConsultor(ids, cfg.id);
-  const metaProj = matrizMetaForProj(cfg, ids, isTeam);
-  if (proj == null || !metaProj) return null;
-  const lb = cfgLowerBetter(cfg);
-  const pp = matrizProjPerfRatio(proj, metaProj, lb);
-  const color = lb ? heatMatrizLowerBetterColor(proj, metaProj, false) : (pp != null ? heatMatrizText(pp) : "var(--text-dim)");
-  return { real, proj, metaProj, pp, color, lb };
-}
 /** Meta para cor/% da coluna Proj.: loja = meta da loja; CV = meta mensal ou estimativa meta/dia na escala. */
 function matrizMetaForProj(cfg, ids, isTeam) {
   if (isTeam) {
-    if (divisionalMode()) {
-      const div = getMetaDivisional(cfg.id);
-      if (div != null && div > 0) return div;
-    }
-    const ml = getMetaLojaResolved(cfg.id);
+    const div = getMetaDivisional(cfg.id);
+    if (div != null && div > 0) return div;
+    const ml = getMetaLoja(cfg.id);
     return ml != null && ml > 0 ? ml : null;
   }
   const mm = metaMonthFor(cfg);
@@ -4461,7 +4422,7 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
       const metaProj = matrizMetaForProj(ind, ids, isTeam);
       const lbProj = cfgLowerBetter(ind);
       const pp = metaProj && proj != null ? matrizProjPerfRatio(proj, metaProj, lbProj) : null;
-      const projTip = matrizTipProj({ isTeam, sellerId: isTeam ? null : ids[0], real: has ? real : null, proj, metaProj: metaProj || 0, ind: { ...ind, sub: false, lowerBetter: ind.lowerBetter }, divisionalTotal: !!(isTeam && divMeta), sumMetasLojas: isTeam ? getMetaLojaResolved(ind.id) : null });
+      const projTip = matrizTipProj({ isTeam, sellerId: isTeam ? null : ids[0], real: has ? real : null, proj, metaProj: metaProj || 0, ind: { ...ind, sub: false, lowerBetter: ind.lowerBetter }, divisionalTotal: !!(isTeam && divMeta), sumMetasLojas: isTeam ? getMetaLoja(ind.id) : null });
       const projColor = lbProj && metaProj && proj != null ? heatMatrizLowerBetterColor(proj, metaProj, false) : (pp != null ? heatMatrizText(pp) : "var(--text-dim)");
       html += `<td style="color:${projColor}; font-weight:${proj != null ? 700 : 400};"${matrizTipData(projTip, ind.color)}>${proj == null ? "—" : fmt(proj)}</td>`;
     }
@@ -4482,7 +4443,7 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
         const subMetaProj = matrizMetaForProj(s, ids, isTeam);
         const lbSub = cfgLowerBetter(s);
         const subPp = subMetaProj && subProj != null ? matrizProjPerfRatio(subProj, subMetaProj, lbSub) : null;
-        const subProjTip = matrizTipProj({ isTeam, sellerId: isTeam ? null : ids[0], real: h ? sr : null, proj: subProj, metaProj: subMetaProj || 0, ind: { ...s, sub: true, lowerBetter: s.lowerBetter }, divisionalTotal: !!(isTeam && subDivMeta), sumMetasLojas: isTeam ? getMetaLojaResolved(s.id) : null });
+        const subProjTip = matrizTipProj({ isTeam, sellerId: isTeam ? null : ids[0], real: h ? sr : null, proj: subProj, metaProj: subMetaProj || 0, ind: { ...s, sub: true, lowerBetter: s.lowerBetter }, divisionalTotal: !!(isTeam && subDivMeta), sumMetasLojas: isTeam ? getMetaLoja(s.id) : null });
         const subProjColor = lbSub && subMetaProj && subProj != null ? heatMatrizLowerBetterColor(subProj, subMetaProj, false) : (subPp != null ? heatMatrizText(subPp) : "var(--text-dim)");
         html += `<td style="color:${subProjColor}; font-weight:700;"${matrizTipData(subProjTip, ind.color)}>${subProj == null ? "—" : fmt(subProj)}</td>`;
       }
@@ -4883,14 +4844,22 @@ function visaoDiaTeamTodayFields(planId, realId) {
   });
   return { plan: planHas ? plan : null, real: realHas ? real : null };
 }
-/** Projeção do mês (equipe) — mesma lógica da coluna Proj. da matriz (⌀ Equipe). */
+/** Projeção do mês (equipe) — mesma lógica da coluna Proj. da matriz. */
 function visaoDiaTeamProjPct(parentInd) {
   if (!parentInd) return null;
-  const ids = matrizEquipeSellerIds();
+  const ids = orderedSellers().map(s => s.id);
   if (!ids.length) return null;
-  const pack = matrizTeamProjPack(parentInd, ids, true);
-  if (!pack || pack.pp == null) return null;
-  return { pct: pack.pp, text: pctTxt(pack.pp) + " proj. mês", color: pack.color };
+  const days = monthDays();
+  const { real, has } = matrizRealForSellers(ids, parentInd.id, days, "mes");
+  if (!has || real == null) return null;
+  const proj = matrizProjEquipe(real);
+  const metaProj = matrizMetaForProj(parentInd, ids, true);
+  if (proj == null || !metaProj) return null;
+  const lb = cfgLowerBetter(parentInd);
+  const pp = matrizProjPerfRatio(proj, metaProj, lb);
+  if (pp == null) return null;
+  const color = lb ? heatMatrizLowerBetterColor(proj, metaProj, false) : heatMatrizText(pp);
+  return { pct: pp, text: pctTxt(pp) + " proj. mês", color };
 }
 function refreshVisaoDiaIfNeeded() {
   const el = document.getElementById("matrizVisaoDia");

@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto("http://127.0.0.1:8765/index.html?v=v110", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/index.html?v=v111", { waitUntil: "networkidle", timeout: 60000 });
 
 const result = await page.evaluate(() => {
   const ind = state.indicators.find(i => !i.pctOnly && (i.checkin || i.checkout));
