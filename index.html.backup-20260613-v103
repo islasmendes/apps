@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v104";
+  var BUILD = "v103";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -419,40 +419,15 @@
   .sched-profile-bar { margin-top: 12px; }
   .matriz-visao-overlay { position: fixed; inset: 0; z-index: 900; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }
   .matriz-visao-overlay[hidden] { display: none !important; }
-  .matriz-visao-sheet { width: min(1040px, 96vw); background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 20px 22px 18px; box-shadow: 0 24px 80px rgba(0,0,0,.35); max-height: calc(100vh - 32px); overflow-y: auto; }
+  .matriz-visao-sheet { width: min(920px, 100%); background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 20px 22px 18px; box-shadow: 0 24px 80px rgba(0,0,0,.35); max-height: calc(100vh - 32px); overflow-y: auto; }
   .matriz-visao-head h2 { margin: 0 0 4px; font-size: 22px; }
-  .visao-dia-team { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-  .visao-dia-stat { font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border-soft); background: var(--panel-2); color: var(--text-dim); white-space: nowrap; }
-  .visao-dia-stat b { color: var(--text); font-weight: 900; }
-  .visao-dia-stat.ok b { color: var(--ok); }
-  .visao-dia-stat.warn b { color: var(--warn); }
-  .visao-dia-stat.accent b { color: var(--accent-2); }
-  .visao-dia-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-top: 16px; }
+  .visao-dia-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 16px; }
   .visao-dia-card { border: 1px solid var(--border-soft); border-radius: 14px; padding: 14px 14px 12px; background: var(--panel-2); border-top: 4px solid var(--vc, var(--accent)); }
   .visao-dia-card .vd-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .35px; color: var(--text-dim); }
-  .visao-dia-card .vd-pr { display: flex; align-items: baseline; gap: 2px; margin-top: 8px; line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; }
-  .visao-dia-card .vd-plan { font-size: clamp(26px, 6vw, 34px); color: var(--accent); }
-  .visao-dia-card .vd-slash { font-size: clamp(20px, 4vw, 26px); color: var(--text-faint); font-weight: 700; margin: 0 2px; }
-  .visao-dia-card .vd-real { font-size: clamp(26px, 6vw, 34px); color: var(--accent-2); }
-  .visao-dia-card .vd-meta { font-size: 11px; color: var(--text-faint); margin-top: 8px; line-height: 1.45; }
-  .visao-dia-card .vd-tag { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; padding: 2px 6px; border-radius: 4px; }
-  .visao-dia-card .vd-tag.in { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
-  .visao-dia-card .vd-tag.out { background: color-mix(in srgb, var(--accent-2) 18%, transparent); color: var(--accent-2); }
+  .visao-dia-card .vd-val { font-size: 28px; font-weight: 900; margin-top: 6px; line-height: 1; }
+  .visao-dia-card .vd-meta { font-size: 11px; color: var(--text-faint); margin-top: 6px; }
   .matriz-visao-actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  @media (max-width: 640px) {
-    .matriz-visao-overlay { padding: 0; align-items: stretch; }
-    .matriz-visao-sheet { width: 100%; max-width: none; border-radius: 0; border-left: none; border-right: none; max-height: 100vh; min-height: 100vh; padding: 16px 14px 20px; }
-    .matriz-visao-head h2 { font-size: 20px; }
-    .visao-dia-grid { grid-template-columns: 1fr; gap: 10px; }
-    .visao-dia-card { padding: 16px; }
-    .visao-dia-team { gap: 6px; }
-    .visao-dia-stat { font-size: 10px; padding: 5px 8px; flex: 1 1 calc(50% - 6px); text-align: center; }
-    .matriz-visao-actions { flex-direction: column; align-items: stretch; }
-    .matriz-visao-actions .btn { width: 100%; min-height: 44px; }
-  }
-  @media (min-width: 900px) {
-    .visao-dia-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  }
+  @media (max-width: 640px) { .visao-dia-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .matriz-visao-sheet { padding: 16px; } }
   .chip-days { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); font-weight: 800; font-size: 10.5px; border-radius: 99px; padding: 1px 7px; }
   .seller-chip .x.esc:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
   .seller-chip .x.portal:hover { background: color-mix(in srgb, var(--accent-2) 22%, transparent); color: var(--accent-2); }
@@ -842,7 +817,6 @@
         <div class="matriz-visao-head">
           <h2>Visão Dia</h2>
           <div class="sub" id="visaoDiaSubtitle">Resumo de hoje para a equipe</div>
-          <div id="visaoDiaTeamBar" class="visao-dia-team"></div>
         </div>
         <div id="visaoDiaCards" class="visao-dia-grid"></div>
         <div class="matriz-visao-actions">
@@ -2733,7 +2707,6 @@ function setCell(sellerId, fieldId, day, key, val, m = currentMonth) {
   }
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
   scheduleGestorDailyCellPush(sellerId, fieldId, dayKey, key, val, m);
-  if (m === currentMonth && +dayKey === diarioTodayDay()) refreshVisaoDiaIfNeeded();
 }
 function cellSourceTag(cell, key) {
   const hasVal = key === "plan" && (cell.planYes === true || cell.planYes === false)
@@ -2902,11 +2875,10 @@ function startLojaDataListener() {
       if (activeView === "diario" && isDiarioEditing()) return;
       if (activeView === "diario") patchDiarioCells();
       else renderActive();
-      refreshVisaoDiaIfNeeded();
     }, 120);
   });
 }
-const APP_BUILD = "v104"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v103"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4557,85 +4529,31 @@ function reopenVisaoDia() {
   save();
   updateVisaoDiaOverlay();
 }
-function visaoDiaSellersToday() {
-  const day = diarioTodayDay();
-  if (day == null) return [];
-  return orderedSellers().filter(s => sellerWorks(s.id, day));
-}
-function visaoDiaTeamStats() {
-  const day = diarioTodayDay();
-  const sellers = visaoDiaSellersToday();
-  if (day == null || !sellers.length) return { active: 0, ci: 0, co: 0, both: 0 };
-  let ci = 0, co = 0, both = 0;
-  sellers.forEach(s => {
-    const ciOk = diarioSellerCheckinDone(s.id, day) === true;
-    const coOk = diarioSellerCheckoutDone(s.id, day) === true;
-    if (ciOk) ci++;
-    if (coOk) co++;
-    if (ciOk && coOk) both++;
-  });
-  return { active: sellers.length, ci, co, both };
-}
 function visaoDiaTeamToday(ind) {
-  const day = diarioTodayDay();
-  if (day == null || !ind) return { plan: null, real: null, meta: 0 };
-  const sellers = visaoDiaSellersToday();
-  const fidPlan = ind.id;
-  const fidReal = checkoutFieldId(ind.id);
-  let plan = 0, planHas = false, real = 0, realHas = false, meta = 0;
-  sellers.forEach(s => {
-    const p = accum(s.id, fidPlan, "plan", [day]);
-    if (p != null) { plan += p; planHas = true; }
-    const r = accum(s.id, fidReal, "real", [day]);
-    if (r != null) { real += r; realHas = true; }
-    meta += metaForDay(ind, currentMonth, day);
-  });
-  return { plan: planHas ? plan : null, real: realHas ? real : null, meta };
-}
-function refreshVisaoDiaIfNeeded() {
-  const el = document.getElementById("matrizVisaoDia");
-  if (!el || el.hidden) return;
-  if (!visaoDiaShouldShow()) return;
-  renderVisaoDiaCards();
-}
-function renderVisaoDiaTeamBar() {
-  const bar = document.getElementById("visaoDiaTeamBar");
-  if (!bar) return;
-  const st = visaoDiaTeamStats();
-  if (!st.active) {
-    bar.innerHTML = '<span class="visao-dia-stat">Nenhum CV na escala de hoje</span>';
-    return;
-  }
-  bar.innerHTML = [
-    `<span class="visao-dia-stat accent"><b>${st.active}</b> CV${st.active > 1 ? "s" : ""} na escala</span>`,
-    `<span class="visao-dia-stat ok"><b>${st.ci}</b> check-in ok</span>`,
-    `<span class="visao-dia-stat ok"><b>${st.co}</b> check-out ok</span>`,
-    `<span class="visao-dia-stat warn"><b>${st.both}</b> dia completo</span>`
-  ].join("");
+  if (!ind) return { real: null, meta: 0 };
+  const day = new Date().getDate();
+  const ids = orderedSellers().map(s => s.id);
+  const { real, has } = matrizRealForSellers(ids, ind.id, [day], "mes");
+  let meta = 0;
+  ids.forEach(id => { if (sellerWorks(id, day)) meta += metaForDay(ind, currentMonth, day); });
+  return { real: has ? real : 0, meta };
 }
 function renderVisaoDiaCards() {
   const root = document.getElementById("visaoDiaCards");
   const sub = document.getElementById("visaoDiaSubtitle");
   if (!root) return;
-  const day = diarioTodayDay();
-  const hol = day != null && isBrazilianNationalHoliday(currentMonth, day);
+  const day = new Date().getDate();
+  const hol = isBrazilianNationalHoliday(currentMonth, day);
   if (sub) {
     const dLbl = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
-    sub.textContent = dLbl + (hol ? " · " + nationalHolidayShortLabel(currentMonth, day) : "") + " · planejado (check-in) × realizado (check-out) ao vivo";
-  }
-  renderVisaoDiaTeamBar();
-  if (day == null) {
-    root.innerHTML = '<div class="empty">Visão Dia só para o mês atual.</div>';
-    return;
+    sub.textContent = dLbl + (hol ? " · " + nationalHolidayShortLabel(currentMonth, day) : "") + " · check-out acumulado do dia (equipe)";
   }
   root.innerHTML = VISAO_DIA_MATCHERS.map(m => {
     const ind = findVisaoDiaIndicator(m);
     if (!ind) return "";
-    const { plan, real, meta } = visaoDiaTeamToday(ind);
-    const planDisp = plan != null ? fmt(plan) : "0";
-    const realDisp = real != null ? fmt(real) : "0";
-    const pctMeta = meta > 0 && real != null ? Math.round((real / meta) * 100) : null;
-    return `<div class="visao-dia-card" style="--vc:${ind.color || m.color}"><div class="vd-label">${escapeHtml(m.label)}</div><div class="vd-pr" title="Planejado (check-in) / Realizado (check-out)"><span class="vd-plan">${planDisp}</span><span class="vd-slash">/</span><span class="vd-real">${realDisp}</span></div><div class="vd-meta"><span class="vd-tag in">Plano</span> <span class="vd-tag out">Real</span> · Meta dia ${meta > 0 ? fmt(meta) : "—"}${pctMeta != null ? " · " + pctMeta + "%" : ""}</div></div>`;
+    const { real, meta } = visaoDiaTeamToday(ind);
+    const pct = meta > 0 && real != null ? Math.round((real / meta) * 100) : null;
+    return `<div class="visao-dia-card" style="--vc:${ind.color || m.color}"><div class="vd-label">${escapeHtml(m.label)}</div><div class="vd-val">${real != null ? fmt(real) : "—"}</div><div class="vd-meta">Meta dia ${meta > 0 ? fmt(meta) : "—"}${pct != null ? " · " + pct + "%" : ""}</div></div>`;
   }).filter(Boolean).join("") || '<div class="empty">Cadastre indicadores em KPIs para ver os cards.</div>';
 }
 function updateVisaoDiaOverlay() {
@@ -5301,7 +5219,6 @@ function patchDiarioCells() {
     refreshProgramacaoDiarioRowHints(fid);
   });
   renderDiarioSellerBar(orderedSellers());
-  refreshVisaoDiaIfNeeded();
 }
 function renderDiario() {
   /* overlay só é limpo no blur — não apagar aqui para não perder valor otimista */
