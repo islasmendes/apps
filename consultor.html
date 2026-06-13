@@ -606,9 +606,9 @@ const CONSULTOR_SCHEDULE_DEFAULTS = {
   checkinOpen: "07:00",
   checkinClose: "12:00",
   checkinGraceEnd: "12:30",
-  checkoutVisible: "12:30",
   checkoutOpen: "16:00",
   checkoutClose: "20:00",
+  checkoutGraceEnd: "20:30",
   checkinOverride: null,
   checkoutOverride: null
 };
@@ -629,7 +629,14 @@ function fmtScheduleHM(mins) {
 }
 function normalizeConsultorSchedule(raw) {
   const s = { ...CONSULTOR_SCHEDULE_DEFAULTS, ...(raw || {}) };
-  ["checkinOpen", "checkinClose", "checkinGraceEnd", "checkoutVisible", "checkoutOpen", "checkoutClose"].forEach(k => {
+  if (!parseScheduleHM(s.checkoutGraceEnd)) {
+    const cc = parseScheduleHM(s.checkoutClose);
+    const ic = parseScheduleHM(s.checkinClose);
+    const ig = parseScheduleHM(s.checkinGraceEnd);
+    if (cc != null && ic != null && ig != null && ig >= ic) s.checkoutGraceEnd = fmtScheduleHM(cc + (ig - ic));
+    else if (cc != null) s.checkoutGraceEnd = fmtScheduleHM(cc + 30);
+  }
+  ["checkinOpen", "checkinClose", "checkinGraceEnd", "checkoutOpen", "checkoutClose", "checkoutGraceEnd"].forEach(k => {
     const p = parseScheduleHM(s[k]);
     s[k] = p != null ? fmtScheduleHM(p) : CONSULTOR_SCHEDULE_DEFAULTS[k];
   });
@@ -641,6 +648,7 @@ function normalizeConsultorSchedule(raw) {
   s.checkinOverride = normScheduleOverride(s.checkinOverride);
   s.checkoutOverride = normScheduleOverride(s.checkoutOverride);
   delete s.override;
+  delete s.checkoutVisible;
   return s;
 }
 function consultorSchedule() { return normalizeConsultorSchedule(lojaData?.consultorSchedule); }
@@ -681,20 +689,25 @@ function consultorCheckoutVisible() {
   const ov = scheduleCheckoutOverride();
   if (ov === "open") return true;
   if (ov === "closed") return false;
-  return nowMins() >= scheduleMins("checkoutVisible");
+  return nowMins() >= scheduleMins("checkinGraceEnd");
 }
 function checkoutWindowOpen() {
   const ov = scheduleCheckoutOverride();
   if (ov === "open") return true;
   if (ov === "closed") return false;
   const m = nowMins();
-  return m >= scheduleMins("checkoutOpen") && m < scheduleMins("checkoutClose");
+  return m >= scheduleMins("checkoutOpen") && m < scheduleMins("checkoutGraceEnd");
+}
+function checkoutGraceActive() {
+  if (scheduleCheckoutOverride()) return false;
+  const m = nowMins();
+  return m >= scheduleMins("checkoutClose") && m < scheduleMins("checkoutGraceEnd");
 }
 function checkoutWindowEnded() {
   const ov = scheduleCheckoutOverride();
   if (ov === "open") return false;
   if (ov === "closed") return true;
-  return nowMins() >= scheduleMins("checkoutClose");
+  return nowMins() >= scheduleMins("checkoutGraceEnd");
 }
 function timePhase() {
   const m = nowMins();
@@ -703,6 +716,7 @@ function timePhase() {
   if (m < scheduleMins("checkinGraceEnd")) return "checkin-grace";
   if (m < scheduleMins("checkoutOpen")) return "pre-checkout";
   if (m < scheduleMins("checkoutClose")) return "checkout";
+  if (m < scheduleMins("checkoutGraceEnd")) return "checkout-grace";
   return "ended";
 }
 function planUsesCheckoutWindow(cfg, day, month) {
@@ -2744,6 +2758,9 @@ function soonBannerHtml(kind) {
 function graceBannerHtml() {
   return `<div class="dio-soon-banner"><span class="hourglass" aria-hidden="true">⏳</span><span>Prorrogação — check-in encerra às ${scheduleTimeLabel("checkinGraceEnd")}. Veja o cronômetro.</span></div>`;
 }
+function checkoutGraceBannerHtml() {
+  return `<div class="dio-soon-banner"><span class="hourglass" aria-hidden="true">⏳</span><span>Prorrogação — check-out encerra às ${scheduleTimeLabel("checkoutGraceEnd")}. Veja o cronômetro.</span></div>`;
+}
 function lockLabel(cell, key, day, month, cfg) {
   if (key === "plan" && !planWindowOpen(cfg, day, month)) {
     if (cell.planBy === "gestor" || cell[key + "By"] === "gestor") return '<span class="lock-tag gestor">👔 Gestor</span>';
@@ -2820,6 +2837,11 @@ function tickUrgencyAndDay() {
       pill.classList.add("urgent");
       const end = dateAtScheduleMins(scheduleMins("checkoutClose"));
       lbl.textContent = "⏱ CHECK-OUT";
+      txt.textContent = formatCountdown(Math.max(0, end - now));
+    } else if (phase === "checkout-grace") {
+      const end = dateAtScheduleMins(scheduleMins("checkoutGraceEnd"));
+      pill.classList.add("urgent");
+      lbl.textContent = "⏱ PRORROGAÇÃO";
       txt.textContent = formatCountdown(Math.max(0, end - now));
     } else {
       pill.classList.add("ended");
@@ -3034,6 +3056,7 @@ function renderFieldsNow() {
         const realSoon = fieldSoonKind(c, "real", day, month, cfg);
         html += `<div class="dio-box out${realLocked ? " locked" : ""}${realMine && !realLocked ? " mine" : ""}"><div class="dio-lbl">Check-out ${lockLabel(c, "real", day, month, cfg)}</div>`;
         if (realSoon) html += soonBannerHtml(realSoon);
+        else if (checkoutGraceActive()) html += checkoutGraceBannerHtml();
         html += `<input type="number" inputmode="numeric" data-fid="${cfg.id}" data-key="real" data-day="${day}" value="${c.real ?? ""}" placeholder="—" ${realLocked ? "disabled" : ""}>${progOut}${dioSaveFooterHtml(cfg, c, "real", day, month, "Check-out")}</div>`;
       }
     }
@@ -3099,7 +3122,7 @@ async function saveOpenPlan(box) {
   const month = todayISO(), day = todayDay();
   if (!planWindowOpen(cfg, day, month)) {
     toast(planUsesCheckoutWindow(cfg, day, month)
-      ? (checkoutWindowEnded() ? "Horário de check-out encerrado (" + scheduleTimeLabel("checkoutClose") + ")" : "Check-out abre às " + scheduleTimeLabel("checkoutOpen") + " — veja o cronômetro")
+      ? (checkoutWindowEnded() ? "Horário de check-out encerrado (" + scheduleTimeLabel("checkoutGraceEnd") + ")" : "Check-out abre às " + scheduleTimeLabel("checkoutOpen") + " — veja o cronômetro")
       : (checkinWindowEnded() ? "Horário de check-in encerrado (" + scheduleTimeLabel("checkinGraceEnd") + ")" : "Check-in abre às " + scheduleTimeLabel("checkinOpen") + " — veja o cronômetro"), true);
     return;
   }
@@ -3205,13 +3228,13 @@ async function saveField(inp, opts) {
     if (isNaN(num)) { toast("Valor inválido", true); return; }
     if (key === "plan" && !planWindowOpen(cfg, day, month)) {
       toast(planUsesCheckoutWindow(cfg, day, month)
-        ? (checkoutWindowEnded() ? "Horário de check-out encerrado (" + scheduleTimeLabel("checkoutClose") + ")" : "Check-out abre às " + scheduleTimeLabel("checkoutOpen") + " — veja o cronômetro")
+        ? (checkoutWindowEnded() ? "Horário de check-out encerrado (" + scheduleTimeLabel("checkoutGraceEnd") + ")" : "Check-out abre às " + scheduleTimeLabel("checkoutOpen") + " — veja o cronômetro")
         : (checkinWindowEnded() ? "Horário de check-in encerrado (" + scheduleTimeLabel("checkinGraceEnd") + ")" : "Check-in abre às " + scheduleTimeLabel("checkinOpen") + " — veja o cronômetro"), true);
       scheduleRenderFields();
       return;
     }
     if (key === "real" && !checkoutWindowOpen()) {
-      toast(checkoutWindowEnded() ? "Horário de check-out encerrado (" + scheduleTimeLabel("checkoutClose") + ")" : "Check-out abre às " + scheduleTimeLabel("checkoutOpen") + " — veja o cronômetro", true);
+      toast(checkoutWindowEnded() ? "Horário de check-out encerrado (" + scheduleTimeLabel("checkoutGraceEnd") + ")" : "Check-out abre às " + scheduleTimeLabel("checkoutOpen") + " — veja o cronômetro", true);
       scheduleRenderFields();
       return;
     }

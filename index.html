@@ -406,6 +406,8 @@
   .consultor-schedule-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   @media (max-width: 720px) { .consultor-schedule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .consultor-schedule-grid input[type="time"] { width: 100%; font-weight: 700; padding: 7px 8px; }
+  .consultor-schedule-sections { display: grid; gap: 16px; margin-top: 12px; }
+  .consultor-schedule-sections h3 { margin: 0 0 8px; font-size: 13px; font-weight: 800; letter-spacing: 0.02em; }
   .sched-override-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 14px; }
   .sched-override-group { padding: 12px; border-radius: 12px; border: 1px solid var(--border-soft); background: var(--panel-2); }
   .sched-override-group h3 { margin: 0 0 8px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .35px; color: var(--text-dim); }
@@ -865,13 +867,24 @@
         </div>
         <span class="sched-status-chip normal" id="schedStatusChip">—</span>
       </div>
-      <div class="month-breakdown consultor-schedule-grid" style="margin-top:12px;">
-        <div class="mb"><label>Abertura check-in<span>início</span></label><input type="time" id="schedCheckinOpen" step="60"></div>
-        <div class="mb"><label>Fechamento oficial<span>fim sem prorrogação</span></label><input type="time" id="schedCheckinClose" step="60"></div>
-        <div class="mb"><label>Prorrogação check-in<span>fim com tolerância</span></label><input type="time" id="schedCheckinGraceEnd" step="60"></div>
-        <div class="mb"><label>Check-out visível<span>aparece no app</span></label><input type="time" id="schedCheckoutVisible" step="60"></div>
-        <div class="mb"><label>Abertura check-out<span>editável</span></label><input type="time" id="schedCheckoutOpen" step="60"></div>
-        <div class="mb"><label>Fechamento check-out<span>fim do dia</span></label><input type="time" id="schedCheckoutClose" step="60"></div>
+      <div class="consultor-schedule-sections">
+        <div>
+          <h3>Check-in</h3>
+          <div class="month-breakdown consultor-schedule-grid">
+            <div class="mb"><label>Abertura<span>início</span></label><input type="time" id="schedCheckinOpen" step="60"></div>
+            <div class="mb"><label>Fechamento<span>oficial</span></label><input type="time" id="schedCheckinClose" step="60"></div>
+            <div class="mb"><label>Prorrogação<span>fim tolerância</span></label><input type="time" id="schedCheckinGraceEnd" step="60"></div>
+          </div>
+        </div>
+        <div>
+          <h3>Check-out</h3>
+          <div class="month-breakdown consultor-schedule-grid">
+            <div class="mb"><label>Abertura<span>editável</span></label><input type="time" id="schedCheckoutOpen" step="60"></div>
+            <div class="mb"><label>Fechamento<span>oficial</span></label><input type="time" id="schedCheckoutClose" step="60"></div>
+            <div class="mb"><label>Prorrogação<span>fim tolerância</span></label><input type="time" id="schedCheckoutGraceEnd" step="60"></div>
+          </div>
+          <div class="hint" style="margin-top:8px;">O check-out fica <b>visível no app</b> automaticamente após o fim da prorrogação do check-in.</div>
+        </div>
       </div>
       <div class="sched-override-bar">
         <div class="sched-override-group">
@@ -1119,9 +1132,9 @@ function defaultState() {
       checkinOpen: "07:00",
       checkinClose: "12:00",
       checkinGraceEnd: "12:30",
-      checkoutVisible: "12:30",
       checkoutOpen: "16:00",
       checkoutClose: "20:00",
+      checkoutGraceEnd: "20:30",
       checkinOverride: null,
       checkoutOverride: null
     },
@@ -1277,9 +1290,9 @@ const CONSULTOR_SCHEDULE_DEFAULTS = {
   checkinOpen: "07:00",
   checkinClose: "12:00",
   checkinGraceEnd: "12:30",
-  checkoutVisible: "12:30",
   checkoutOpen: "16:00",
   checkoutClose: "20:00",
+  checkoutGraceEnd: "20:30",
   checkinOverride: null,
   checkoutOverride: null
 };
@@ -1300,7 +1313,14 @@ function fmtScheduleHM(mins) {
 }
 function normalizeConsultorSchedule(raw) {
   const s = { ...CONSULTOR_SCHEDULE_DEFAULTS, ...(raw || {}) };
-  ["checkinOpen", "checkinClose", "checkinGraceEnd", "checkoutVisible", "checkoutOpen", "checkoutClose"].forEach(k => {
+  if (!parseScheduleHM(s.checkoutGraceEnd)) {
+    const cc = parseScheduleHM(s.checkoutClose);
+    const ic = parseScheduleHM(s.checkinClose);
+    const ig = parseScheduleHM(s.checkinGraceEnd);
+    if (cc != null && ic != null && ig != null && ig >= ic) s.checkoutGraceEnd = fmtScheduleHM(cc + (ig - ic));
+    else if (cc != null) s.checkoutGraceEnd = fmtScheduleHM(cc + 30);
+  }
+  ["checkinOpen", "checkinClose", "checkinGraceEnd", "checkoutOpen", "checkoutClose", "checkoutGraceEnd"].forEach(k => {
     const p = parseScheduleHM(s[k]);
     s[k] = p != null ? fmtScheduleHM(p) : CONSULTOR_SCHEDULE_DEFAULTS[k];
   });
@@ -1312,6 +1332,7 @@ function normalizeConsultorSchedule(raw) {
   s.checkinOverride = normScheduleOverride(s.checkinOverride);
   s.checkoutOverride = normScheduleOverride(s.checkoutOverride);
   delete s.override;
+  delete s.checkoutVisible;
   return s;
 }
 function scheduleOverrideSummary(s) {
@@ -1331,13 +1352,13 @@ function validateConsultorSchedule(s) {
   const io = scheduleMinsFrom(s, "checkinOpen");
   const ic = scheduleMinsFrom(s, "checkinClose");
   const ig = scheduleMinsFrom(s, "checkinGraceEnd");
-  const cv = scheduleMinsFrom(s, "checkoutVisible");
   const oo = scheduleMinsFrom(s, "checkoutOpen");
   const oc = scheduleMinsFrom(s, "checkoutClose");
+  const og = scheduleMinsFrom(s, "checkoutGraceEnd");
   if (io >= ic) return "Abertura do check-in deve ser antes do fechamento oficial.";
-  if (ic > ig) return "Fechamento oficial deve ser antes ou igual ao fim da prorrogação.";
-  if (cv > oo) return "Check-out visível não pode ser depois da abertura do check-out.";
-  if (oo >= oc) return "Abertura do check-out deve ser antes do fechamento.";
+  if (ic > ig) return "Fechamento do check-in deve ser antes ou igual à prorrogação.";
+  if (oo >= oc) return "Abertura do check-out deve ser antes do fechamento oficial.";
+  if (oc > og) return "Fechamento do check-out deve ser antes ou igual à prorrogação.";
   return null;
 }
 function gestorNowMins() {
@@ -1352,6 +1373,7 @@ function gestorTimePhase(s) {
   if (m < scheduleMinsFrom(s, "checkinGraceEnd")) return "checkin-grace";
   if (m < scheduleMinsFrom(s, "checkoutOpen")) return "pre-checkout";
   if (m < scheduleMinsFrom(s, "checkoutClose")) return "checkout";
+  if (m < scheduleMinsFrom(s, "checkoutGraceEnd")) return "checkout-grace";
   return "ended";
 }
 function consultorSchedulePhaseLabel(phase) {
@@ -1361,6 +1383,7 @@ function consultorSchedulePhaseLabel(phase) {
     "checkin-grace": "Prorrogação do check-in",
     "pre-checkout": "Check-out visível · aguardando abertura",
     checkout: "Check-out aberto",
+    "checkout-grace": "Prorrogação do check-out",
     ended: "Encerrado"
   })[phase] || phase;
 }
@@ -6403,9 +6426,9 @@ function renderConsultorSchedulePanel() {
     schedCheckinOpen: "checkinOpen",
     schedCheckinClose: "checkinClose",
     schedCheckinGraceEnd: "checkinGraceEnd",
-    schedCheckoutVisible: "checkoutVisible",
     schedCheckoutOpen: "checkoutOpen",
-    schedCheckoutClose: "checkoutClose"
+    schedCheckoutClose: "checkoutClose",
+    schedCheckoutGraceEnd: "checkoutGraceEnd"
   };
   Object.entries(map).forEach(([id, key]) => {
     const el = document.getElementById(id);
@@ -6430,7 +6453,7 @@ function renderConsultorSchedulePanel() {
       if (hasOpen) extra += ` <span style="color:var(--ok)">Liberado</span> ignora o relógio só naquele bloco.`;
       if (hasClosed) extra += ` <span style="color:var(--danger)">Travado</span> bloqueia só aquele bloco.`;
     } else {
-      extra = `<br>Resumo: check-in <b>${s.checkinOpen}–${s.checkinGraceEnd}</b> (oficial ${s.checkinClose}) · check-out visível <b>${s.checkoutVisible}</b> · editável <b>${s.checkoutOpen}–${s.checkoutClose}</b>.`;
+      extra = `<br>Resumo: check-in <b>${s.checkinOpen}–${s.checkinGraceEnd}</b> (oficial ${s.checkinClose}) · check-out visível após <b>${s.checkinGraceEnd}</b> · editável <b>${s.checkoutOpen}–${s.checkoutGraceEnd}</b> (oficial ${s.checkoutClose}).`;
     }
     hint.innerHTML = `Fase atual no app: <b>${consultorSchedulePhaseLabel(phase)}</b>.${extra}`;
   }
