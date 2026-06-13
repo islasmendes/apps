@@ -1,19 +1,24 @@
 import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
-const page = await browser.newPage();
-await page.goto("http://127.0.0.1:8765/index.html?v=v111", { waitUntil: "networkidle", timeout: 60000 });
+const context = await browser.newContext();
+const page = await context.newPage();
+await page.goto("http://127.0.0.1:8765/index.html?v=v112", { waitUntil: "networkidle", timeout: 60000 });
 
 const result = await page.evaluate(() => {
   authUnlocked = true;
+  const troca = state.indicators.find(i => /troca|carro/.test(normKpiName(i.name)));
   const vendas = state.indicators.find(i => /vend/i.test(normKpiName(i.name)));
-  if (!vendas) return { err: "sem vendas" };
+  if (!vendas || !troca) return { err: "indicadores" };
+  const sub = (troca.subs || [])[0] || { id: uid(), name: "Efetivação" };
+  if (!(troca.subs || []).length) troca.subs = [sub];
   const ids = state.sellers.map(s => s.id);
   const m = currentMonth;
   const md = monthData(m);
   md.metaLoja = md.metaLoja || {};
   md.metaLoja[vendas.id] = 100;
-  delete md.metaLoja[(vendas.subs || [])[0]?.id];
+  md.metaLoja[troca.id] = 80;
+  md.metaLoja[sub.id] = 999;
 
   const day = Math.min(new Date().getDate(), 10);
   ids.forEach((sid, i) => {
@@ -23,31 +28,28 @@ const result = await page.evaluate(() => {
   });
 
   const equipeIds = matrizEquipeSellerIds();
-  const pack = matrizTeamProjPack(vendas, equipeIds, true);
+  const vendasPack = matrizTeamProjPack(vendas, equipeIds, true);
+  const subMetaProj = matrizMetaForProj(sub, equipeIds, true);
+  const subMetaMatriz = metaForMatriz(sub, equipeIds, monthDays(), "mes", true);
   const visao = visaoDiaTeamProjPct(vendas);
-  const subResolved = (vendas.subs || [])[0];
-  const subMeta = subResolved ? getMetaLojaResolved(subResolved.id) : null;
-  const divLeak = getMetaDivisional(vendas.id);
 
   return {
-    equipeCount: equipeIds.length,
-    real: pack?.real,
-    proj: pack?.proj,
-    metaProj: pack?.metaProj,
-    pp: pack?.pp,
-    visaoPct: visao?.pct,
-    visaoText: visao?.text,
-    subMeta,
-    divLeak,
-    divisionalMode: divisionalMode(),
-    match: pack?.pp != null && visao?.pct != null && Math.abs(pack.pp - visao.pct) < 1e-9,
-    metaIsLoja: pack?.metaProj === 100,
-    subInheritsParent: subResolved ? subMeta === 100 : true,
+    vendasMeta: vendasPack?.metaProj,
+    subMetaProj,
+    subMetaPctCol: subMetaMatriz,
+    subDirectIgnored: getMetaLoja(sub.id) === 999 && subMetaProj === 80,
+    visaoMatch: vendasPack?.pp === visao?.pct,
+    principalOnly: vendasPack?.metaProj === 100 && subMetaProj === 80,
   };
 });
 
 console.log("projecao test:", JSON.stringify(result, null, 2));
-const ok = result.match && result.metaIsLoja && result.subInheritsParent && result.equipeCount > 0;
+const ok = result.vendasMeta === 100
+  && result.subMetaProj === 80
+  && result.subMetaPctCol === 80
+  && result.subDirectIgnored
+  && result.visaoMatch
+  && result.principalOnly;
 console.log(ok ? "PASS" : "FAIL");
 await browser.close();
 process.exit(ok ? 0 : 1);
