@@ -5,7 +5,7 @@ const page = await browser.newPage();
 const pageErrors = [];
 page.on("pageerror", e => pageErrors.push(e.message));
 
-await page.goto("http://127.0.0.1:8765/index.html?v=v131", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/index.html?v=v132", { waitUntil: "networkidle", timeout: 60000 });
 
 const setup = await page.evaluate(() => {
   unlockAuth();
@@ -28,6 +28,9 @@ const setup = await page.evaluate(() => {
   const day = diarioTodayDay();
   const fid = realCfg?.id;
   if (!fid || !sid || day == null) return { ok: false, reason: "setup missing" };
+
+  const scSid = ensureSched(sid);
+  scSid[day] = 1;
 
   const md = monthData();
   if (md.daily[sid]?.[fid]) delete md.daily[sid][fid];

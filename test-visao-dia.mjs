@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto("http://127.0.0.1:8765/index.html?v=v127", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/index.html?v=v132", { waitUntil: "networkidle", timeout: 60000 });
 
 const result = await page.evaluate(() => {
   authUnlocked = true;
@@ -29,6 +29,8 @@ const result = await page.evaluate(() => {
   const real = findVisaoDiaDiarioCfg(matchVisaoDiaAgendamentoReal);
   const agCard = resolveVisaoDiaCard({ label: "Agendamentos", kind: "agendamentoProx", color: "#4f8cff" });
   const prev = prevWorkedDay(sid, day);
+  const scSid = ensureSched(sid);
+  if (day != null) scSid[day] = 1;
   if (prox && prev != null) setCell(sid, prox.cfg.id, prev, "real", 5);
   let clearSubtractOk = true;
   if (real && day != null) {
