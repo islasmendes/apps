@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v108";
+  var BUILD = "v107";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function failKey(b) { return b + "@" + BUILD; }
@@ -2924,7 +2924,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v108"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v107"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4558,31 +4558,18 @@ function visaoDiaIsAuxHojeName(n) {
   return /prox|sabado|domingo/.test(n);
 }
 function visaoDiaIsHojePlanName(n) {
-  if (!nameHasHoje(n)) return false;
-  if (/\bp\//.test(n) || /\bp\s/.test(n)) return true;
-  if (/\bde\b/.test(n) && n.includes("?")) return true;
-  return false;
+  return nameHasHoje(n) && (/\bp\//.test(n) || /\bp\s/.test(n));
 }
 function visaoDiaIsHojeRealName(n) {
-  if (!nameHasHoje(n) || /\bp\//.test(n)) return false;
-  if (!/\bde\b/.test(n)) return false;
-  if (n.includes("!")) return true;
-  return !n.includes("?");
+  return nameHasHoje(n) && /\bde\b/.test(n) && !/\bp\//.test(n);
 }
 function findVisaoDiaDiarioCfg(testFn) {
   const hits = visaoDiaDiarioCfgs().filter(x => testFn(normKpiName(x.cfg.name), x));
-  if (!hits.length) return null;
-  if (hits.length === 1) return hits[0];
-  const subHit = hits.find(x => x.cfg.id !== x.parent.id);
-  return subHit || hits[0];
+  return hits.length ? hits[0] : null;
 }
-/** Referência diário: Agendamentos p/ HOJE! ou Agendamentos de HOJE? (check-in) */
-function matchVisaoDiaAgendamentoPlan(n) {
-  return n.includes("agendament") && n.includes("hoje") && !visaoDiaIsAuxHojeName(n) && visaoDiaIsHojePlanName(n);
-}
-/** Referência diário: Agendamentos de HOJE! (check-out) */
-function matchVisaoDiaAgendamentoReal(n) {
-  return n.includes("agendament") && n.includes("hoje") && !visaoDiaIsAuxHojeName(n) && visaoDiaIsHojeRealName(n);
+/** Referência print diário: Agendamentos de HOJE? */
+function matchVisaoDiaAgendamento(n) {
+  return n.includes("agendament") && n.includes("hoje") && !visaoDiaIsAuxHojeName(n);
 }
 /** Referência print diário: Fez a confirmação de visitas pra hoje? (check-in) */
 function matchVisaoDiaConfirmacao(n) {
@@ -4604,17 +4591,6 @@ function matchVisaoDiaTrocaPlan(n) {
 function matchVisaoDiaTrocaReal(n) {
   return (/troca|carro/.test(n)) && n.includes("hoje") && visaoDiaIsHojeRealName(n);
 }
-/** Referência diário: Vendas p/ HOJE? (check-in) */
-function matchVisaoDiaVendaPlan(n) {
-  return n.includes("vend") && n.includes("hoje") && visaoDiaIsHojePlanName(n);
-}
-/** Referência diário: Vendas de HOJE! (check-out) */
-function matchVisaoDiaVendaReal(n) {
-  return n.includes("vend") && n.includes("hoje") && visaoDiaIsHojeRealName(n);
-}
-function visaoDiaParentByStem(stemTest) {
-  return (state.indicators || []).find(ind => !ind.pctOnly && stemTest(normKpiName(ind.name))) || null;
-}
 function resolveVisaoDiaCard(spec) {
   if (spec.kind === "single") {
     const hit = findVisaoDiaDiarioCfg(spec.match);
@@ -4634,21 +4610,7 @@ function resolveVisaoDiaCard(spec) {
   }
   const planHit = findVisaoDiaDiarioCfg(spec.matchPlan);
   const realHit = findVisaoDiaDiarioCfg(spec.matchReal);
-  if (!planHit && !realHit) {
-    if (!spec.fallbackParent) return null;
-    const parent = visaoDiaParentByStem(spec.fallbackParent);
-    if (!parent) return null;
-    const realId = checkoutFieldId(parent.id);
-    return {
-      label: spec.label,
-      color: parent.color || spec.color,
-      planId: parent.id,
-      realId,
-      parent,
-      refPlan: parent.name,
-      refReal: (cfgById(realId) || parent).name
-    };
-  }
+  if (!planHit && !realHit) return null;
   const anchor = planHit || realHit;
   return {
     label: spec.label,
@@ -4661,11 +4623,10 @@ function resolveVisaoDiaCard(spec) {
   };
 }
 const VISAO_DIA_CARDS = [
-  { label: "Agendamentos", color: "#4f8cff", kind: "pair", matchPlan: matchVisaoDiaAgendamentoPlan, matchReal: matchVisaoDiaAgendamentoReal },
+  { label: "Agendamentos", color: "#4f8cff", kind: "single", match: matchVisaoDiaAgendamento },
   { label: "Comparecimento", color: "#22d3aa", kind: "pair", matchPlan: matchVisaoDiaConfirmacao, matchReal: matchVisaoDiaComparecimentoReal },
   { label: "Fichas", color: "#fbbf24", kind: "pair", matchPlan: matchVisaoDiaFichaPlan, matchReal: matchVisaoDiaFichaReal },
-  { label: "Carro troca", color: "#a78bfa", kind: "pair", matchPlan: matchVisaoDiaTrocaPlan, matchReal: matchVisaoDiaTrocaReal },
-  { label: "Vendas", color: "#46d39a", kind: "pair", matchPlan: matchVisaoDiaVendaPlan, matchReal: matchVisaoDiaVendaReal, fallbackParent: n => n.includes("vend") }
+  { label: "Carro troca", color: "#a78bfa", kind: "pair", matchPlan: matchVisaoDiaTrocaPlan, matchReal: matchVisaoDiaTrocaReal }
 ];
 function visaoDiaShouldShow() {
   if (!authUnlocked) return false;
@@ -4703,24 +4664,6 @@ function visaoDiaTeamStats() {
   });
   return { active: sellers.length, ci, co, both };
 }
-function visaoDiaDayPlanValue(sellerId, fieldId, day) {
-  const cfg = cfgById(fieldId);
-  if (!cfg) return null;
-  const c = getCell(sellerId, fieldId, day);
-  if (cfgOpenQuestion(cfg)) {
-    if (c.planYes !== true) return null;
-    if (c.plan != null && c.plan !== "" && !isNaN(Number(c.plan))) return Number(c.plan);
-    const cross = crossPlanTarget(sellerId, cfg, day);
-    return cross != null ? cross : null;
-  }
-  if (c.plan != null && c.plan !== "" && !isNaN(Number(c.plan))) return Number(c.plan);
-  return null;
-}
-function visaoDiaDayRealValue(sellerId, fieldId, day) {
-  const c = getCell(sellerId, fieldId, day);
-  if (c.real != null && c.real !== "" && !isNaN(Number(c.real))) return Number(c.real);
-  return null;
-}
 function visaoDiaTeamTodayFields(planId, realId) {
   const day = diarioTodayDay();
   if (day == null) return { plan: null, real: null };
@@ -4728,11 +4671,11 @@ function visaoDiaTeamTodayFields(planId, realId) {
   let plan = 0, planHas = false, real = 0, realHas = false;
   sellers.forEach(s => {
     if (planId) {
-      const p = visaoDiaDayPlanValue(s.id, planId, day);
+      const p = accum(s.id, planId, "plan", [day]);
       if (p != null) { plan += p; planHas = true; }
     }
     if (realId) {
-      const r = visaoDiaDayRealValue(s.id, realId, day);
+      const r = accum(s.id, realId, "real", [day]);
       if (r != null) { real += r; realHas = true; }
     }
   });
