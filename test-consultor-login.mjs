@@ -5,7 +5,7 @@ const page = await browser.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
 
-await page.goto("http://127.0.0.1:8765/consultor.html?v=v114", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/consultor.html?v=v139", { waitUntil: "networkidle", timeout: 60000 });
 await page.waitForFunction(() => typeof fbReady !== "undefined" && fbReady, { timeout: 25000 });
 
 const result = await page.evaluate(() => {
