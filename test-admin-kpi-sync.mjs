@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto("http://127.0.0.1:8765/index.html?v=v146", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/index.html?v=v147", { waitUntil: "networkidle", timeout: 60000 });
 
 const result = await page.evaluate(() => {
   authUnlocked = true;
@@ -12,49 +12,64 @@ const result = await page.evaluate(() => {
   lojaCode = "VCANT";
   configPushBlocked = false;
   lastPushedConfigHash = "";
+  pendingKpiAdminPush = false;
 
-  const npsId = uid();
+  const testId = uid();
   state.indicators.push({
-    id: npsId, name: "KPI Admin Teste", abbr: "KAT", color: "#2244aa", checkin: true, checkout: true,
+    id: testId, name: "KPI Admin Teste", abbr: "KAT", color: "#2244aa", checkin: true, checkout: true,
     pctOnly: true, lowerBetter: false, showInMatriz: true, subs: [], rates: [
       { id: uid(), name: "Taxa Teste", numId: "", denId: "", manual: true, absolute: false, showInMatriz: false }
     ]
   });
   state.order.indicators = state.order.indicators || state.indicators.map(i => i.id);
-  if (!state.order.indicators.includes(npsId)) state.order.indicators.push(npsId);
+  if (!state.order.indicators.includes(testId)) state.order.indicators.push(testId);
 
-  const beforeCount = state.indicators.length;
   const tplAfterAdd = extractOperationalConfig(state);
   const hasTestInTpl = tplAfterAdd.indicators.some(i => i.name === "KPI Admin Teste");
 
-  state.indicators = state.indicators.filter(i => i.id !== npsId);
-  state.order.indicators = state.order.indicators.filter(x => x !== npsId);
+  state.indicators = state.indicators.filter(i => i.id !== testId);
+  state.order.indicators = state.order.indicators.filter(x => x !== testId);
   afterKpiStructureChange({ silent: true });
   const reorgAt = state.ui.kpiReorgAt;
   const tplAfterDel = extractOperationalConfig(state);
   const testGoneFromTpl = !tplAfterDel.indicators.some(i => i.name === "KPI Admin Teste");
 
-  const target = { indicators: JSON.parse(JSON.stringify(state.indicators)), order: { indicators: state.order.indicators.slice() }, ui: { kpiReorgAt: reorgAt }, sellers: state.sellers };
-  const oldGuard = {
-    indicators: [...target.indicators, { id: npsId, name: "KPI Admin Teste", subs: [], rates: [] }],
-    order: { indicators: [...target.order.indicators, npsId] },
+  const target = {
+    indicators: JSON.parse(JSON.stringify(state.indicators)),
+    order: { indicators: state.order.indicators.slice() },
+    ui: { kpiReorgAt: reorgAt },
+    sellers: state.sellers
+  };
+  const staleBackup = {
+    indicators: [...target.indicators, { id: testId, name: "KPI Admin Teste", subs: [], rates: [] }],
+    order: { indicators: [...target.order.indicators, testId] },
     ui: { kpiReorgAt: 0 },
     sellers: state.sellers
   };
-  mergeLojaConfigFromSnapshot(target, oldGuard, "VCANT");
+  mergeLojaPrefsFromSnapshot(target, staleBackup, "VCANT");
   const guardDidNotRestore = !target.indicators.some(i => i.name === "KPI Admin Teste");
 
-  const skipMerge = shouldSkipKpiMergeFrom(oldGuard);
+  const cloudAfterDelete = JSON.parse(JSON.stringify(target));
+  const pullWinner = preferKpiAuthoritativeState(cloudAfterDelete, staleBackup);
+  const pullPicksCloud = pullWinner === cloudAfterDelete;
+
+  const healed = (() => {
+    const tpl = { v: 1, indicators: staleBackup.indicators.map(i => ({ name: i.name, subs: [], rates: [] })), orderNames: staleBackup.indicators.map(i => i.name), updatedAt: 1 };
+    return maybeHealOperationalTemplateFromState(tpl);
+  })();
+
+  const best = bestLocalSnapForLoja("VCANT", cloudAfterDelete, staleBackup);
+  const bestIsAuthoritative = !best?.indicators?.some(i => i.name === "KPI Admin Teste") && localKpiReorgAt(best) >= reorgAt;
 
   return {
-    beforeCount,
-    afterCount: state.indicators.length,
     hasTestInTpl,
     testGoneFromTpl,
     reorgAt,
     guardDidNotRestore,
-    skipMerge,
-    ok: hasTestInTpl && testGoneFromTpl && reorgAt > 0 && guardDidNotRestore && skipMerge
+    pullPicksCloud,
+    healed,
+    bestIsAuthoritative,
+    ok: hasTestInTpl && testGoneFromTpl && reorgAt > 0 && guardDidNotRestore && pullPicksCloud && healed && bestIsAuthoritative
   };
 });
 
