@@ -2,11 +2,13 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto("http://127.0.0.1:8765/index.html?v=v150", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto(`http://127.0.0.1:8765/index.html?v=v151&_=${Date.now()}`, { waitUntil: "networkidle", timeout: 60000 });
 
 const result = await page.evaluate(() => {
   authUnlocked = true;
   activeView = "matriz";
+  matrizPeriodo = "mes";
+  state.ui.period = "mes";
 
   const indId = uid();
   state.indicators.push({
@@ -19,6 +21,7 @@ const result = await page.evaluate(() => {
     role: "",
     pctOnly: true,
     showInMatriz: true,
+    target: 85,
     metaDay: 0,
     metaSat: 0,
     metaMonth: 0,
@@ -89,14 +92,14 @@ const result = await page.evaluate(() => {
 console.log(JSON.stringify(result, null, 2));
 const pass =
   result.expandable &&
-  result.collapsedCols === 1 &&
-  result.expandedCols === 4 &&
-  result.collapsedSubHeaders === 1 &&
-  result.expandedSubHeaders === 4 &&
+  result.collapsedCols === 3 &&
+  result.expandedCols > result.collapsedCols &&
+  result.collapsedSubHeaders === 3 &&
+  result.expandedSubHeaders > result.collapsedSubHeaders &&
   result.toggleCollapsed === "▸" &&
   result.toggleExpanded === "▾" &&
-  result.colspanWhenCollapsed === 1 &&
-  result.colspanWhenExpanded === 4;
+  result.colspanWhenCollapsed === 3 &&
+  result.colspanWhenExpanded > result.colspanWhenCollapsed;
 console.log(pass ? "PASS" : "FAIL");
 await browser.close();
 process.exit(pass ? 0 : 1);

@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v150";
+  var BUILD = "v151";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -1268,7 +1268,7 @@ function defaultState() {
         rates: [ { id: uid(), name: "Pen%", numId: sFinEf, denId: venda, invert: false, target: 45, manual: false } ] },
       { id: venda, name: "Vendas", abbr: "VENDA", color: "#46d39a", checkin: true, checkout: true, role: "venda", pctOnly: false, metaDay: 1, metaSat: 2, metaMonth: 14, subs: [], rates: [] },
       { id: leads, name: "Leads", abbr: "LEADS", color: "#38bdf8", checkin: false, checkout: true, role: "", pctOnly: false, metaDay: 2, metaSat: 2, metaMonth: 36, subs: [], rates: [] },
-      { id: nps, name: "NPS", abbr: "NPS", color: "#f472b6", checkin: false, checkout: false, role: "", pctOnly: true, metaDay: 0, metaSat: 0, metaMonth: 0, subs: [],
+      { id: nps, name: "NPS", abbr: "NPS", color: "#f472b6", checkin: false, checkout: false, role: "", pctOnly: true, metaDay: 0, metaSat: 0, metaMonth: 0, target: 85, subs: [],
         rates: [ { id: npsRate, name: "NPS", numId: "", denId: "", invert: false, target: 85, manual: true } ] },
     ],
     order: { sellers: null, indicators: null },
@@ -1542,6 +1542,7 @@ function migrate(s) {
   }
   (s.indicators || []).forEach(i => {
     if (i.pctOnly == null) i.pctOnly = false;
+    if (i.target == null) i.target = 0;
     if (i.lowerBetter == null) i.lowerBetter = false;
     if (i.metaSun == null) i.metaSun = 0;
     (i.subs || []).forEach(sub => {
@@ -4373,7 +4374,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v150"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v151"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -5625,7 +5626,7 @@ function matrizShowPct(cfg) { return cfgHasMeta(cfg); }
 function cfgShowInMatriz(cfg) { return cfg && cfg.showInMatriz !== false; }
 function indHasMatrizContent(ind) {
   if (!ind) return false;
-  if (ind.pctOnly) return (ind.rates || []).some(r => cfgShowInMatriz(r));
+  if (ind.pctOnly) return cfgShowInMatriz(ind) || (ind.rates || []).some(r => cfgShowInMatriz(r));
   if (cfgShowInMatriz(ind)) return true;
   return (ind.subs || []).some(s => cfgShowInMatriz(s)) || (ind.rates || []).some(r => cfgShowInMatriz(r));
 }
@@ -5838,6 +5839,7 @@ function matrizSortMetric(sellerId, sortKey, days) {
     const ind = state.indicators.find(i => i.id === p[1]);
     if (!ind) return null;
     const field = p[2];
+    if (ind.pctOnly && field === "real") return matrizPctOnlyValue([sellerId], ind, periodo).rv;
     const { real, has } = matrizRealForSellers(ids, ind.id, days, periodo);
     if (field === "real") return has && real != null ? real : null;
     if (field === "pct") {
@@ -5851,6 +5853,11 @@ function matrizSortMetric(sellerId, sortKey, days) {
       return meta ? real / meta : null;
     }
     if (field === "proj") {
+      if (ind.pctOnly) {
+        const pv = matrizPctOnlyValue(ids, ind, periodo);
+        if (!pv.has || pv.rv == null) return null;
+        return sellerProjFromReal(ids[0], ind.id, pv.rv);
+      }
       if (!has || real == null) return null;
       return matrizProjConsultor(ids, ind.id);
     }
@@ -6074,13 +6081,87 @@ function bindMatrizSort(tbl, moveOn) {
 function matrizPctOnlyHasExpandableRates(ind) {
   return visibleRates(ind).length > 1;
 }
+function matrizPctOnlyTarget(ind) {
+  const t = Number(ind.target) || 0;
+  const ml = getMetaLoja(ind.id);
+  return ml != null && ml > 0 ? ml : (t > 0 ? t : null);
+}
+function matrizPctOnlyHasAlvo(ind) {
+  const tgt = matrizPctOnlyTarget(ind);
+  return tgt != null && tgt > 0;
+}
+function matrizPctOnlyMainColCount(ind, periodo) {
+  let c = 1;
+  if (matrizPctOnlyHasAlvo(ind)) c++;
+  if (periodo === "mes") c++;
+  return c;
+}
+function matrizPctOnlyValue(ids, ind, periodo, m = currentMonth) {
+  let sum = 0, count = 0, fromSystem = false;
+  ids.forEach(id => {
+    const v = getSystem(id, ind.id, m);
+    if (v != null) { sum += v; count++; if (periodo === "mes") fromSystem = true; }
+  });
+  return { rv: count ? sum / count : null, has: count > 0, fromSystem };
+}
+function matrizPctOnlyFmtValue(val, ind) {
+  if (val == null) return "—";
+  if (cfgLowerBetter(ind)) return fmtPctFineUnit(val);
+  return fmt(val, 0) + "%";
+}
+function matrizPctOnlyFmtTarget(tgt, ind) {
+  if (!tgt) return "—";
+  if (cfgLowerBetter(ind)) return fmtPctFineUnit(tgt);
+  return tgt + "%";
+}
+function matrizPctOnlyTip(ind, rv, tgt, ids, isTeam) {
+  const lb = cfgLowerBetter(ind);
+  const lines = [
+    ind.name,
+    "Unidade: percentual (%)",
+    lb ? "Modo: quanto menor melhor ↓" : "Modo: quanto maior melhor ↑",
+    "Fonte: gestor (sistema) ⚙",
+    "Valor: " + matrizPctOnlyFmtValue(rv, ind),
+    "Alvo: " + matrizPctOnlyFmtTarget(tgt, ind),
+  ];
+  if (rv != null && tgt) {
+    if (lb) lines.push("Situação: " + matrizLowerBetterLabel(rv, tgt, true));
+    else lines.push("Relação: " + Math.round((matrizPerfRatio(rv, tgt, false) || 0) * 100) + "% do alvo · " + heatMatrizBandLabel(matrizPerfRatio(rv, tgt, false)));
+  }
+  return lines.join("\n");
+}
+function matrizPctOnlyMainCells(ids, ind, isTeam, days, periodo) {
+  const { rv, has, fromSystem } = matrizPctOnlyValue(ids, ind, periodo);
+  const tgt = matrizPctOnlyTarget(ind);
+  const lb = cfgLowerBetter(ind);
+  const rp = matrizRateRatio(rv, tgt, lb);
+  const tip = matrizPctOnlyTip(ind, rv, tgt, ids, isTeam);
+  const color = lb && rv != null && tgt ? heatMatrizLowerBetterColor(rv, tgt, true) : heatMatrizText(rp);
+  const valDisp = matrizPctOnlyFmtValue(rv, ind);
+  const tgtDisp = matrizPctOnlyFmtTarget(tgt, ind);
+  const realCls = fromSystem ? "heat matriz-from-sys matriz-real" : "matriz-real";
+  let html = `<td style="border-left:3px solid ${ind.color}; color:${has && rv != null ? color : "inherit"}; font-weight:700;"${matrizTipData(tip, ind.color)}><span class="${realCls}">${has ? valDisp : "—"}</span></td>`;
+  if (matrizPctOnlyHasAlvo(ind)) html += `<td class="muted">${tgtDisp}</td>`;
+  if (periodo === "mes") {
+    const proj = has && rv != null ? (isTeam ? matrizProjEquipe(rv) : sellerProjFromReal(ids[0], ind.id, rv)) : null;
+    const metaProj = matrizPctOnlyTarget(ind) || 0;
+    const lbProj = cfgLowerBetter(ind);
+    const pp = metaProj && proj != null ? matrizProjPerfRatio(proj, metaProj, lbProj) : null;
+    const projTip = matrizTipProj({ isTeam, sellerId: isTeam ? null : ids[0], real: has ? rv : null, proj, metaProj, ind: { ...ind, sub: false, lowerBetter: ind.lowerBetter }, divisionalTotal: false, sumMetasLojas: null });
+    const projColor = lbProj && metaProj && proj != null ? heatMatrizLowerBetterColor(proj, metaProj, true) : (pp != null ? heatMatrizText(pp) : "var(--text-dim)");
+    html += `<td style="color:${projColor}; font-weight:${proj != null ? 700 : 400};"${matrizTipData(projTip, ind.color)}>${proj == null ? "—" : matrizPctOnlyFmtValue(proj, ind)}</td>`;
+  }
+  return html;
+}
 function matrizColCount(ind, periodo) {
   const subs = visibleSubs(ind), rates = visibleRates(ind);
   const exp = isIndExpanded(ind.id);
   if (ind.pctOnly) {
-    if (!rates.length) return 0;
-    if (!exp) return 1;
-    return rates.reduce((s, r) => s + matrizRateColCount(r), 0);
+    let c = cfgShowInMatriz(ind) ? matrizPctOnlyMainColCount(ind, periodo) : 0;
+    if (!c && !rates.length) return 0;
+    if (!c && !exp) return 1;
+    if (exp && rates.length) c += rates.reduce((s, r) => s + matrizRateColCount(r), 0);
+    return c || 1;
   }
   let c = cfgShowInMatriz(ind) ? matrizItemColCount(ind, periodo) : 0;
   if (exp) c += subs.reduce((s, sub) => s + matrizItemColCount(sub, periodo), 0) + rates.reduce((s, r) => s + matrizRateColCount(r), 0);
@@ -6114,8 +6195,9 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
   const subs = visibleSubs(ind), rates = visibleRates(ind);
   let html = "";
   if (ind.pctOnly) {
-    if (!rates.length) return html;
-    if (!isIndExpanded(ind.id)) return html + `<td class="muted" style="border-left:3px solid ${ind.color}; font-weight:700;">—</td>`;
+    if (cfgShowInMatriz(ind)) html += matrizPctOnlyMainCells(ids, ind, isTeam, days, periodo);
+    else if (!rates.length) return html;
+    if (!isIndExpanded(ind.id)) return html;
     rates.forEach(r => { html += matrizRateCells(r, ids, days, periodo, ind, isTeam); });
     return html;
   }
@@ -6178,9 +6260,13 @@ function matrizBuildHeaders(inds, opts) {
     const pctExpandable = ind.pctOnly && matrizPctOnlyHasExpandableRates(ind);
     head1 += `<th colspan="${matrizColCount(ind, periodo)}" style="background:color-mix(in srgb, ${ind.color} 22%, var(--panel-2)); color:${ind.color}; border-left:3px solid ${ind.color};" class="block-head${lbHead ? " block-head-lower" : ""}" ${blockAttr}="${ind.id}"${indTitle.title}>${moveOn ? '<span class="draghandle" draggable="true" data-dragind="' + ind.id + '">⋮⋮</span>' : ""}<span class="block-toggle">${ind.pctOnly ? (pctExpandable ? (exp ? "▾" : "▸") : "") : (exp ? "▾" : "▸")}</span>${indTitle.short}${lbHead ? " ↓" : ""}</th>`;
     if (ind.pctOnly) {
-      if (!rates.length) return;
-      if (!exp) { head2 += `<th style="border-left:3px solid ${ind.color}" class="muted">—</th>`; return; }
-      rates.forEach(r => { head2 += matrizSortTh(`rate:${r.id}`, r.name, `border-left:3px solid ${ind.color}`); if (rateHasAlvo(r)) head2 += `<th>alvo</th>`; });
+      if (cfgShowInMatriz(ind)) {
+        head2 += matrizSortTh(`ind:${ind.id}:real`, "Real", `border-left:3px solid ${ind.color}`);
+        if (matrizPctOnlyHasAlvo(ind)) head2 += `<th>alvo</th>`;
+        if (periodo === "mes") head2 += matrizSortTh(`ind:${ind.id}:proj`, "Proj.");
+      } else if (!rates.length) return;
+      else if (!exp) { head2 += `<th style="border-left:3px solid ${ind.color}" class="muted">—</th>`; return; }
+      if (exp && rates.length) rates.forEach(r => { head2 += matrizSortTh(`rate:${r.id}`, r.name, "color:var(--accent)"); if (rateHasAlvo(r)) head2 += `<th>alvo</th>`; });
       return;
     }
     if (cfgShowInMatriz(ind)) {
@@ -6279,12 +6365,40 @@ function arvExpandedTotalCells(lojas, localInd, days, periodo) {
   });
   return html;
 }
+function arvTotalPctOnlyMainCells(lojas, localInd, days, periodo) {
+  const vals = [];
+  lojas.forEach(L => withState(L.data, () => {
+    const li = arvResolveInd(L, localInd); if (!li) return;
+    const ids = arvTeamSellerIds(L); if (!ids.length) return;
+    const v = matrizPctOnlyValue(ids, li, periodo); if (v.rv != null) vals.push(v.rv);
+  }));
+  const rv = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  const has = vals.length > 0;
+  const tgt = matrizPctOnlyTarget(localInd);
+  const lb = cfgLowerBetter(localInd);
+  const rp = matrizRateRatio(rv, tgt, lb);
+  const tip = matrizPctOnlyTip(localInd, rv, tgt, [], true);
+  const color = lb && rv != null && tgt ? heatMatrizLowerBetterColor(rv, tgt, true) : heatMatrizText(rp);
+  let html = `<td style="border-left:3px solid ${localInd.color}; color:${has && rv != null ? color : "inherit"}; font-weight:700;"${matrizTipData(tip, localInd.color)}>${has ? matrizPctOnlyFmtValue(rv, localInd) : "—"}</td>`;
+  if (matrizPctOnlyHasAlvo(localInd)) html += `<td class="muted">${matrizPctOnlyFmtTarget(tgt, localInd)}</td>`;
+  if (periodo === "mes") {
+    const proj = has && rv != null ? matrizProjEquipe(rv) : null;
+    const metaProj = tgt || 0;
+    const lbProj = cfgLowerBetter(localInd);
+    const pp = metaProj && proj != null ? matrizProjPerfRatio(proj, metaProj, lbProj) : null;
+    const projTip = matrizTipProj({ isTeam: true, sellerId: null, real: has ? rv : null, proj, metaProj, ind: { ...localInd, sub: false, lowerBetter: localInd.lowerBetter }, divisionalTotal: divisionalMode(), sumMetasLojas: null });
+    const projColor = lbProj && metaProj && proj != null ? heatMatrizLowerBetterColor(proj, metaProj, true) : (pp != null ? heatMatrizText(pp) : "var(--text-dim)");
+    html += `<td style="color:${projColor}; font-weight:${proj != null ? 700 : 400};"${matrizTipData(projTip, localInd.color)}>${proj == null ? "—" : matrizPctOnlyFmtValue(proj, localInd)}</td>`;
+  }
+  return html;
+}
 function arvTotalBlockCells(lojas, localInd, days, periodo) {
   if (localInd.pctOnly) {
     const rates = visibleRates(localInd);
-    if (!rates.length) return "";
-    if (!isIndExpanded(localInd.id)) return `<td class="muted" style="border-left:3px solid ${localInd.color}; font-weight:700;">—</td>`;
-    return rates.map(rt => {
+    let html = cfgShowInMatriz(localInd) ? arvTotalPctOnlyMainCells(lojas, localInd, days, periodo) : "";
+    if (!html && !rates.length) return "";
+    if (!isIndExpanded(localInd.id)) return html || `<td class="muted" style="border-left:3px solid ${localInd.color}; font-weight:700;">—</td>`;
+    html += rates.map(rt => {
       const vals = [];
       lojas.forEach(L => withState(L.data, () => {
         const li = arvResolveInd(L, localInd); const r = arvResolveRate(li, rt); if (!r) return;
@@ -6294,6 +6408,7 @@ function arvTotalBlockCells(lojas, localInd, days, periodo) {
       const rv = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
       return matrizRateCells(rt, [], days, periodo, localInd, true, rv);
     }).join("");
+    return html;
   }
   let real = 0, has = false, proj = 0;
   lojas.forEach(L => withState(L.data, () => {
@@ -6801,7 +6916,11 @@ function acuracidadeFieldList() {
   const fields = [];
   const indicators = divisionalMode() ? filterIndicatorTreeToOperational(state.indicators) : state.indicators;
   indicators.forEach(ind => {
-    if (ind.pctOnly) { (ind.rates||[]).forEach(r => { if (r.manual) fields.push({ id: "rate:"+r.id, rateId: r.id, name: r.name, color: ind.color, sub: false, rate: true }); }); return; }
+    if (ind.pctOnly) {
+      fields.push({ id: ind.id, name: ind.name, color: ind.color, sub: false, rate: false, pctOnly: true });
+      (ind.rates||[]).forEach(r => { if (r.manual) fields.push({ id: "rate:"+r.id, rateId: r.id, name: r.name, color: ind.color, sub: false, rate: true }); });
+      return;
+    }
     const hasCo = ind.checkout || (ind.subs || []).some(s => s.checkout);
     if (hasCo) fields.push({ id: ind.id, name: ind.name, color: ind.color, sub: false, rate: false });
   });
@@ -7812,15 +7931,15 @@ function renderLancamentoCardsForSeller(sellerId, days) {
       });
     }
     subsRates += renderLancamentoRatesHtml(sellerId, ind);
-    const hasPrincipal = !ind.pctOnly;
+    const hasPrincipal = true;
     if (!hasPrincipal && !subsRates) return "";
     const exp = lancamentoExpanded[ind.id] === true;
     const sysTitle = matrizBlockTitle(ind.name);
     const headLabel = ind.pctOnly ? sysTitle.short : lancamentoPrincipalLabel(ind);
-    const principalHtml = hasPrincipal
-      ? `<div class="sysfield principal"><input type="number" class="syscell syscell-principal" data-seller="${sellerId}" data-field="${ind.id}" value="${getSystem(sellerId, ind.id) ?? ""}" placeholder="0" title="${escapeHtml(ind.name)}"></div>`
-      : "";
-    return `<div class="sysgroup ${exp ? "" : "collapsed"}" data-ind="${ind.id}" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head sys-toggle" style="color:${ind.color}" data-ind="${ind.id}"${sysTitle.title}><span class="block-toggle">${exp ? "▾" : "▸"}</span> ${headLabel}</div>${hasPrincipal ? `<div class="sysgroup-principal">${principalHtml}</div>` : ""}<div class="sysgroup-subs">${subsRates}</div></div>`;
+    const principalHtml = ind.pctOnly
+      ? `<div class="sysfield principal pct-only"><label>% ${escapeHtml(ind.name)}</label><input type="number" class="syscell syscell-principal" tabindex="-1" data-seller="${sellerId}" data-field="${ind.id}" step="${cfgLowerBetter(ind) ? "0.01" : "1"}" inputmode="decimal" value="${getSystem(sellerId, ind.id) ?? ""}" placeholder="${cfgLowerBetter(ind) ? "0,00" : "0"}" title="${escapeHtml(ind.name)} (%)"></div>`
+      : `<div class="sysfield principal"><input type="number" class="syscell syscell-principal" data-seller="${sellerId}" data-field="${ind.id}" value="${getSystem(sellerId, ind.id) ?? ""}" placeholder="0" title="${escapeHtml(ind.name)}"></div>`;
+    return `<div class="sysgroup ${exp ? "" : "collapsed"}" data-ind="${ind.id}" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head sys-toggle" style="color:${ind.color}" data-ind="${ind.id}"${sysTitle.title}><span class="block-toggle">${exp ? "▾" : "▸"}</span> ${headLabel}</div><div class="sysgroup-principal">${principalHtml}</div><div class="sysgroup-subs">${subsRates}</div></div>`;
   }).filter(Boolean).join("");
 }
 function renderLancamentoCards() {
@@ -9170,6 +9289,7 @@ function renderIndicatorConfig() {
       ${ind.pctOnly ? "" : `<button class="iconbtn" data-demote-ind="${ind.id}" title="Descer para subindicador (pode trocar lugar com um sub)">↳</button>`}
       <button class="iconbtn" data-del-ind="${ind.id}" title="Excluir">✕</button></div>${!ind.pctOnly && (ind.checkin || ind.checkout) ? diarioDaysPickerHtml(ind, { indId: ind.id }) : ""}${cvHintRowHtml(ind, "ind-field", "data-k")}${ind.openQuestion && !ind.pctOnly ? openCrossPickerHtml(ind) : ""}${lowerBetterPanelHtml(ind)}`;
     if (!ind.pctOnly) html += metaGoalsQtyHtml(ind, ind.id);
+    else html += metaGoalsPctOnlyHtml(ind, ind.id);
     if (!ind.pctOnly) {
       html += `<div class="sub-list"><div class="flex-between"><b style="font-size:12.5px;">Sub-indicadores</b><button class="btn sec sm" data-add-sub="${ind.id}">+ sub-indicador</button></div>`;
       (ind.subs||[]).forEach(s => {
@@ -9856,6 +9976,12 @@ function onMetaLojaInput(fieldId, val) {
 function cvHintRowHtml(cfg, fieldClass, dataAttr) {
   return `<div class="cv-hint-row"><input type="text" class="${fieldClass}" ${dataAttr}="cvHint" value="${escapeHtml(cfg.cvHint || "")}" placeholder="Descrição para o consultor (só no app CV)" title="Texto exibido abaixo do nome no app do consultor"></div>`;
 }
+function metaGoalsPctOnlyHtml(cfg, fieldId) {
+  return `<div class="meta-goals-block" data-goals-field="${fieldId}"><div class="row" style="align-items:flex-end;">
+    <div class="field"><label>alvo %</label><input type="number" value="${cfg.target ?? 0}" data-meta="target" title="Meta percentual do consultor"></div>
+    <div class="field"><label>loja %</label><input type="number" class="metaloja-inp" data-field="${fieldId}" value="${getMetaLoja(fieldId) ?? ''}" placeholder="—" title="Meta percentual da loja"></div>
+  </div></div>`;
+}
 function metaGoalsQtyHtml(cfg, fieldId) {
   const du = diasUteisOf(), sb = sabadosOf(), dom = countSundays(currentMonth);
   return `<div class="meta-goals-block" data-goals-field="${fieldId}"><div class="row" style="align-items:flex-end;">
@@ -9941,6 +10067,10 @@ function bindIndicatorEvents() {
       else if (k === "showInMatriz" && !canEditKpiSection("showInMatriz")) { f.checked = ind.showInMatriz !== false; toast("Exibir na Matriz travado pelo admin", true); return; }
       flushCardMetaFields(card, ind);
       ind[k] = f.type === "checkbox" ? f.checked : f.value;
+      if (k === "pctOnly" && ind[k] && !(Number(ind.target) > 0)) {
+        const firstRate = (ind.rates || []).find(r => Number(r.target) > 0);
+        if (firstRate) ind.target = Number(firstRate.target) || 0;
+      }
       if (k === "lowerBetter") {
         if (ind[k]) syncLowerBetterChildren(ind, true);
         renderMatrizLegend();
