@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto("http://127.0.0.1:8765/index.html?v=v144", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/index.html?v=v145", { waitUntil: "networkidle", timeout: 60000 });
 await page.waitForFunction(() => typeof shouldUseStrictKpiSync === "function", { timeout: 25000 });
 
 const result = await page.evaluate(() => {

@@ -2652,7 +2652,6 @@ function pullDailyMonthsFromCloud(code) {
     return null;
   });
 }
-const TAB_VIEW_IDS = ["matriz", "diario", "fechamento", "rscen", "kpis", "gestao", "config"];
 let globalNavTabOrderCache = null;
 let globalNavTabOrderAt = 0;
 function cleanedGlobalTabOrder(arr) {
