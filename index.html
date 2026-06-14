@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v149";
+  var BUILD = "v150";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -4373,7 +4373,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v149"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v150"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -6071,10 +6071,17 @@ function bindMatrizSort(tbl, moveOn) {
 }
 
 
+function matrizPctOnlyHasExpandableRates(ind) {
+  return visibleRates(ind).length > 1;
+}
 function matrizColCount(ind, periodo) {
   const subs = visibleSubs(ind), rates = visibleRates(ind);
-  if (ind.pctOnly) return rates.reduce((s, r) => s + matrizRateColCount(r), 0);
   const exp = isIndExpanded(ind.id);
+  if (ind.pctOnly) {
+    if (!rates.length) return 0;
+    if (!exp) return 1;
+    return rates.reduce((s, r) => s + matrizRateColCount(r), 0);
+  }
   let c = cfgShowInMatriz(ind) ? matrizItemColCount(ind, periodo) : 0;
   if (exp) c += subs.reduce((s, sub) => s + matrizItemColCount(sub, periodo), 0) + rates.reduce((s, r) => s + matrizRateColCount(r), 0);
   return c;
@@ -6107,6 +6114,8 @@ function matrizBlockCells(ids, ind, isTeam, days, periodo) {
   const subs = visibleSubs(ind), rates = visibleRates(ind);
   let html = "";
   if (ind.pctOnly) {
+    if (!rates.length) return html;
+    if (!isIndExpanded(ind.id)) return html + `<td class="muted" style="border-left:3px solid ${ind.color}; font-weight:700;">—</td>`;
     rates.forEach(r => { html += matrizRateCells(r, ids, days, periodo, ind, isTeam); });
     return html;
   }
@@ -6166,8 +6175,11 @@ function matrizBuildHeaders(inds, opts) {
     const exp = isIndExpanded(ind.id);
     const lbHead = cfgLowerBetter(ind) || (ind.subs || []).some(s => cfgLowerBetter(s)) || (ind.rates || []).some(r => rateLowerBetter(r, ind));
     const indTitle = matrizBlockTitle(ind.name, lbHead ? "↓ Menor melhor: verde abaixo · amarelo alerta · vermelho estourou" : "");
-    head1 += `<th colspan="${matrizColCount(ind, periodo)}" style="background:color-mix(in srgb, ${ind.color} 22%, var(--panel-2)); color:${ind.color}; border-left:3px solid ${ind.color};" class="block-head${lbHead ? " block-head-lower" : ""}" ${blockAttr}="${ind.id}"${indTitle.title}>${moveOn ? '<span class="draghandle" draggable="true" data-dragind="' + ind.id + '">⋮⋮</span>' : ""}<span class="block-toggle">${ind.pctOnly ? "" : (exp ? "▾" : "▸")}</span>${indTitle.short}${lbHead ? " ↓" : ""}</th>`;
+    const pctExpandable = ind.pctOnly && matrizPctOnlyHasExpandableRates(ind);
+    head1 += `<th colspan="${matrizColCount(ind, periodo)}" style="background:color-mix(in srgb, ${ind.color} 22%, var(--panel-2)); color:${ind.color}; border-left:3px solid ${ind.color};" class="block-head${lbHead ? " block-head-lower" : ""}" ${blockAttr}="${ind.id}"${indTitle.title}>${moveOn ? '<span class="draghandle" draggable="true" data-dragind="' + ind.id + '">⋮⋮</span>' : ""}<span class="block-toggle">${ind.pctOnly ? (pctExpandable ? (exp ? "▾" : "▸") : "") : (exp ? "▾" : "▸")}</span>${indTitle.short}${lbHead ? " ↓" : ""}</th>`;
     if (ind.pctOnly) {
+      if (!rates.length) return;
+      if (!exp) { head2 += `<th style="border-left:3px solid ${ind.color}" class="muted">—</th>`; return; }
       rates.forEach(r => { head2 += matrizSortTh(`rate:${r.id}`, r.name, `border-left:3px solid ${ind.color}`); if (rateHasAlvo(r)) head2 += `<th>alvo</th>`; });
       return;
     }
@@ -6269,7 +6281,10 @@ function arvExpandedTotalCells(lojas, localInd, days, periodo) {
 }
 function arvTotalBlockCells(lojas, localInd, days, periodo) {
   if (localInd.pctOnly) {
-    return visibleRates(localInd).map(rt => {
+    const rates = visibleRates(localInd);
+    if (!rates.length) return "";
+    if (!isIndExpanded(localInd.id)) return `<td class="muted" style="border-left:3px solid ${localInd.color}; font-weight:700;">—</td>`;
+    return rates.map(rt => {
       const vals = [];
       lojas.forEach(L => withState(L.data, () => {
         const li = arvResolveInd(L, localInd); const r = arvResolveRate(li, rt); if (!r) return;
@@ -6771,7 +6786,7 @@ function renderMatriz() {
   renderMatrizLegend("arvoreLegend", "arvoreLegendHint");
   bindMatrizSort(tbl, moveOn);
 
-  tbl.querySelectorAll('[data-block]').forEach(el => { el.onclick = (e) => { if (e.target.classList.contains('draghandle')) return; const ind = state.indicators.find(i=>i.id===el.dataset.block); if (ind && ind.pctOnly) return; const id = el.dataset.block; expandedBlocks[id] = expandedBlocks[id] === false ? true : false; save(); matrizUiRerender(); }; });
+  tbl.querySelectorAll('[data-block]').forEach(el => { el.onclick = (e) => { if (e.target.classList.contains('draghandle')) return; const ind = state.indicators.find(i=>i.id===el.dataset.block); if (ind && ind.pctOnly && !matrizPctOnlyHasExpandableRates(ind)) return; const id = el.dataset.block; expandedBlocks[id] = expandedBlocks[id] === false ? true : false; save(); matrizUiRerender(); }; });
   if (!moveOn) tbl.querySelectorAll('tbody tr[data-seller] td.name.seller-link').forEach(td => { td.onclick = (e) => { if (e.target.classList.contains('draghandle')) return; const sid = td.closest('tr').dataset.seller; if (sid) openLancamentoModal(sid); }; });
   if (moveOn) setupMatrixDnD();
   renderAcuracidade();
@@ -10557,7 +10572,7 @@ function renderArvore() {
       el.onclick = (e) => {
         if (e.target.classList.contains("draghandle")) return;
         const ind = state.indicators.find(i => i.id === el.dataset.block);
-        if (ind && ind.pctOnly) return;
+        if (ind && ind.pctOnly && !matrizPctOnlyHasExpandableRates(ind)) return;
         const id = el.dataset.block;
         arvExpandedBlocks[id] = arvExpandedBlocks[id] === true ? false : true;
         state.ui.arvExpanded = arvExpandedBlocks;
