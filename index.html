@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v157";
+  var BUILD = "v158";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -919,6 +919,7 @@
   <div class="spacer"></div>
   <div class="header-controls">
     <button class="iconbtn" id="trocarLojaTop" title="Trocar de loja">🏪 Trocar</button>
+    <button class="iconbtn" id="authLogoutTop" title="Sair — exigir senha novamente">⎋ Sair</button>
     <button class="iconbtn" id="themeToggle" title="Alternar tema" aria-label="Alternar tema">🌙</button>
     <div class="month-picker-wrap" id="monthPickerWrap">
       <button type="button" class="month-picker-btn" id="monthPickerBtn" aria-haspopup="dialog" aria-expanded="false">
@@ -4458,7 +4459,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v157"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v158"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -10925,6 +10926,7 @@ function fbInit(){
 }
 /* ============================================================ AUTENTICAÇÃO — senha mestra + senha por loja */
 const AUTH_SESSION_KEY = "gc_auth_session";
+const AUTH_SESSION_MS = 48 * 60 * 60 * 1000;
 const AUTH_PBKDF2_ITER = 310000;
 let authMasterCache = null;
 let authAdminDevices = {};
@@ -11014,9 +11016,10 @@ function saveAuthSession(entry) {
   const type = typeof entry === "object" && entry?.type
     ? entry.type
     : (isDivisionalCode(code) ? "divisional" : "loja");
+  const at = Date.now();
   localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
     type, code, loja: type === "loja" ? code : undefined,
-    exp: Date.now() + 30 * 24 * 60 * 60 * 1000, device: getDeviceId()
+    at, exp: at + AUTH_SESSION_MS, device: getDeviceId()
   }));
 }
 function applyAuthContext(type, code) {
@@ -11341,22 +11344,20 @@ async function finishAuthEnterLoja(code) {
   saveAuthSession({ type: "loja", code });
   unlockAuth();
   resetLojaDataListener();
+  resetLocalStateForLoja(code);
   applyLojaIdentity(code, code);
-  const sameLoja = localStateLojaTag() === String(code || "").trim().toUpperCase();
-  if (!sameLoja) resetLocalStateForLoja(code);
-  const displayName = await fetchLojaDisplayName(code);
-  applyLojaIdentity(code, displayName);
   if (!fbReady) await ensureAuthCloudReady(20000);
   if (fbReady) {
     createLojaSafetyBackup(code, "pre-login-pull");
-    const ok = await pullLoja({ cloudOnly: !sameLoja });
-    applyLojaIdentity(code, state.storeName || displayName);
+    const ok = await pullLoja({ cloudOnly: true });
+    applyLojaIdentity(code, state.storeName || code);
     startLojaDataListener();
     syncStore();
     updateDivisionalNav();
     renderActive();
     updateVisaoDiaOverlay();
-    toast(ok ? ("Loja " + code + " — " + (state.storeName || code)) : ("Loja " + code + " — sem dados na nuvem ainda"));
+    const displayName = state.storeName || code;
+    toast(ok ? ("Loja " + code + " sincronizada — " + displayName) : ("Loja " + code + " — sem dados na nuvem ainda"));
   } else {
     save();
     syncStore();
@@ -11512,7 +11513,7 @@ function fbInit(){
       loadLockPolicyFromCloud();
       loadAuthConfig().then(() => {
         if (authUnlocked && divisionalCode) pullDivisional();
-        else if (authUnlocked && lojaCode) pullLoja({ cloudOnly: localStateLojaTag() !== String(lojaCode || "").trim().toUpperCase() });
+        else if (authUnlocked && lojaCode) pullLoja({ cloudOnly: true });
         else if (!authUnlocked && !authBusy && authFlowStep === "senha" && !pendingAuthPassword) startAuthFlow();
       });
     });
@@ -11724,15 +11725,26 @@ function trocarLoja() {
     return;
   }
   if (!confirm("Trocar de loja? Será necessário autenticar novamente.")) return;
+  logoutAuth({ skipConfirm: true });
+}
+function logoutAuth(opts) {
+  opts = opts || {};
+  if (!opts.skipConfirm && !confirm("Sair? Será necessário digitar a senha novamente.")) return;
+  if (lojaCode && authUnlocked && !divisionalMode()) {
+    try { persistLocalState(state, lojaCode); } catch (e) { /* ignore */ }
+  }
+  resetLojaDataListener();
   localStorage.removeItem("gc_loja_code");
   localStorage.removeItem("gc_divisional_code");
   localStorage.removeItem(LS_STATE_LOJA_KEY);
   clearAuthSession();
   lojaCode = null;
   divisionalCode = null;
+  myLojaId = null;
   authUnlocked = false;
+  pendingAuthPassword = "";
   document.body.classList.add("auth-locked");
-  startAuthFlow();
+  startAuthFlow(true);
 }
 
 /* ============================================================ FASE 2.3 — MODO DIVISIONAL (RSCEN) + trocar no topo */
@@ -12257,6 +12269,7 @@ function init() {
   const _ls=document.getElementById("lojaSubmit"); if(_ls) _ls.onclick=submitLoja;
   const _lc=document.getElementById("lojaCodeInput"); if(_lc) _lc.addEventListener("keydown",e=>{ if(e.key==="Enter") submitLoja(); });
   const _tlt=document.getElementById("trocarLojaTop"); if(_tlt) _tlt.onclick=trocarLoja;
+  const _alo=document.getElementById("authLogoutTop"); if(_alo) _alo.onclick=()=>logoutAuth();
   updateTrocarLojaTopTitle();
 }
 function currentWeekIndex() { const weeks = weeksOf(currentMonth); if (todayISO() !== currentMonth) return weeks.length-1; const day = new Date().getDate(); for (let i=0;i<weeks.length;i++) if (weeks[i].includes(day)) return i; return weeks.length-1; }
