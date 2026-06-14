@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto(`http://127.0.0.1:8765/index.html?v=v151&_=${Date.now()}`, { waitUntil: "networkidle", timeout: 60000 });
+await page.goto(`http://127.0.0.1:8765/index.html?v=v152&_=${Date.now()}`, { waitUntil: "networkidle", timeout: 60000 });
 
 const result = await page.evaluate(() => {
   authUnlocked = true;
@@ -11,6 +11,7 @@ const result = await page.evaluate(() => {
   state.ui.period = "mes";
 
   const indId = uid();
+  const rateId = uid();
   state.indicators.push({
     id: indId,
     name: "NPS Main Test",
@@ -27,8 +28,7 @@ const result = await page.evaluate(() => {
     metaMonth: 0,
     subs: [],
     rates: [
-      { id: uid(), name: "%Taxa", numId: "", denId: "", manual: true, absolute: false, showInMatriz: true, target: 0 },
-      { id: uid(), name: "%Resp", numId: "", denId: "", manual: true, absolute: false, showInMatriz: true, target: 0 },
+      { id: rateId, name: "Respondentes", numId: "", denId: "", manual: true, absolute: true, showInMatriz: true, target: 0 },
     ],
   });
   if (!state.order.indicators) state.order.indicators = state.indicators.map(i => i.id);
@@ -38,49 +38,59 @@ const result = await page.evaluate(() => {
   const sellerId = state.sellers[0].id;
   const m = currentMonth;
   if (!state.months[m]) state.months[m] = { daily: {}, system: {}, systemRate: {} };
-  state.months[m].system[sellerId] = state.months[m].system[sellerId] || {};
-  state.months[m].system[sellerId][indId] = 85;
+  state.months[m].system[sellerId] = { [indId]: 85 };
+  state.months[m].systemRate[sellerId] = { [rateId]: 42 };
 
   const ind = state.indicators.find(i => i.id === indId);
-  expandedBlocks[indId] = false;
-  const collapsedCols = matrizColCount(ind, "mes");
-  const collapsedMain = matrizPctOnlyMainColCount(ind, "mes");
+  const mainCols = matrizPctOnlyMainColCount(ind, "mes");
   const { rv } = matrizPctOnlyValue([sellerId], ind, "mes");
   const fmt = matrizPctOnlyFmtValue(rv, ind);
 
-  renderMatriz();
-  const block = document.querySelector(`[data-block="${indId}"]`);
-  const colspan = block ? +block.getAttribute("colspan") : 0;
-  const row = document.querySelector(`#matrizTable tbody tr[data-seller="${sellerId}"]`);
-  const cells = row ? [...row.querySelectorAll("td")].map(td => td.textContent.trim()) : [];
+  expandedBlocks[indId] = false;
+  const collapsedCols = matrizColCount(ind, "mes");
+  const { head2: headCollapsed } = matrizBuildHeaders([ind], { periodo: "mes", moveOn: false });
+  const hasProjHeader = headCollapsed.includes("Proj.");
 
-  const cfgHtml = metaGoalsPctOnlyHtml(ind, indId);
-  const hasAlvoCfg = cfgHtml.includes("alvo %");
+  renderMatriz();
+  const blockCollapsed = document.querySelector(`[data-block="${indId}"]`);
+  const colspanCollapsed = blockCollapsed ? +blockCollapsed.getAttribute("colspan") : 0;
+  const rowCollapsed = document.querySelector(`#matrizTable tbody tr[data-seller="${sellerId}"]`);
+  const cellsCollapsed = rowCollapsed ? rowCollapsed.querySelectorAll("td").length : 0;
+  const rateVisibleCollapsed = rowCollapsed ? rowCollapsed.textContent.includes("42") : false;
 
   expandedBlocks[indId] = true;
   const expandedCols = matrizColCount(ind, "mes");
+  renderMatriz();
+  const rowExpanded = document.querySelector(`#matrizTable tbody tr[data-seller="${sellerId}"]`);
+  const rateVisibleExpanded = rowExpanded ? rowExpanded.textContent.includes("42") : false;
 
   return {
+    mainCols,
     collapsedCols,
-    collapsedMain,
     expandedCols,
-    colspan,
+    colspanCollapsed,
+    cellsCollapsed,
     fmt,
-    hasAlvoCfg,
+    hasProjHeader,
     hasPctSuffix: fmt.includes("%"),
-    cellsSample: cells.slice(-6),
+    expandable: matrizPctOnlyHasExpandableRates(ind),
+    rateVisibleCollapsed,
+    rateVisibleExpanded,
   };
 });
 
 console.log(JSON.stringify(result, null, 2));
 const pass =
-  result.collapsedMain === 3 &&
-  result.collapsedCols === 3 &&
+  result.mainCols === 2 &&
+  result.collapsedCols === 2 &&
   result.expandedCols > result.collapsedCols &&
-  result.colspan === 3 &&
+  result.colspanCollapsed === 2 &&
   result.hasPctSuffix &&
   result.fmt === "85%" &&
-  result.hasAlvoCfg;
+  !result.hasProjHeader &&
+  result.expandable &&
+  !result.rateVisibleCollapsed &&
+  result.rateVisibleExpanded;
 console.log(pass ? "PASS" : "FAIL");
 await browser.close();
 process.exit(pass ? 0 : 1);

@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v151";
+  var BUILD = "v152";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -4374,7 +4374,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v151"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v152"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -6079,7 +6079,7 @@ function bindMatrizSort(tbl, moveOn) {
 
 
 function matrizPctOnlyHasExpandableRates(ind) {
-  return visibleRates(ind).length > 1;
+  return visibleRates(ind).length > 0;
 }
 function matrizPctOnlyTarget(ind) {
   const t = Number(ind.target) || 0;
@@ -6093,7 +6093,6 @@ function matrizPctOnlyHasAlvo(ind) {
 function matrizPctOnlyMainColCount(ind, periodo) {
   let c = 1;
   if (matrizPctOnlyHasAlvo(ind)) c++;
-  if (periodo === "mes") c++;
   return c;
 }
 function matrizPctOnlyValue(ids, ind, periodo, m = currentMonth) {
@@ -6142,15 +6141,6 @@ function matrizPctOnlyMainCells(ids, ind, isTeam, days, periodo) {
   const realCls = fromSystem ? "heat matriz-from-sys matriz-real" : "matriz-real";
   let html = `<td style="border-left:3px solid ${ind.color}; color:${has && rv != null ? color : "inherit"}; font-weight:700;"${matrizTipData(tip, ind.color)}><span class="${realCls}">${has ? valDisp : "—"}</span></td>`;
   if (matrizPctOnlyHasAlvo(ind)) html += `<td class="muted">${tgtDisp}</td>`;
-  if (periodo === "mes") {
-    const proj = has && rv != null ? (isTeam ? matrizProjEquipe(rv) : sellerProjFromReal(ids[0], ind.id, rv)) : null;
-    const metaProj = matrizPctOnlyTarget(ind) || 0;
-    const lbProj = cfgLowerBetter(ind);
-    const pp = metaProj && proj != null ? matrizProjPerfRatio(proj, metaProj, lbProj) : null;
-    const projTip = matrizTipProj({ isTeam, sellerId: isTeam ? null : ids[0], real: has ? rv : null, proj, metaProj, ind: { ...ind, sub: false, lowerBetter: ind.lowerBetter }, divisionalTotal: false, sumMetasLojas: null });
-    const projColor = lbProj && metaProj && proj != null ? heatMatrizLowerBetterColor(proj, metaProj, true) : (pp != null ? heatMatrizText(pp) : "var(--text-dim)");
-    html += `<td style="color:${projColor}; font-weight:${proj != null ? 700 : 400};"${matrizTipData(projTip, ind.color)}>${proj == null ? "—" : matrizPctOnlyFmtValue(proj, ind)}</td>`;
-  }
   return html;
 }
 function matrizColCount(ind, periodo) {
@@ -6263,7 +6253,6 @@ function matrizBuildHeaders(inds, opts) {
       if (cfgShowInMatriz(ind)) {
         head2 += matrizSortTh(`ind:${ind.id}:real`, "Real", `border-left:3px solid ${ind.color}`);
         if (matrizPctOnlyHasAlvo(ind)) head2 += `<th>alvo</th>`;
-        if (periodo === "mes") head2 += matrizSortTh(`ind:${ind.id}:proj`, "Proj.");
       } else if (!rates.length) return;
       else if (!exp) { head2 += `<th style="border-left:3px solid ${ind.color}" class="muted">—</th>`; return; }
       if (exp && rates.length) rates.forEach(r => { head2 += matrizSortTh(`rate:${r.id}`, r.name, "color:var(--accent)"); if (rateHasAlvo(r)) head2 += `<th>alvo</th>`; });
@@ -6381,15 +6370,6 @@ function arvTotalPctOnlyMainCells(lojas, localInd, days, periodo) {
   const color = lb && rv != null && tgt ? heatMatrizLowerBetterColor(rv, tgt, true) : heatMatrizText(rp);
   let html = `<td style="border-left:3px solid ${localInd.color}; color:${has && rv != null ? color : "inherit"}; font-weight:700;"${matrizTipData(tip, localInd.color)}>${has ? matrizPctOnlyFmtValue(rv, localInd) : "—"}</td>`;
   if (matrizPctOnlyHasAlvo(localInd)) html += `<td class="muted">${matrizPctOnlyFmtTarget(tgt, localInd)}</td>`;
-  if (periodo === "mes") {
-    const proj = has && rv != null ? matrizProjEquipe(rv) : null;
-    const metaProj = tgt || 0;
-    const lbProj = cfgLowerBetter(localInd);
-    const pp = metaProj && proj != null ? matrizProjPerfRatio(proj, metaProj, lbProj) : null;
-    const projTip = matrizTipProj({ isTeam: true, sellerId: null, real: has ? rv : null, proj, metaProj, ind: { ...localInd, sub: false, lowerBetter: localInd.lowerBetter }, divisionalTotal: divisionalMode(), sumMetasLojas: null });
-    const projColor = lbProj && metaProj && proj != null ? heatMatrizLowerBetterColor(proj, metaProj, true) : (pp != null ? heatMatrizText(pp) : "var(--text-dim)");
-    html += `<td style="color:${projColor}; font-weight:${proj != null ? 700 : 400};"${matrizTipData(projTip, localInd.color)}>${proj == null ? "—" : matrizPctOnlyFmtValue(proj, localInd)}</td>`;
-  }
   return html;
 }
 function arvTotalBlockCells(lojas, localInd, days, periodo) {
