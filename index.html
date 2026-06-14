@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v156";
+  var BUILD = "v157";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -4458,7 +4458,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v156"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v157"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -6569,9 +6569,19 @@ function findVisaoDiaDiarioCfg(testFn) {
   const subHit = hits.find(x => x.cfg.id !== x.parent.id);
   return subHit || hits[0];
 }
-/** Referência diário: Agendamentos p/ próx Dia — check-out de ontem = plano de hoje */
+/** Sub sábado: Agendamentos p/ amanhã? (Dom) — checkout no sáb para quem trabalha domingo */
+function matchVisaoDiaAgendamentoDomSab(n) {
+  return n.includes("agendament") && (/domingo/.test(n) || /\bdom\b/.test(n)) && /amanh|prox|proxim|seguinte/.test(n);
+}
+/** Sub seg–sex: Agendamentos p/ domingo — acumula programação para o domingo */
+function matchVisaoDiaAgendamentoDomingoWeek(n) {
+  return n.includes("agendament") && (/domingo/.test(n) || /\bdom\b/.test(n)) && !/amanh|prox|proxim|seguinte/.test(n);
+}
+/** Referência diário: Agendamentos p/ próx Dia (seg–sex) — próximo dia trabalhado */
 function matchVisaoDiaAgendamentoProxDia(n) {
-  return n.includes("agendament") && /prox|proxim|prrox|amanh|seguinte/.test(n);
+  if (!n.includes("agendament")) return false;
+  if (matchVisaoDiaAgendamentoDomSab(n) || matchVisaoDiaAgendamentoDomingoWeek(n)) return false;
+  return /prox|proxim|prrox|amanh|seguinte/.test(n);
 }
 /** Referência diário: Agendamentos p/ HOJE?, Agendamentos de HOJE? ou de HOJE! (check-out de hoje) */
 function matchVisaoDiaAgendamentoReal(n) {
@@ -6625,17 +6635,21 @@ function resolveVisaoDiaCard(spec) {
   if (spec.kind === "agendamentoProx") {
     const parent = visaoDiaParentByStem(n => n.includes("agendament"));
     const proxHit = findVisaoDiaDiarioCfg(matchVisaoDiaAgendamentoProxDia);
+    const domSabHit = findVisaoDiaDiarioCfg(matchVisaoDiaAgendamentoDomSab);
+    const domWeekHit = findVisaoDiaDiarioCfg(matchVisaoDiaAgendamentoDomingoWeek);
     const realHit = findVisaoDiaDiarioCfg(matchVisaoDiaAgendamentoReal);
-    if (!parent && !proxHit && !realHit) return null;
-    const anchor = proxHit || realHit;
+    if (!parent && !proxHit && !realHit && !domSabHit && !domWeekHit) return null;
+    const anchor = proxHit || domSabHit || domWeekHit || realHit;
     return {
       label: spec.label,
       color: anchor?.color || parent?.color || spec.color,
       kind: "agendamentoProx",
       proxId: proxHit ? proxHit.cfg.id : null,
+      domSabId: domSabHit ? domSabHit.cfg.id : null,
+      domingoWeekId: domWeekHit ? domWeekHit.cfg.id : null,
       realId: visaoDiaResolveRealFieldId(realHit?.cfg),
       parent: parent || anchor?.parent,
-      refPlan: proxHit ? ("Check-out ontem · " + proxHit.cfg.name) : "Agendamentos p/ próx Dia",
+      refPlan: proxHit ? ("Programação · " + proxHit.cfg.name) : "Agendamentos p/ próx Dia",
       refReal: realHit ? realHit.cfg.name : "Agendamentos p/ HOJE?"
     };
   }
@@ -6823,31 +6837,89 @@ function visaoDiaDayPlanValue(sellerId, fieldId, day) {
   if (c.plan != null && c.plan !== "" && !isNaN(Number(c.plan))) return Number(c.plan);
   return null;
 }
-function visaoDiaDayRealValue(sellerId, fieldId, day) {
+function visaoDiaDayRealValue(sellerId, fieldId, day, m = currentMonth) {
   const coId = visaoDiaResolveCheckoutFieldId(fieldId);
   const cfg = cfgById(coId);
   if (!cfg || day == null) return null;
-  return diarioDayFieldOutValue(sellerId, cfg, day);
+  return diarioDayFieldOutValue(sellerId, cfg, day, m);
 }
-/** CVs com dia trabalhado antes de hoje — inclui folga hoje (checkout prox dia = plano de hoje na Visão Dia). */
-function visaoDiaAgendamentoPlanSellers(day) {
-  return orderedSellers().filter(s => prevWorkedDay(s.id, day) != null);
-}
-function visaoDiaAgendamentoTeamToday(card) {
-  const day = diarioTodayDay();
-  if (day == null) return { plan: null, real: null };
-  const sellersToday = visaoDiaSellersToday();
-  let plan = 0, planHas = false, real = 0, realHas = false;
-  if (card.proxId) {
-    visaoDiaAgendamentoPlanSellers(day).forEach(s => {
-      const prev = prevWorkedDay(s.id, day);
-      const v = visaoDiaDayRealValue(s.id, card.proxId, prev);
-      if (v != null) { plan += v; planHas = true; }
-    });
+function nextWorkedDay(sellerId, day, m = currentMonth) {
+  const n = daysInMonth(m);
+  for (let d = day + 1; d <= n; d++) {
+    if (sellerWorks(sellerId, d, m)) return d;
   }
+  return null;
+}
+function visaoDiaAgendamentoProxTargetDay(sellerId, sourceDay, m = currentMonth) {
+  return nextWorkedDay(sellerId, sourceDay, m);
+}
+function diarioAgendamentoDomSubKind(cfg) {
+  const n = normKpiName(cfg?.name || "");
+  if (matchVisaoDiaAgendamentoDomSab(n)) return "domSab";
+  if (matchVisaoDiaAgendamentoDomingoWeek(n)) return "domWeek";
+  return null;
+}
+function visaoDiaProxPlanCheckoutValue(sellerId, proxId, sourceDay, m = currentMonth) {
+  if (!proxId || sourceDay == null || !sellerWorks(sellerId, sourceDay, m)) return null;
+  const c = getCell(sellerId, proxId, sourceDay, m);
+  const v = c.real;
+  return v != null && v !== "" && !isNaN(Number(v)) ? Number(v) : null;
+}
+/** Planejado de Agendamentos na Visão Dia para um CV (só se trabalha no dia). */
+function visaoDiaAgendamentoPlanForSeller(sellerId, day, card, m = currentMonth) {
+  if (day == null || !card || !sellerWorks(sellerId, day, m)) return null;
+  const proxVal = (src) => visaoDiaProxPlanCheckoutValue(sellerId, card.proxId, src, m);
+  if (isSunday(m, day)) {
+    const week = weekForDay(day, m);
+    const sat = diarioWeekSatForSeller(week, sellerId, m);
+    if (card.domSabId && sat != null) {
+      const v = visaoDiaDayRealValue(sellerId, card.domSabId, sat, m);
+      if (v != null) return v;
+    }
+    if (card.domingoWeekId) {
+      const ref = cfgById(card.domingoWeekId);
+      if (ref) {
+        const acc = programacaoAcumulada(sellerId, ref, day, m);
+        if (acc != null) return acc.value;
+      }
+    }
+    return null;
+  }
+  if (weekday(m, day) === 1) {
+    const sunDay = day - 1;
+    if (sunDay < 1 || !isSunday(m, sunDay) || !card.proxId) return null;
+    if (!sellerWorks(sellerId, sunDay, m)) {
+      const prev = prevWorkedDay(sellerId, day, m);
+      if (prev == null || visaoDiaAgendamentoProxTargetDay(sellerId, prev, m) !== day) return null;
+      return proxVal(prev);
+    }
+    if (visaoDiaAgendamentoProxTargetDay(sellerId, sunDay, m) !== day) return null;
+    return proxVal(sunDay);
+  }
+  const yday = day - 1;
+  if (yday < 1 || !card.proxId) return null;
+  if (visaoDiaAgendamentoProxTargetDay(sellerId, yday, m) !== day) return null;
+  return proxVal(yday);
+}
+/** CVs com dia trabalhado antes de hoje — referência legada / folga hoje no agendamento. */
+function visaoDiaAgendamentoPlanSellers(day, m = currentMonth) {
+  return orderedSellers().filter(s => prevWorkedDay(s.id, day, m) != null);
+}
+function visaoDiaSellersForDay(day, m = currentMonth) {
+  if (day == null) return [];
+  return orderedSellers().filter(s => sellerWorks(s.id, day, m));
+}
+function visaoDiaAgendamentoTeamToday(card, asDay) {
+  const day = asDay != null ? asDay : diarioTodayDay();
+  if (day == null) return { plan: null, real: null };
+  const m = currentMonth;
+  const sellersToday = visaoDiaSellersForDay(day, m);
+  let plan = 0, planHas = false, real = 0, realHas = false;
   sellersToday.forEach(s => {
+    const p = visaoDiaAgendamentoPlanForSeller(s.id, day, card, m);
+    if (p != null) { plan += p; planHas = true; }
     if (card.realId) {
-      const r = visaoDiaDayRealValue(s.id, card.realId, day);
+      const r = visaoDiaDayRealValue(s.id, card.realId, day, m);
       if (r != null) { real += r; realHas = true; }
     }
   });
@@ -7469,6 +7541,14 @@ function diarioSundaySubActive(sellerId, day, m = currentMonth) {
 }
 function diarioFieldNeeds(sellerId, cfg, day, m = currentMonth) {
   if (!sellerWorks(sellerId, day, m)) return { checkin: false, checkout: false };
+  const agKind = diarioAgendamentoDomSubKind(cfg);
+  if (agKind === "domSab") {
+    if (!isSaturday(m, day)) return { checkin: false, checkout: false };
+    const week = weekForDay(day, m);
+    if (!diarioWeekSunForSeller(week, sellerId, m)) return { checkin: false, checkout: false };
+  } else if (agKind === "domWeek") {
+    if (!diarioSundaySubActive(sellerId, day, m)) return { checkin: false, checkout: false };
+  }
   if (!cfgActiveOnWeekday(cfg, day, m)) return { checkin: false, checkout: false };
   return { checkin: !!cfg.checkin, checkout: !!cfg.checkout };
 }

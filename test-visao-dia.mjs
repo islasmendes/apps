@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto("http://127.0.0.1:8765/index.html?v=v137", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto(`http://127.0.0.1:8765/index.html?v=v157&_=${Date.now()}`, { waitUntil: "networkidle", timeout: 60000 });
 
 const result = await page.evaluate(() => {
   authUnlocked = true;
@@ -11,9 +11,10 @@ const result = await page.evaluate(() => {
   state.ui.visaoDiaDismissed = null;
   activeView = "matriz";
 
+  currentMonth = "2026-06";
+  const day = 16;
   const agto = state.indicators.find(i => /agend/.test(normKpiName(i.name)));
   const sid = state.sellers[0].id;
-  const day = diarioTodayDay();
 
   if (agto) {
     agto.subs = agto.subs || [];
@@ -28,16 +29,16 @@ const result = await page.evaluate(() => {
   const prox = findVisaoDiaDiarioCfg(matchVisaoDiaAgendamentoProxDia);
   const real = findVisaoDiaDiarioCfg(matchVisaoDiaAgendamentoReal);
   const agCard = resolveVisaoDiaCard({ label: "Agendamentos", kind: "agendamentoProx", color: "#4f8cff" });
-  const prev = prevWorkedDay(sid, day);
   const scSid = ensureSched(sid);
-  if (day != null) scSid[day] = 1;
-  if (prox && prev != null) setCell(sid, prox.cfg.id, prev, "real", 5);
+  scSid[day] = 1;
+  scSid[day - 1] = 1;
+  if (prox) setCell(sid, prox.cfg.id, day - 1, "real", 5);
   let clearSubtractOk = true;
-  if (real && day != null) {
+  if (real) {
     setCell(sid, real.cfg.id, day, "real", 2);
-    const afterAdd = visaoDiaAgendamentoTeamToday(agCard).real;
+    const afterAdd = visaoDiaAgendamentoTeamToday(agCard, day).real;
     setCell(sid, real.cfg.id, day, "real", "");
-    const afterClear = visaoDiaAgendamentoTeamToday(agCard).real;
+    const afterClear = visaoDiaAgendamentoTeamToday(agCard, day).real;
     clearSubtractOk = afterAdd === 2 && afterClear == null;
     setCell(sid, real.cfg.id, day, "real", 2);
   }
@@ -45,17 +46,18 @@ const result = await page.evaluate(() => {
   // Folga hoje: plano deve vir do checkout prox dia do último dia trabalhado
   const folgaSid = state.sellers[1]?.id || sid;
   const sc = ensureSched(folgaSid);
-  if (day != null) sc[day] = 0;
-  const folgaPrev = prevWorkedDay(folgaSid, day);
+  sc[day] = 0;
+  sc[day - 1] = 1;
   const folgaProxVal = 7;
-  if (prox && folgaPrev != null) setCell(folgaSid, prox.cfg.id, folgaPrev, "real", folgaProxVal);
+  if (prox) setCell(folgaSid, prox.cfg.id, day - 1, "real", folgaProxVal);
 
   updateVisaoDiaOverlay();
 
-  const vals = visaoDiaAgendamentoTeamToday(agCard);
+  const vals = visaoDiaAgendamentoTeamToday(agCard, day);
   const agNums = document.querySelector(".visao-dia-card .vd-trio")?.textContent;
   const folgaOnScaleToday = sellerWorks(folgaSid, day);
   const folgaInPlanPool = visaoDiaAgendamentoPlanSellers(day).some(s => s.id === folgaSid);
+  const folgaPlanToday = visaoDiaAgendamentoPlanForSeller(folgaSid, day, agCard);
 
   // Realizado: checkout no sub "de HOJE!" quando realId aponta para o pai
   let parentRealTest = null;
@@ -84,8 +86,8 @@ const result = await page.evaluate(() => {
     cardCount: VISAO_DIA_CARDS.length,
     folgaOnScaleToday,
     folgaInPlanPool,
-    folgaPrev,
-    expectedPlan: 5 + (folgaPrev != null && folgaSid !== sid ? folgaProxVal : 0),
+    folgaPlanToday,
+    expectedPlan: 5,
     parentRealTest,
     clearSubtractOk,
   };
@@ -96,11 +98,11 @@ const ok = result.cardCount === 5
   && result.vals.plan === result.expectedPlan
   && result.vals.real === 2
   && (result.parentRealTest == null || result.parentRealTest === 9)
-  && result.agCard?.refPlan?.includes("próx")
+  && result.agCard?.refPlan?.includes("Programação")
   && result.agCard?.refReal?.includes("HOJE")
   && result.satActiveFri === false
   && result.folgaOnScaleToday === false
-  && result.folgaInPlanPool === true
+  && result.folgaPlanToday == null
   && result.clearSubtractOk === true;
 console.log(ok ? "PASS" : "FAIL");
 await browser.close();
