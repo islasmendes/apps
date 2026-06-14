@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v152";
+  var BUILD = "v153";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -1370,13 +1370,24 @@ function loadLojaVersionedBackup(code, id) {
     return stampPersistLoja(migrate(JSON.parse(raw)), c);
   } catch (e) { return null; }
 }
+function pruneLojaBackupSlots(code, index, dropFromIndex) {
+  const c = String(code || lojaCode || "").trim().toUpperCase();
+  if (!c || !Array.isArray(index) || dropFromIndex == null) return index;
+  const keep = index.slice(0, dropFromIndex);
+  index.slice(dropFromIndex).forEach(e => {
+    if (!e?.id) return;
+    try { localStorage.removeItem(lojaBackupSlotKey(c, e.id)); } catch (err) { /* ignore */ }
+  });
+  return keep;
+}
 function saveVersionedLojaBackup(st, code, reason, opts) {
   const c = String(code || lojaCode || "").trim().toUpperCase();
   const bag = stampPersistLoja(st || state, c);
   if (!c || !bag || divisionalMode()) return null;
+  const isManual = reason === "manual" || reason === "pre-restore" || !!opts?.force;
   const richness = lojaStateRichness(bag);
-  if (richness < 3 && !(bag.sellers || []).length) return null;
-  const forceNew = !!(opts?.force || reason === "pre-restore" || reason === "manual");
+  if (!isManual && richness < 3 && !(bag.sellers || []).length) return null;
+  const forceNew = isManual;
   const now = Date.now();
   let index = readLojaBackupIndex(c);
   const last = index[0];
@@ -1386,7 +1397,7 @@ function saveVersionedLojaBackup(st, code, reason, opts) {
     id = last.id;
     reuseSlot = true;
   } else {
-    id = `${String(APP_BUILD || "v0").replace(/[^a-zA-Z0-9]/g, "")}_${now}`;
+    id = `${String(APP_BUILD || "v0").replace(/[^a-zA-Z0-9]/g, "")}_${now}_${Math.random().toString(36).slice(2, 8)}`;
   }
   const entry = {
     id,
@@ -1400,8 +1411,12 @@ function saveVersionedLojaBackup(st, code, reason, opts) {
     indicators: (bag.indicators || []).length,
     dailyCells: dailyCellsInState(bag)
   };
-  try {
-    const payload = JSON.stringify(bag);
+  const payload = JSON.stringify(bag);
+  const writeBackup = () => {
+    if (!reuseSlot && index.length >= LOJA_BACKUP_MAX) {
+      index = pruneLojaBackupSlots(c, index, LOJA_BACKUP_MAX - 1);
+      writeLojaBackupIndex(c, index);
+    }
     localStorage.setItem(lojaBackupSlotKey(c, id), payload);
     const prev = localStorage.getItem(lojaLsKey(c));
     if (prev) localStorage.setItem(lojaLsBackupKey(c), prev);
@@ -1411,17 +1426,30 @@ function saveVersionedLojaBackup(st, code, reason, opts) {
       index = index.filter(e => e.id !== id);
       index.unshift(entry);
       if (index.length > LOJA_BACKUP_MAX) {
-        index.splice(LOJA_BACKUP_MAX).forEach(e => {
-          try { localStorage.removeItem(lojaBackupSlotKey(c, e.id)); } catch (err) { /* ignore */ }
-        });
+        index = pruneLojaBackupSlots(c, index, LOJA_BACKUP_MAX);
       }
     }
     writeLojaBackupIndex(c, index);
     _lastVersionedBackupKey = `${c}|${APP_BUILD}|${Math.floor(now / 60000)}`;
     return entry;
+  };
+  try {
+    return writeBackup();
   } catch (e) {
-    console.warn("backup versionado falhou", e);
-    return null;
+    const quota = e && (e.name === "QuotaExceededError" || /quota/i.test(String(e.message || e)));
+    if (!quota) {
+      console.warn("backup versionado falhou", e);
+      return null;
+    }
+    console.warn("backup quota — liberando slots antigos", e);
+    try {
+      index = pruneLojaBackupSlots(c, index, Math.max(0, Math.floor(index.length / 2)));
+      writeLojaBackupIndex(c, index);
+      return writeBackup();
+    } catch (e2) {
+      console.warn("backup versionado falhou após limpeza", e2);
+      return null;
+    }
   }
 }
 function shouldCreateVersionedBackup(st, code) {
@@ -4374,7 +4402,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v152"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v153"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -9549,7 +9577,7 @@ async function runBackupNow() {
   const code = String(lojaCode || "").trim().toUpperCase();
   if (!code || divisionalMode()) { toast("Entre em uma loja", true); return; }
   const entry = saveVersionedLojaBackup(state, code, "manual", { force: true });
-  if (!entry) { toast("Não foi possível criar backup", true); return; }
+  if (!entry) { toast("Não foi possível criar backup (armazenamento cheio ou loja inválida)", true); return; }
   if (fbReady && fbDb) {
     try {
       persistLocalState(state, code);
