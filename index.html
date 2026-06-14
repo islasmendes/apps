@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v155";
+  var BUILD = "v156";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -88,6 +88,7 @@
   html[data-theme="light"] .matriz-filter-chip.active { background: color-mix(in srgb, var(--accent) 16%, var(--cell)); border-color: var(--accent); color: var(--text); }
   html[data-theme="light"] .panel { box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06); }
   html[data-theme="light"] .sysgroup { background: var(--panel); }
+  html[data-theme="light"] #divisionalMetasBody .div-meta-inp:focus { background: #fff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
   * { box-sizing: border-box; }
   body { margin: 0; background: radial-gradient(1100px 560px at 82% -12%, var(--bg-soft), var(--bg)) fixed; color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
   :focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); outline-offset: 1px; border-radius: 4px; }
@@ -784,7 +785,35 @@
   #divisionalMetasBody .sysgroup-principal { margin-bottom: 0; }
   #divisionalMetasBody .sysgroup:not(.collapsed) .sysgroup-principal { margin-bottom: 10px; }
   #divisionalMetasBody .sysgroup.collapsed .sysgroup-subs { display: none; }
-  #divisionalMetasBody .sysfield.principal input { font-size: 18px; }
+  #divisionalMetasBody .div-meta-inp {
+    width: 100%;
+    background: var(--cell);
+    border: 1.5px solid var(--border);
+    border-radius: 9px;
+    padding: 10px 12px;
+    font-size: 18px;
+    font-weight: 800;
+    text-align: center;
+    color: var(--text);
+    transition: background .15s, border-color .15s, box-shadow .15s;
+  }
+  #divisionalMetasBody .sysfield.sub .div-meta-inp,
+  #divisionalMetasBody .sysfield.rate .div-meta-inp {
+    font-size: 15px;
+    padding: 8px 10px;
+    font-weight: 700;
+  }
+  #divisionalMetasBody .div-meta-inp:hover {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+    background: color-mix(in srgb, var(--bg) 55%, var(--cell));
+  }
+  #divisionalMetasBody .div-meta-inp:focus {
+    background: var(--bg);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+    outline: none;
+  }
+  #divisionalMetasBody .div-meta-inp::placeholder { color: var(--text-faint); opacity: .55; font-size: 12px; font-weight: 600; }
   #divisionalMetasBody .div-meta-ref { font-size: 11px; margin-top: 6px; text-align: right; }
   .audit-summary { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
   .audit-summary .pill { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 99px; font-weight: 700; }
@@ -4429,7 +4458,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v155"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v156"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -6071,7 +6100,7 @@ function divisionalMetaFieldHtml(cfg, lojas, isSub, parentInd) {
     ? `↳ ${escapeHtml(matrizDisplayName(cfg.name))}`
     : (cfg.pctOnly ? `% ${escapeHtml(cfg.name)}` : "Meta divisional");
   const cls = `sysfield ${isSub ? "sub" : "principal"}${cfg.pctOnly && !isSub ? " pct-only" : ""}`;
-  return `<div class="${cls}"><label>${label}</label><input type="number" class="cellinput div-meta-inp" data-field="${cfg.id}" value="${val ?? ""}" placeholder="—" step="${step}"><div class="div-meta-ref muted">Soma lojas: ${sumDisp}</div></div>`;
+  return `<div class="${cls}"><label>${label}</label><input type="number" class="div-meta-inp" data-field="${cfg.id}" value="${val ?? ""}" placeholder="—" step="${step}"><div class="div-meta-ref muted">Soma lojas: ${sumDisp}</div></div>`;
 }
 function divisionalMetaRatesHtml(ind) {
   let html = "";
@@ -6081,7 +6110,7 @@ function divisionalMetaRatesHtml(ind) {
     if (r.manual) {
       const val = getMetaDivisional(r.id);
       const step = rateIsAbsolute(r) ? "1" : (rLb ? "0.01" : "1");
-      html += `<div class="sysfield rate"><label>${unit} ${escapeHtml(r.name)}</label><input type="number" class="cellinput div-meta-inp" data-field="${r.id}" value="${val ?? ""}" placeholder="—" step="${step}"></div>`;
+      html += `<div class="sysfield rate"><label>${unit} ${escapeHtml(r.name)}</label><input type="number" class="div-meta-inp" data-field="${r.id}" value="${val ?? ""}" placeholder="—" step="${step}"></div>`;
     } else {
       html += `<div class="sysfield rate calc"><label>${unit} ${escapeHtml(r.name)} <span class="hint">auto</span></label><div class="syscalc muted">calculada</div></div>`;
     }
