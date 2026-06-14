@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v154";
+  var BUILD = "v155";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -760,6 +760,32 @@
   .sysgroup:not(.collapsed) .sysgroup-head.sys-toggle { margin-bottom: 12px; }
   .sysgroup.collapsed .sysgroup-fields,
   .sysgroup.collapsed .sysgroup-subs { display: none; }
+  #divisionalMetasModal { padding: 12px; align-items: flex-start; }
+  #divisionalMetasModal .modal.modal-wide {
+    max-width: none;
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+    margin: 0;
+  }
+  #divisionalMetasBody .syscards {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-start;
+    width: 100%;
+  }
+  #divisionalMetasBody .sysgroup {
+    flex: 1 1 140px;
+    min-width: min(140px, 100%);
+    max-width: none;
+    margin: 0;
+  }
+  #divisionalMetasBody .sysgroup-principal { margin-bottom: 0; }
+  #divisionalMetasBody .sysgroup:not(.collapsed) .sysgroup-principal { margin-bottom: 10px; }
+  #divisionalMetasBody .sysgroup.collapsed .sysgroup-subs { display: none; }
+  #divisionalMetasBody .sysfield.principal input { font-size: 18px; }
+  #divisionalMetasBody .div-meta-ref { font-size: 11px; margin-top: 6px; text-align: right; }
   .audit-summary { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
   .audit-summary .pill { font-size: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 99px; font-weight: 700; }
   .audit-discipline { margin-top: 14px; padding: 14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; }
@@ -1232,11 +1258,11 @@
 
 <div class="modal-bg" id="divisionalMetasModal"><div class="modal modal-wide">
   <div class="flex-between" style="align-items:flex-start;gap:12px;margin-bottom:12px;">
-    <div><h3>Metas Divisional</h3><div class="sub">Meta do mês <b id="divMetaMonthLbl"></b> por indicador (KPIs). A projeção do <b>⌂ Total RSCEN</b> usa estas metas — não a soma das metas de loja.</div></div>
+    <div><h3>Metas Divisional</h3><div class="sub">Meta do mês <b id="divMetaMonthLbl"></b> por indicador (KPIs). Clique no indicador para expandir ou recolher subindicadores e taxas. A projeção do <b>⌂ Total RSCEN</b> usa estas metas — não a soma das metas de loja.</div></div>
     <button type="button" class="ghost-btn" id="divMetaClose" title="Fechar">✕</button>
   </div>
   <div id="divisionalMetasBody"></div>
-  <div class="hint" style="margin-top:12px;">A coluna <b>Soma lojas</b> é só referência (metas cadastradas em cada loja). Deixe em branco para usar a soma automaticamente.</div>
+  <div class="hint" style="margin-top:12px;"><b>Soma lojas</b> em cada card é só referência (metas cadastradas em cada loja). Deixe a meta divisional em branco para usar a soma automaticamente na projeção.</div>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -1520,13 +1546,14 @@ function migrate(s) {
   if (!s.order) s.order = { sellers: null, indicators: null };
   if (!s.months) s.months = {};
   if (!s.theme) s.theme = "dark";
-  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, arvExpanded: {}, lancamentoExpanded: {}, lancamentoFilter: [], matrizFilter: [], kpiFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" }, kpiReorgAt: 0, dailyTombstones: {} }, s.ui || {});
+  s.ui = Object.assign({ view: "matriz", period: "mes", weekIdx: 0, diarioSeller: null, diarioWeek: 0, diarioUnlock: null, fechUnlock: null, sistemaSeller: null, resumoWeek: 0, expanded: {}, arvExpanded: {}, lancamentoExpanded: {}, divMetaExpanded: {}, lancamentoFilter: [], matrizFilter: [], kpiFilter: [], arvLojaFilter: [], arvSellerFilter: [], matrizSort: { key: null, dir: "desc" }, kpiReorgAt: 0, dailyTombstones: {} }, s.ui || {});
   if (s.ui.kpiReorgAt == null) s.ui.kpiReorgAt = 0;
   if (!s.ui.dailyTombstones) s.ui.dailyTombstones = {};
   if (!Array.isArray(s.ui.dioClearFields)) s.ui.dioClearFields = null;
   if (!s.ui.expanded) s.ui.expanded = {};
   if (!s.ui.arvExpanded) s.ui.arvExpanded = {};
   if (!s.ui.lancamentoExpanded) s.ui.lancamentoExpanded = {};
+  if (!s.ui.divMetaExpanded) s.ui.divMetaExpanded = {};
   if (!s.ui.lancamentoFilter) s.ui.lancamentoFilter = [];
   if (!Array.isArray(s.ui.kpiFilter)) s.ui.kpiFilter = [];
   if (!Array.isArray(s.ui.matrizFilter)) s.ui.matrizFilter = [];
@@ -4402,7 +4429,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v154"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v155"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -6027,35 +6054,70 @@ function renderArvoreToolbar() {
 }
 function openDivisionalMetasModal() {
   const modal = document.getElementById("divisionalMetasModal");
-  const body = document.getElementById("divisionalMetasBody");
   const lbl = document.getElementById("divMetaMonthLbl");
-  if (!modal || !body) return;
+  if (!modal) return;
   if (lbl) lbl.textContent = monthLabel(currentMonth);
-  const lojas = allLojas();
-  let rows = "";
-  filterIndicatorTreeToOperational(orderedIndicators()).forEach(ind => {
-    if (ind.pctOnly) return;
-    rows += divisionalMetaRowHtml(ind, lojas, false);
-    (ind.subs || []).forEach(sub => { rows += divisionalMetaRowHtml(sub, lojas, true, ind.color, ind); });
-  });
-  body.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>
-    <th style="text-align:left;padding:8px 6px;border-bottom:1px solid var(--border);">Indicador</th>
-    <th style="text-align:right;padding:8px 6px;border-bottom:1px solid var(--border);">Meta divisional</th>
-    <th style="text-align:right;padding:8px 6px;border-bottom:1px solid var(--border);" class="muted">Soma lojas</th>
-  </tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted" style="padding:12px;">Nenhum indicador em KPIs.</td></tr>'}</tbody></table>`;
-  body.querySelectorAll(".div-meta-inp").forEach(inp => {
-    inp.addEventListener("input", () => setMetaDivisional(inp.dataset.field, inp.value === "" ? "" : Number(inp.value)));
-  });
+  divMetaExpanded = state.ui.divMetaExpanded || {};
+  renderDivisionalMetasBody();
   modal.classList.add("show");
 }
-function divisionalMetaRowHtml(cfg, lojas, isSub, color, parentInd) {
+function divisionalMetaFieldHtml(cfg, lojas, isSub, parentInd) {
   const val = getMetaDivisional(cfg.id);
   const sum = sumLojasMetaForTpl(isSub ? parentInd : cfg, lojas, isSub ? cfg : null);
   const sumDisp = sum != null ? fmt(sum) : "—";
-  const name = (isSub ? '<span class="tag sub">↳</span> ' : '<b style="color:' + (color || cfg.color || "var(--accent)") + '">') + escapeHtml(matrizDisplayName(cfg.name)) + (isSub ? "" : "</b>");
-  return `<tr><td class="name" style="padding:8px 6px;border-bottom:1px solid var(--border-soft);">${name}</td>
-    <td style="padding:6px;text-align:right;border-bottom:1px solid var(--border-soft);"><input type="number" class="cellinput div-meta-inp" data-field="${cfg.id}" value="${val ?? ''}" placeholder="—" style="max-width:110px;text-align:right;"></td>
-    <td class="muted" style="padding:8px 6px;text-align:right;border-bottom:1px solid var(--border-soft);">${sumDisp}</td></tr>`;
+  const lb = isSub ? (parentInd ? cfgLowerBetter(cfg, parentInd) : cfgLowerBetter(cfg)) : cfgLowerBetter(cfg);
+  const step = lb ? "0.01" : "1";
+  const label = isSub
+    ? `↳ ${escapeHtml(matrizDisplayName(cfg.name))}`
+    : (cfg.pctOnly ? `% ${escapeHtml(cfg.name)}` : "Meta divisional");
+  const cls = `sysfield ${isSub ? "sub" : "principal"}${cfg.pctOnly && !isSub ? " pct-only" : ""}`;
+  return `<div class="${cls}"><label>${label}</label><input type="number" class="cellinput div-meta-inp" data-field="${cfg.id}" value="${val ?? ""}" placeholder="—" step="${step}"><div class="div-meta-ref muted">Soma lojas: ${sumDisp}</div></div>`;
+}
+function divisionalMetaRatesHtml(ind) {
+  let html = "";
+  (ind.rates || []).forEach(r => {
+    const rLb = rateLowerBetter(r, ind);
+    const unit = rateIsAbsolute(r) ? "nº" : "%";
+    if (r.manual) {
+      const val = getMetaDivisional(r.id);
+      const step = rateIsAbsolute(r) ? "1" : (rLb ? "0.01" : "1");
+      html += `<div class="sysfield rate"><label>${unit} ${escapeHtml(r.name)}</label><input type="number" class="cellinput div-meta-inp" data-field="${r.id}" value="${val ?? ""}" placeholder="—" step="${step}"></div>`;
+    } else {
+      html += `<div class="sysfield rate calc"><label>${unit} ${escapeHtml(r.name)} <span class="hint">auto</span></label><div class="syscalc muted">calculada</div></div>`;
+    }
+  });
+  return html;
+}
+function renderDivisionalMetaCard(ind, lojas) {
+  let subsRates = "";
+  if (!ind.pctOnly) {
+    (ind.subs || []).forEach(sub => { subsRates += divisionalMetaFieldHtml(sub, lojas, true, ind); });
+  }
+  subsRates += divisionalMetaRatesHtml(ind);
+  const exp = divMetaExpanded[ind.id] === true;
+  const sysTitle = matrizBlockTitle(ind.name);
+  const headLabel = ind.pctOnly ? sysTitle.short : lancamentoPrincipalLabel(ind);
+  const principalHtml = divisionalMetaFieldHtml(ind, lojas, false, ind);
+  return `<div class="sysgroup ${exp ? "" : "collapsed"}" data-ind="${ind.id}" style="box-shadow: inset 3px 0 0 ${ind.color}, 0 0 14px color-mix(in srgb, ${ind.color} 16%, transparent); border-color: color-mix(in srgb, ${ind.color} 45%, var(--border));"><div class="sysgroup-head sys-toggle" style="color:${ind.color}" data-ind="${ind.id}"${sysTitle.title}><span class="block-toggle">${exp ? "▾" : "▸"}</span> ${headLabel}</div><div class="sysgroup-principal">${principalHtml}</div><div class="sysgroup-subs">${subsRates}</div></div>`;
+}
+function renderDivisionalMetasBody() {
+  const body = document.getElementById("divisionalMetasBody");
+  if (!body) return;
+  const lojas = allLojas();
+  const cards = filterIndicatorTreeToOperational(orderedIndicators()).map(ind => renderDivisionalMetaCard(ind, lojas)).join("");
+  body.innerHTML = `<div class="syscards">${cards || '<div class="empty">Nenhum indicador em KPIs.</div>'}</div>`;
+  body.querySelectorAll(".sys-toggle").forEach(h => {
+    h.onclick = () => {
+      const id = h.dataset.ind;
+      divMetaExpanded[id] = divMetaExpanded[id] === true ? false : true;
+      state.ui.divMetaExpanded = divMetaExpanded;
+      save();
+      renderDivisionalMetasBody();
+    };
+  });
+  body.querySelectorAll(".div-meta-inp").forEach(inp => {
+    inp.addEventListener("input", () => setMetaDivisional(inp.dataset.field, inp.value === "" ? "" : Number(inp.value)));
+  });
 }
 function closeDivisionalMetasModal() {
   const modal = document.getElementById("divisionalMetasModal");
@@ -7797,6 +7859,7 @@ function updateDiarioSummary(fieldId) {
 /* ============================================================ LANÇAMENTO / AUDITORIA (modais) */
 let modalSellerId = null;
 let lancamentoExpanded = state.ui.lancamentoExpanded || {};
+let divMetaExpanded = state.ui.divMetaExpanded || {};
 function lancamentoFilteredSellers(allSellers) {
   const filter = state.ui.lancamentoFilter || [];
   if (!filter.length) return allSellers;
@@ -10318,6 +10381,7 @@ function importJson(file) {
       expandedBlocks = state.ui.expanded;
       arvExpandedBlocks = state.ui.arvExpanded || {};
       lancamentoExpanded = state.ui.lancamentoExpanded || {};
+      divMetaExpanded = state.ui.divMetaExpanded || {};
       renderActive();
       toast("Backup importado");
     } catch(e){ toast("Arquivo inválido", true); }
