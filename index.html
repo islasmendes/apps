@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v140";
+  var BUILD = "v141";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -1985,7 +1985,13 @@ function startLockPolicyListener() {
     if (activeView === "gestao") renderGestao();
   });
 }
+function applyAdminTabVisibility() {
+  const configTab = document.querySelector('nav.tabs button[data-view="config"]');
+  if (configTab) configTab.style.display = isAdmin ? "" : "none";
+  if (!isAdmin && fbReady && authUid && activeView === "config") showView("matriz");
+}
 function applyTabLockVisibility() {
+  applyAdminTabVisibility();
   if (!lockPolicyApplies()) {
     document.querySelectorAll('nav.tabs button[data-view="kpis"], nav.tabs button[data-view="gestao"]').forEach(b => { b.style.display = ""; });
     return;
@@ -3902,7 +3908,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v140"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v141"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -4835,6 +4841,7 @@ let activeView = state.ui.view || "matriz";
 if (activeView === "sistema" || activeView === "resumo" || activeView === "foco" || !views.includes(activeView)) activeView = "matriz";
 function showView(v) {
   if (v === "resumo" || v === "foco") v = "matriz";
+  if (v === "config" && fbReady && authUid && !isAdmin) v = "matriz";
   if (divisionalMode() && !DIVISIONAL_VIEWS.includes(v)) {
     v = DIVISIONAL_VIEWS.includes(activeView) ? activeView : "rscen";
   }
@@ -4855,7 +4862,7 @@ function renderActive() {
   else if (activeView === "rscen") renderArvore();
   else if (activeView === "kpis") renderIndicatorConfig();
   else if (activeView === "gestao") renderGestao();
-  else if (activeView === "config") { if (typeof renderSync === "function") renderSync(); }
+  else if (activeView === "config") { if (isAdmin && typeof renderSync === "function") renderSync(); }
 }
 function updateWorkdaysBadge() {
   const el = document.getElementById("workdaysBadge");
@@ -10557,6 +10564,7 @@ function fbInit(){
       try { fbDb.ref("admins/"+authUid).on("value", s => {
         const was = isAdmin;
         isAdmin = (s.val() === true);
+        applyAdminTabVisibility();
         if (isAdmin && !was) { configPushBlocked = false; configWriteOk = null; queueConfigPush(); }
         updateTrocarLojaTopTitle();
         if (activeView === "config") renderSync();
@@ -11008,6 +11016,7 @@ function pullLoja(opts) {
 }
 function renderSync(){
   const el = document.getElementById("syncPanel"); if(!el) return;
+  if (!isAdmin) { el.innerHTML = ""; return; }
   const div = divisionalMode(); const lojas = allLojas();
   let html = `<h2>Sincronização &amp; Lojas</h2>`;
   const adminTag = isAdmin
@@ -11047,13 +11056,15 @@ function renderSync(){
     else html += `<span style="color:var(--text-dim)">aguardando…</span> — ao editar KPIs, o template operacional será publicado se as regras permitirem.`;
     html += `</div>`;
     html += `<div id="lockPolicyPanel"></div>`;
-  } else if (isDeviceAdmin()) {
-    html += `<div class="hint" style="margin-top:12px; padding:10px 12px; background:color-mix(in srgb,var(--warn) 8%,transparent); border-radius:8px; border:1px solid color-mix(in srgb,var(--warn) 28%,transparent);"><b>Admin deste aparelho</b> (ID <code style="font-size:10px">${escapeHtml(getDeviceId())}</code>) — senha mestra e gestão de lojas OK.<br>Para <b>sync de KPIs em todas as lojas</b>, cadastre também o UID Firebase <code style="font-size:10px">${escapeHtml(authUid||'—')}</code> em <code>/admins/{uid}</code> (não basta só o ID do Mac).</div>`;
-  } else if (!div) {
-    html += `<div class="hint" style="margin-top:12px;">Só o <b>admin</b> exclui lojas. ID deste aparelho (para virar admin): <code style="font-size:10px">${escapeHtml(authUid||'—')}</code></div>`;
   }
   html += `<div style="margin-top:18px; padding-top:14px; border-top:1px solid var(--border-soft);"><b style="font-size:13px;">🔐 Segurança &amp; acesso</b>`;
-  html += `<div class="hint" style="margin-top:6px;">ID deste aparelho: <code style="font-size:10px">${escapeHtml(getDeviceId())}</code> <button class="btn sec sm" id="copyDeviceId">copiar</button></div>`;
+  html += `<div class="hint" style="margin-top:8px;line-height:1.55;padding:10px 12px;border:1px solid color-mix(in srgb,var(--ok) 28%,transparent);border-radius:8px;background:color-mix(in srgb,var(--ok) 6%,transparent);">
+    <b>UID Firebase (admin)</b> — cadastre em <code>/admins</code> com valor <code>true</code>:<br>
+    <code style="font-size:11px;word-break:break-all;display:inline-block;margin-top:4px;">${escapeHtml(authUid || "aguardando login anônimo…")}</code>
+    <button class="btn sec sm" id="copyAuthUid" style="margin-left:6px;vertical-align:middle;">copiar UID</button>
+    <div style="margin-top:8px;font-size:11px;color:var(--text-dim);">Ex.: <code>EQB9QcEraQQLyd0dhcmvoGHM21X2</code>. Cada navegador/aparelho gera um UID novo — copie o UID do equipamento e adicione em <code>/admins</code>. <b>Não</b> use o ID <code>dev_…</code> aqui.</div>
+  </div>`;
+  html += `<div class="hint" style="margin-top:8px;">ID interno do aparelho (sessão local): <code style="font-size:10px">${escapeHtml(getDeviceId())}</code> <button class="btn sec sm" id="copyDeviceId">copiar</button> <span class="muted" style="font-size:10px;">— opcional em <code>/auth/adminDevices</code> só para senha mestra sem admin Firebase</span></div>`;
   if (isDeviceAdmin()) {
     html += `<div class="row" style="margin-top:10px; align-items:flex-end; flex-wrap:wrap;">
       <div class="field"><label>Senha mestra atual</label><input type="password" id="authChgCur" autocomplete="current-password"></div>
@@ -11065,9 +11076,6 @@ function renderSync(){
     } else if (divisionalCode) {
       html += `<div class="row" style="margin-top:10px;"><button class="btn danger sm" id="authRegenLoja">↻ Gerar nova senha individual do Divisional (${escapeHtml(divisionalCode)})</button></div>`;
     }
-    html += `<div class="hint" style="margin-top:8px;">Cadastre o ID do aparelho em <code>/auth/adminDevices</code> no Firebase para liberar funções de admin.</div>`;
-  } else {
-    html += `<div class="hint" style="margin-top:8px;">Admin: cadastre o ID acima em <code>/auth/adminDevices</code> no Firebase.</div>`;
   }
   html += `</div>`;
   el.innerHTML = html;
@@ -11095,7 +11103,8 @@ function renderSync(){
     }
   };
   el.querySelectorAll("[data-del-loja]").forEach(b=>b.onclick=()=>{ if(confirm("Excluir esta loja da nuvem?")){ try{ fbDb.ref("lojas/"+b.dataset.delLoja).remove(); toast("Loja excluída"); }catch(e){ toast("Sem permissão", true); } } });
-  const cpd=document.getElementById("copyDeviceId"); if(cpd) cpd.onclick=()=>{ try{ navigator.clipboard&&navigator.clipboard.writeText(getDeviceId()); }catch(e){} toast("ID copiado"); };
+  const cpd=document.getElementById("copyDeviceId"); if(cpd) cpd.onclick=()=>{ try{ navigator.clipboard&&navigator.clipboard.writeText(getDeviceId()); }catch(e){} toast("ID do aparelho copiado"); };
+  const cau=document.getElementById("copyAuthUid"); if(cau) cau.onclick=()=>{ try{ navigator.clipboard&&navigator.clipboard.writeText(authUid||""); }catch(e){} toast(authUid ? "UID Firebase copiado" : "UID ainda não disponível", !authUid); };
   const chg=document.getElementById("authChgBtn");
   if(chg) chg.onclick=async()=>{
     try{
