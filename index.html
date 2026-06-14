@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <script>
 (function () {
-  var BUILD = "v153";
+  var BUILD = "v154";
   var FB = "https://gestao-altaperformance-default-rtdb.firebaseio.com/config/appBuild.json";
   function num(v) { var m = String(v || "").match(/(\d+)/); return m ? +m[1] : 0; }
   function clearJump() {
@@ -4402,7 +4402,7 @@ function startLojaDataListener() {
     }, 120);
   });
 }
-const APP_BUILD = "v153"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
+const APP_BUILD = "v154"; // manter igual ao BUILD do <head> e ao APP_BUILD em consultor.html
 function consultorPortalUrl() {
   const base = location.href.replace(/[^/]*$/, "");
   const loja = lojaCode || state.storeName || "";
@@ -6924,11 +6924,7 @@ function acuracidadeFieldList() {
   const fields = [];
   const indicators = divisionalMode() ? filterIndicatorTreeToOperational(state.indicators) : state.indicators;
   indicators.forEach(ind => {
-    if (ind.pctOnly) {
-      fields.push({ id: ind.id, name: ind.name, color: ind.color, sub: false, rate: false, pctOnly: true });
-      (ind.rates||[]).forEach(r => { if (r.manual) fields.push({ id: "rate:"+r.id, rateId: r.id, name: r.name, color: ind.color, sub: false, rate: true }); });
-      return;
-    }
+    if (ind.pctOnly) return;
     const hasCo = ind.checkout || (ind.subs || []).some(s => s.checkout);
     if (hasCo) fields.push({ id: ind.id, name: ind.name, color: ind.color, sub: false, rate: false });
   });
