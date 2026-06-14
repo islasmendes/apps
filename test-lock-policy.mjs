@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto("http://127.0.0.1:8765/index.html?v=v140", { waitUntil: "networkidle", timeout: 60000 });
+await page.goto("http://127.0.0.1:8765/index.html?v=v142", { waitUntil: "networkidle", timeout: 60000 });
 await page.waitForFunction(() => typeof shouldUseStrictKpiSync === "function", { timeout: 25000 });
 
 const result = await page.evaluate(() => {
@@ -12,6 +12,7 @@ const result = await page.evaluate(() => {
   const strictDefault = shouldUseStrictKpiSync();
   const metasEditable = canEditKpiSection("metas");
   const togglesLocked = lockMode("kpis", "toggles") === "locked";
+  const rscenHiddenLoja = lockTabMode("rscen") === "hidden";
   const tpl = {
     v: 1,
     updatedAt: Date.now(),
@@ -27,7 +28,23 @@ const result = await page.evaluate(() => {
   applyOperationalConfig(st, tpl, { strictTemplate: true, ignoreVersion: true });
   const names = st.indicators.map(i => i.name);
   const subNames = (st.indicators.find(i => i.name === "Agendamento")?.subs || []).map(s => s.name);
-  return { strictDefault, metasEditable, togglesLocked, names, subNames, ok: strictDefault && metasEditable && togglesLocked && !names.includes("Loja Only") && subNames.includes("Sub HOJE") };
+
+  // Simula DOM de toggle travado
+  document.body.innerHTML = `<div id="indicatorList"><div class="ind-card" data-ind="t1">
+    <label class="switch"><input type="checkbox" class="ind-field" data-k="checkin" checked><span class="track"></span></label>
+  </div></div>`;
+  state.indicators = [{ id: "t1", name: "Test", checkin: true, checkout: false, subs: [], rates: [] }];
+  applyKpiLockDom();
+  const toggleDisabled = document.querySelector('.ind-field[data-k="checkin"]')?.disabled === true;
+  const switchLocked = document.querySelector(".switch")?.classList.contains("kpi-switch-locked");
+
+  return {
+    strictDefault, metasEditable, togglesLocked, rscenHiddenLoja, names, subNames,
+    toggleDisabled, switchLocked,
+    ok: strictDefault && metasEditable && togglesLocked && rscenHiddenLoja
+      && !names.includes("Loja Only") && subNames.includes("Sub HOJE")
+      && toggleDisabled && switchLocked
+  };
 });
 
 console.log(JSON.stringify(result, null, 2));
